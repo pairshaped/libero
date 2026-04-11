@@ -173,20 +173,25 @@ The compiler statically checks that you handle every `RpcError` variant. The `Ap
 
 Libero's generator is driven by three flags:
 
-| flag | required? | default | purpose |
-|---|---|---|---|
-| `--ws-url=<url>` | **yes** | none | WebSocket URL baked into the generated `rpc_config.gleam`. There's no default, not even localhost. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL. |
-| `--namespace=<name>` | no | none | When set, drives every path by directory convention and prefixes wire names. |
-| `--client=<path>` | no | `../client` | Path to the client package root. Only needed for non-standard layouts. |
+- **`--ws-url=<url>`** — *required*, no default. WebSocket URL baked into the generated `rpc_config.gleam`. There's no default, not even localhost. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL.
+- **`--namespace=<name>`** — optional, no default. When set, drives every path by directory convention and prefixes wire names.
+- **`--client=<path>`** — optional, defaults to `../client`. Path to the client package root. Only needed for non-standard layouts.
 
-All other paths are derived by convention:
+All other paths are derived by convention.
 
-| path | no namespace | `--namespace=admin` |
-|---|---|---|
-| scan root | `src/server` | `src/server/admin` |
-| dispatch output | `src/server/generated/libero/rpc_dispatch.gleam` | `src/server/generated/libero/admin/rpc_dispatch.gleam` |
-| stub root | `{client}/src/client/generated/libero/rpc` | `{client}/src/client/generated/libero/admin/rpc` |
-| config output | `{client}/src/client/generated/libero/rpc_config.gleam` | `{client}/src/client/generated/libero/admin/rpc_config.gleam` |
+Without a namespace:
+
+- scan root: `src/server`
+- dispatch output: `src/server/generated/libero/rpc_dispatch.gleam`
+- stub root: `{client}/src/client/generated/libero/rpc`
+- config output: `{client}/src/client/generated/libero/rpc_config.gleam`
+
+With `--namespace=admin`:
+
+- scan root: `src/server/admin`
+- dispatch output: `src/server/generated/libero/admin/rpc_dispatch.gleam`
+- stub root: `{client}/src/client/generated/libero/admin/rpc`
+- config output: `{client}/src/client/generated/libero/admin/rpc_config.gleam`
 
 Invoke from your server package directory:
 
@@ -263,4 +268,4 @@ End-to-end validation of the generator happens through the fizzbuzz example. If 
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](./LICENSE).
