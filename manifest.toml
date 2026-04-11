@@ -26,7 +26,7 @@ argv = { version = "~> 1.0" }
 glance = { version = "~> 6.0" }
 gleam_crypto = { version = "~> 1.5" }
 gleam_json = { version = "~> 3.0" }
-gleam_stdlib = { version = ">= 0.69.0 and < 0.71.0" }
+gleam_stdlib = { version = ">= 0.69.0 and < 1.0.0" }
 gleeunit = { version = "~> 1.0" }
 glinter = { version = "~> 2.12" }
 lustre = { version = "~> 5.6" }
