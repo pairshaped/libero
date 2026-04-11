@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EXAMPLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "==> Regenerating libero RPC dispatch + stubs"
+(cd "$EXAMPLE_ROOT/server" && gleam run -m libero -- --ws-url=ws://localhost:4000/ws/rpc)
+
+echo "==> Building client (JavaScript target)"
+(cd "$EXAMPLE_ROOT/client" && gleam build)
+
+echo "==> Syncing client bundle to server/priv/static"
+mkdir -p "$EXAMPLE_ROOT/server/priv/static/build/dev"
+rm -rf "$EXAMPLE_ROOT/server/priv/static/build/dev/javascript"
+cp -r "$EXAMPLE_ROOT/client/build/dev/javascript" "$EXAMPLE_ROOT/server/priv/static/build/dev/javascript"
+
+echo "==> Starting server on http://localhost:4000"
+cd "$EXAMPLE_ROOT/server" && exec gleam run

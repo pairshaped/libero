@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Libero · FizzBuzz</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 28rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      h1 { font-size: 1.5rem; }
+      input, button { font: inherit; padding: 0.4rem 0.6rem; }
+      input { width: 6rem; }
+      .result {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f4f4f4;
+        border-radius: 0.4rem;
+        font-size: 2rem;
+        text-align: center;
+        min-height: 1em;
+      }
+      .history {
+        margin-top: 1.5rem;
+        font-size: 0.85rem;
+        color: #555;
+      }
+      .history li { list-style: none; padding: 0.2rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>FizzBuzz over libero RPC</h1>
+    <p>Type a number. The server classifies it. The wire is a typed
+      RPC call with no JSON codecs on your side.</p>
+    <div id="app">loading…</div>
+    <script type="module">
+      import { main } from "/static/build/dev/javascript/client/client.mjs";
+      main();
+    </script>
+  </body>
+</html>

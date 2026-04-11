@@ -1,0 +1,38 @@
+name = "client"
+version = "1.0.0"
+target = "javascript"
+
+[dependencies]
+libero = { path = "../../.." }
+gleam_stdlib = ">= 0.69.0 and < 0.71.0"
+lustre = "~> 5.6"
+
+[dev-dependencies]
+glinter = "~> 2.12"
+
+[tools.glinter]
+stats = true
+warnings_as_errors = true
+include = ["src/"]
+exclude = ["src/client/generated/"]
+
+[tools.glinter.rules]
+# Shared types have constructor accessors etc. that aren't always used.
+unused_exports = "off"
+
+[tools.glinter.ignore]
+# Lustre's init / update / view are runtime callbacks with fixed
+# positional signatures — adding labels doesn't help the Lustre
+# runtime, which calls them with positional args. `int.parse`
+# returning Error(_) is intentionally dropped; we only care that
+# parsing failed, not why. The multi-line hint strings in view_*
+# functions are broken across lines with <> for readability —
+# consolidating would hurt diff-ability.
+"src/client/app.gleam" = [
+  "label_possible",
+  "thrown_away_error",
+  "unnecessary_string_concatenation",
+]
+
+[javascript]
+runtime = "node"

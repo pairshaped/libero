@@ -1,0 +1,72 @@
+name = "libero"
+version = "0.1.0"
+description = "Typed Gleam RPC for Lustre SPAs without REST, JSON codecs, or hand-written dispatch tables"
+licences = ["MIT"]
+
+# No target specified — cross-target package.
+# Erlang-only modules: libero/wire, libero/trace, libero (the generator main)
+# JS-only modules: libero/rpc
+# Cross-target modules: libero/error
+#
+# Per-target @external specs keep each module usable only on its intended
+# target. The package as a whole can be depended on from both Erlang and
+# JavaScript consumer packages.
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 0.71.0"
+gleam_json = "~> 3.0"
+glance = "~> 6.0"
+simplifile = "~> 2.0"
+gleam_crypto = "~> 1.5"
+lustre = "~> 5.6"
+argv = "~> 1.0"
+
+[dev-dependencies]
+glinter = "~> 2.12"
+gleeunit = "~> 1.0"
+
+[tools.glinter]
+stats = true
+warnings_as_errors = true
+include = ["src/"]
+
+[tools.glinter.rules]
+# Libero's public API is consumed from GENERATED code in consumer
+# packages (dispatch modules and per-module client stubs under each
+# consumer's src/*/generated/libero/ tree). The linter can't see those
+# call sites from inside lib/libero, so it would flag every public
+# type and function as unused. Turn off the check globally for the
+# library.
+unused_exports = "off"
+
+[tools.glinter.ignore]
+"src/libero.gleam" = [
+  # String template literals in the generator are broken across
+  # multiple lines with <> for readability. Consolidating them into
+  # one string would hurt the ability to diff changes.
+  "unnecessary_string_concatenation",
+]
+"src/libero/trace.gleam" = [
+  # try_call catches arbitrary Erlang panics from the runtime. The
+  # reason comes back as a stringified diagnostic — there's no
+  # meaningful structured type for an arbitrary catch, and building
+  # one would require parsing Erlang term format at runtime for
+  # marginal benefit.
+  "stringly_typed_error",
+]
+"src/libero/wire.gleam" = [
+  # The reflective ETF-to-JSON encoder panics if it encounters a
+  # term type Gleam can't produce (pids, refs, funs, etc). That's a
+  # "this should never happen" branch; Result-returning it would
+  # cascade noise through every encoder call site for a case that
+  # can only be hit by FFI misuse.
+  "avoid_panic",
+]
+"src/libero/rpc.gleam" = [
+  # The Gleam fallback bodies for JS-only externals intentionally
+  # panic and discard their params. They're unreachable on the
+  # Erlang target (libero/rpc is only used from JS consumer code)
+  # but must exist for lib/libero to compile cross-target.
+  "avoid_panic",
+  "discarded_result",
+]

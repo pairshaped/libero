@@ -1,0 +1,68 @@
+name = "server"
+version = "1.0.0"
+target = "erlang"
+
+[dependencies]
+libero = { path = "../../.." }
+gleam_stdlib = ">= 0.69.0 and < 0.71.0"
+gleam_erlang = "~> 1.0"
+gleam_otp = "~> 1.2"
+gleam_http = "~> 4.0"
+gleam_json = "~> 3.0"
+mist = "~> 5.0"
+simplifile = "~> 2.0"
+
+[dev-dependencies]
+glinter = "~> 2.12"
+
+[tools.glinter]
+stats = true
+warnings_as_errors = true
+include = ["src/"]
+exclude = ["src/server/generated/"]
+
+[tools.glinter.rules]
+# @rpc functions are consumed by the generated dispatch file, which
+# is excluded from linting. Without this, glinter flags every @rpc
+# fn as unused.
+unused_exports = "off"
+
+[tools.glinter.ignore]
+# The three RPC functions each demonstrate a different libero feature
+# and each bumps against a different stylistic glinter rule:
+#   - `range` uses `String` as its app error to avoid needing a
+#     shared package for the demo (stringly_typed_error).
+#   - `range` and `build_labels` use `case cond { True -> ...; False
+#     -> ... }` which the linter prefers as `use <- bool.guard(...)`
+#     — both forms are idiomatic and the case form reads better here
+#     (prefer_guard_clause).
+#   - `crash` intentionally panics to demonstrate libero's panic
+#     recovery pipeline — that IS the demo (avoid_panic).
+"src/server/fizzbuzz.gleam" = [
+  "stringly_typed_error",
+  "prefer_guard_clause",
+  "avoid_panic",
+]
+# Mist callback signatures are fixed by the framework — adding labels
+# to `handle_message(state, message, conn)` doesn't help the runtime,
+# which calls us with positional args. `mist.send_text_frame` returns
+# a Result we intentionally drop because if the socket is closed
+# there's nothing to recover from.
+"src/server/websocket.gleam" = [
+  "label_possible",
+  "discarded_result",
+]
+# web.gleam uses `let assert Ok(html) = simplifile.read(...)` because
+# the index.html file must exist for the example to run at all —
+# the alternative is a cascading Result chain that obscures the
+# demo. The `Error(_) -> 404` pattern in serve_static deliberately
+# discards the simplifile error detail because the 404 response is
+# the meaningful thing, not the file-system reason. content_type_for
+# is a nested case chain (case True/False on extensions) rather than
+# a guard pattern — this matches how MIME fallthrough is traditionally
+# written and is clearer than converting to guards.
+"src/server/web.gleam" = [
+  "assert_ok_pattern",
+  "thrown_away_error",
+  "prefer_guard_clause",
+]
