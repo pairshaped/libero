@@ -37,21 +37,9 @@ The client stub's signature (`n: Int`, `on_response: fn(Result(String, RpcError(
 
 Mark a `pub fn` with `/// @rpc` and libero generates a dispatch case on the server side and a typed stub on the client side. Both talk to each other over WebSocket.
 
-Every response is `Result(T, RpcError(E))`. The four `RpcError` variants cover domain errors (`AppError(e)`), malformed wire traffic, unknown functions, and runtime panics with a trace id.
-
-Generated dispatch wraps every call in `trace.try_call`, so a server panic becomes a typed `InternalError(trace_id)` envelope for the client plus a `PanicInfo` bubble for your WebSocket handler to log. The WebSocket connection is never dropped.
+Every response is `Result(T, RpcError(E))`, where `RpcError` covers domain errors, malformed traffic, unknown functions, and server panics. A panic becomes a typed `InternalError(trace_id)` for the client and a `PanicInfo` bubble for your handler to log — the WebSocket connection is never dropped.
 
 The wire format is reflective. Custom types, tuples, Options, Results, and primitives all serialize and rebuild automatically without `Decoder`s or `encode` functions. The on-wire shape is `{"fn": "...", "args": [...]}` for the call and `{"@": "ok", "v": [...]}` for the response: simple enough to `tcpdump` and read.
-
-Multi-SPA is a flag. Pass `--namespace=admin` for an admin SPA, `--namespace=public` for a public SPA, and libero generates parallel dispatch files with namespaced wire names like `admin.items.save` or `public.cart.add`.
-
-## What it isn't
-
-Libero is not a framework. It generates code and provides a wire format plus an error envelope. Everything else (state management, caching, optimistic updates, subscriptions, retries) lives in your app. A consumer that wants Elm-style `RemoteData` wraps responses themselves. A consumer that wants inline state does the same.
-
-Libero is not a REST replacement for public APIs. The wire is designed for same-origin WebSocket traffic between your own server and your own SPA. If you're exposing a JSON API for third-party clients, keep REST.
-
-Libero is not stateful. Every RPC is a strict request/response. If you need server push, layer a separate mechanism on top.
 
 ## Install
 
@@ -167,13 +155,13 @@ RecordSaved(Error(InternalError(trace_id))) -> { /* show generic error */ }
 RecordSaved(Error(_)) -> { /* framework fallthrough */ }
 ```
 
-The compiler statically checks that you handle every `RpcError` variant. The `AppError(e)` arm is only present when the server function returns `Result(T, E)` with a non-`Never` error type. Bare-return functions use `RpcError(Never)` and the exhaustiveness checker lets you skip the `AppError` arm.
+The compiler statically checks that you handle every `RpcError` variant.
 
 ## CLI flags
 
 Libero's generator is driven by three flags:
 
-- **`--ws-url=<url>`** — *required*, no default. WebSocket URL baked into the generated `rpc_config.gleam`. There's no default, not even localhost. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL.
+- **`--ws-url=<url>`** — *required*, no default. WebSocket URL baked into the generated `rpc_config.gleam`. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL.
 - **`--namespace=<name>`** — optional, no default. When set, drives every path by directory convention and prefixes wire names.
 - **`--client=<path>`** — optional, defaults to `../client`. Path to the client package root. Only needed for non-standard layouts.
 
@@ -209,9 +197,7 @@ gleam run -m libero -- --ws-url=wss://your.host/admin/ws/rpc --namespace=admin
 gleam run -m libero -- --ws-url=wss://your.host/public/ws/rpc --namespace=public
 ```
 
-Each namespace scans `src/server/<ns>/**` recursively (nested directories are fine). Each namespace gets its own `/// @inject` functions and `Session` type, so admin can carry `User + DB` while public carries `CartCookie`. Wire names are prefixed with the namespace, so `admin.items.save` is distinct from `public.items.save` even if the function names collide. Each namespace also gets its own `handle_<ns>` entry point (`handle_admin`, `handle_public`), and your server router mounts one WebSocket endpoint per namespace and calls the matching dispatch.
-
-Nothing is shared between namespaces at the wire level. Two SPAs, two dispatch files, two `Session` types, zero cross-contamination.
+Each namespace scans `src/server/<ns>/**` recursively and gets its own `/// @inject` functions, `Session` type, and `handle_<ns>` entry point — so admin can carry `User + DB` while public carries `CartCookie`. Wire names are prefixed with the namespace, so `admin.items.save` is distinct from `public.items.save` even if the function names collide. Your server router mounts one WebSocket endpoint per namespace and calls the matching dispatch.
 
 ## Error envelope
 
@@ -255,16 +241,6 @@ cd examples/fizzbuzz
 ```
 
 Then open <http://localhost:4000>.
-
-## Testing
-
-Libero's own test suite covers the wire codec (`libero/wire`) and the panic primitive (`libero/trace`):
-
-```bash
-gleam test
-```
-
-End-to-end validation of the generator happens through the fizzbuzz example. If the templates regress, the example fails to compile.
 
 ## License
 
