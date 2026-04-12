@@ -178,7 +178,7 @@ fn rebuild(value: Dynamic) -> Dynamic {
     }
     Ok(#(tag, fields)) -> {
       // Reconstruct as Erlang tuple: {atom, field1, field2, ...}
-      let atom = binary_to_existing_atom(tag)
+      let atom = binary_to_atom(tag)
       let rebuilt_fields = list.map(fields, rebuild)
       list_to_tuple([atom, ..rebuilt_fields])
     }
@@ -192,8 +192,13 @@ fn rebuild(value: Dynamic) -> Dynamic {
   }
 }
 
-@external(erlang, "erlang", "binary_to_existing_atom")
-fn binary_to_existing_atom(name: String) -> Dynamic
+/// binary_to_atom is safe here (vs binary_to_existing_atom) because the
+/// atom strings come from our own wire protocol, not arbitrary user input.
+/// At decode time the target module may not be loaded yet, so the atom may
+/// not exist — binary_to_atom creates it. When the module loads later it
+/// reuses the same atom.
+@external(erlang, "erlang", "binary_to_atom")
+fn binary_to_atom(name: String) -> Dynamic
 
 @external(erlang, "erlang", "list_to_tuple")
 fn list_to_tuple(elements: List(Dynamic)) -> Dynamic
