@@ -121,7 +121,19 @@ function toJsPrimitive(v) {
   return v;
 }
 
-// ---------- Auto-wire Gleam prelude + Record ----------
+// ---------- Auto-wire Gleam prelude + libero framework types ----------
+//
+// Everything registered here is UNIVERSAL across all libero consumers:
+// - Prelude constructors (Ok, Error) that wrap every RPC response.
+// - Libero framework error variants (AppError, MalformedRequest,
+//   UnknownFunction, InternalError) that every RPC can surface through
+//   the error envelope.
+//
+// Consumer application types (records, unions, options on fields) are
+// NOT registered here. Those are discovered by libero's generator and
+// emitted into a per-namespace rpc_register.mjs in the consumer's
+// generated output directory. The consumer calls register_all() from
+// that file once at boot before the first RPC.
 
 try {
   const prelude = await import("../gleam.mjs");
@@ -135,29 +147,7 @@ try {
 }
 
 try {
-  const recordMod = await import("../../shared/shared/record.mjs");
-  if (recordMod.Record) registerConstructor("record", recordMod.Record);
-  // App-specific error types used by @rpc functions
-  if (recordMod.DuplicateEmail)
-    registerConstructor("duplicate_email", recordMod.DuplicateEmail);
-  if (recordMod.DatabaseError)
-    registerConstructor("database_error", recordMod.DatabaseError);
-  if (recordMod.NotFound) registerConstructor("not_found", recordMod.NotFound);
-  if (recordMod.DuplicateEmailOnUpdate)
-    registerConstructor(
-      "duplicate_email_on_update",
-      recordMod.DuplicateEmailOnUpdate,
-    );
-  if (recordMod.UpdateDatabaseError)
-    registerConstructor("update_database_error", recordMod.UpdateDatabaseError);
-} catch (_) {
-  // Standalone mode — shared.Record unavailable.
-}
-
-// Libero error envelope types — every RPC response can include these
-// framework error variants on top of the app's own error type.
-try {
-  const errorMod = await import("../../shared/shared/libero/error.mjs");
+  const errorMod = await import("./error.mjs");
   if (errorMod.AppError) registerConstructor("app_error", errorMod.AppError);
   if (errorMod.MalformedRequest)
     registerConstructor("malformed_request", errorMod.MalformedRequest);
