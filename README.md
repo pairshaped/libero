@@ -4,36 +4,7 @@ Libero is the defensive specialist in volleyball, who handles passes and digs so
 
 Wiring a Gleam server to a Lustre SPA usually means, for every interaction: define a REST route, write a JSON encoder for the request, write a JSON decoder for the response, write a `fetch` wrapper on the client, and keep the type definitions on both sides in sync by hand. Every new endpoint is the same boilerplate, and every mistake (typo, missing field, drifted shape) waits for runtime to bite.
 
-Libero replaces the whole loop. You write a normal server function, annotate it with `/// @rpc`, and call it from the client as if it were a local function. Routes, encoders, decoders, dispatch, and error envelopes are all generated from the function's signature, and the compiler catches drift between the two sides at build time.
-
-```gleam
-// server/src/server/fizzbuzz.gleam
-import gleam/int
-
-/// @rpc
-pub fn classify(n n: Int) -> String {
-  case int.modulo(n, 3), int.modulo(n, 5) {
-    Ok(0), Ok(0) -> "FizzBuzz"
-    Ok(0), _ -> "Fizz"
-    _, Ok(0) -> "Buzz"
-    _, _ -> int.to_string(n)
-  }
-}
-```
-
-```gleam
-// client/src/client/app.gleam  (snippet)
-import client/generated/libero/rpc/fizzbuzz as rpc_fizzbuzz
-
-// Somewhere in your Lustre update function:
-Classify ->
-  #(
-    model,
-    rpc_fizzbuzz.classify(n: 15, on_response: ClassifyResponse),
-  )
-```
-
-The client stub's signature (`n: Int`, `on_response: fn(Result(String, RpcError(Never))) -> msg`) is generated at build time from the server function's signature, and server and client talk to each other over WebSocket.
+Libero replaces the whole loop. You write a normal server function, annotate it with `/// @rpc`, and call it from the client as if it were a local function. Routes, encoders, decoders, dispatch, and error envelopes are all generated from the function's signature, and the compiler catches drift between the two sides at build time. Server and client talk to each other over WebSocket.
 
 The wire format is reflective. Custom types, tuples, Options, Results, and primitives all serialize and rebuild automatically without `Decoder`s or `encode` functions. The on-wire shape is `{"fn": "...", "args": [...]}` for the call and `{"@": "ok", "v": [...]}` for the response: simple enough to `tcpdump` and read.
 
