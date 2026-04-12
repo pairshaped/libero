@@ -3,4 +3,4 @@
 //// WebSocket URL passed to libero at generation time via --ws-url.
 //// Rerun bin/dev to regenerate if the URL changes.
 
-pub const ws_url: String = "ws://localhost:4000/ws/rpc"
+pub const ws_url: String = "wss://localhost:8080/ws"

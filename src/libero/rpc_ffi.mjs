@@ -159,6 +159,14 @@ try {
   // Standalone mode — libero error unavailable.
 }
 
+try {
+  const optionMod = await import("../../gleam_stdlib/gleam/option.mjs");
+  if (optionMod.Some) registerConstructor("some", optionMod.Some);
+  if (optionMod.None) registerConstructor("none", optionMod.None);
+} catch (_) {
+  // Standalone mode — gleam_stdlib unavailable.
+}
+
 // ---------- WebSocket + call queue ----------
 //
 // Every `call` receives the WebSocket URL as its first argument. On the

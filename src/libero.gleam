@@ -181,6 +181,8 @@ type GenError {
   UnknownType(path: String, fn_name: String, type_name: String)
   DuplicateWireName(wire_name: String)
   EmptyModulePath(path: String)
+  UnresolvedTypeModule(module_path: String, type_name: String)
+  TypeNotFound(module_path: String, type_name: String)
 }
 
 // ---------- CLI configuration ----------
@@ -197,6 +199,12 @@ type Config {
     dispatch_output: String,
     stub_root: String,
     config_output: String,
+    register_gleam_output: String,
+    register_ffi_output: String,
+    /// Bundle-relative prefix that prepends every import in the
+    /// generated FFI .mjs file. Depth depends on where the register
+    /// files land inside the consumer client package.
+    register_relpath_prefix: String,
   )
 }
 
@@ -253,12 +261,28 @@ fn build_config(
   namespace namespace: option.Option(String),
   client_root client_root: String,
 ) -> Config {
-  let #(scan_root, dispatch_output, stub_root, config_output) = case namespace {
+  // In the final JS bundle, registration files land at:
+  //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_register_ffi.mjs
+  // So from the ffi file's directory, the bundle root is:
+  //   - 4 levels up for no-namespace (client_pkg/client/generated/libero/)
+  //   - 5 levels up for namespaced  (client_pkg/client/generated/libero/<ns>/)
+  let #(
+    scan_root,
+    dispatch_output,
+    stub_root,
+    config_output,
+    register_gleam_output,
+    register_ffi_output,
+    register_relpath_prefix,
+  ) = case namespace {
     None -> #(
       "src/server",
       "src/server/generated/libero/rpc_dispatch.gleam",
       client_root <> "/src/client/generated/libero/rpc",
       client_root <> "/src/client/generated/libero/rpc_config.gleam",
+      client_root <> "/src/client/generated/libero/rpc_register.gleam",
+      client_root <> "/src/client/generated/libero/rpc_register_ffi.mjs",
+      "../../../../",
     )
     Some(ns) -> #(
       "src/server/" <> ns,
@@ -268,6 +292,15 @@ fn build_config(
         <> "/src/client/generated/libero/"
         <> ns
         <> "/rpc_config.gleam",
+      client_root
+        <> "/src/client/generated/libero/"
+        <> ns
+        <> "/rpc_register.gleam",
+      client_root
+        <> "/src/client/generated/libero/"
+        <> ns
+        <> "/rpc_register_ffi.mjs",
+      "../../../../../",
     )
   }
   Config(
@@ -278,6 +311,9 @@ fn build_config(
     dispatch_output: dispatch_output,
     stub_root: stub_root,
     config_output: config_output,
+    register_gleam_output: register_gleam_output,
+    register_ffi_output: register_ffi_output,
+    register_relpath_prefix: register_relpath_prefix,
   )
 }
 
@@ -381,6 +417,10 @@ fn run(config: Config) -> Result(Int, List(GenError)) {
       use _ <- result.try(
         write_config(config: config) |> result.map_error(fn(e) { [e] }),
       )
+      use _ <- result.try(
+        write_register(config: config, rpcs: all_rpcs)
+        |> result.map_error(fn(errors) { errors }),
+      )
       Ok(list.length(all_rpcs))
     }
     _ -> Error(all_errors)
@@ -458,6 +498,20 @@ fn print_error(err: GenError) -> Nil {
       <> wire_name
       <> "`"
       <> "\n  rename one of them, or use an explicit `/// @rpc other.name` override (not yet implemented)"
+    UnresolvedTypeModule(module_path, type_name) ->
+      "type `"
+      <> type_name
+      <> "` from module `"
+      <> module_path
+      <> "` could not be resolved to a file path"
+      <> "\n  ensure the module is in a path dep of the client package"
+    TypeNotFound(module_path, type_name) ->
+      "type `"
+      <> type_name
+      <> "` was not found in module `"
+      <> module_path
+      <> "`"
+      <> "\n  the type may be private, or the module path may be incorrect"
   }
   io.println_error("error: " <> message)
 }
@@ -488,6 +542,678 @@ pub const ws_url: String = \"" <> config.ws_url <> "\"
       Ok(Nil)
     }
     Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
+  }
+}
+
+// ---------- Type registration codegen ----------
+//
+// Consumer custom types (records, sum types) cross the wire as tagged
+// objects like `{"@": "admin_data", "v": [...]}`. On the client, libero's
+// rebuild function needs a Map<string, Constructor> to reconstruct each
+// tag into an instance of the Gleam-compiled JS class.
+//
+// Gleam's runtime on Erlang can introspect custom types via
+// `erlang:atom_to_binary`, but JS has no such reflection. So libero
+// emits a per-namespace registration file that registers every consumer
+// constructor referenced transitively from @rpc signatures.
+//
+// The walker starts from the types referenced in each @rpc stub_imports
+// dict, then walks each custom type's variant fields transitively to
+// discover all types that can appear on the wire. Only path deps of the
+// client package are walked — hex deps (gleam_stdlib etc.) are skipped
+// because their types are handled by the auto-wire block in rpc_ffi.mjs.
+
+/// Single path dependency from a gleam.toml file, e.g.
+/// `shared = { path = "../shared" }`.
+type PathDep {
+  PathDep(name: String, path: String)
+}
+
+/// A single discovered variant to emit as a registerConstructor call.
+type DiscoveredVariant {
+  DiscoveredVariant(
+    /// Gleam module path, e.g. "shared/discount".
+    module_path: String,
+    /// PascalCase constructor name, e.g. "AdminData".
+    variant_name: String,
+    /// snake_case atom name, e.g. "admin_data".
+    atom_name: String,
+  )
+}
+
+/// Module prefixes that should never be walked — their types are
+/// handled by libero's auto-wire blocks in rpc_ffi.mjs.
+const registry_skip_prefixes = ["libero/", "gleam/"]
+
+/// Primitive/builtin type names — not custom types, never walked.
+const registry_primitives = [
+  "Int", "Float", "String", "Bool", "Nil", "BitArray", "List", "Result",
+  "Option", "Dict",
+]
+
+/// True if a module path should not be walked by the type graph walker.
+fn is_skipped_module(module_path: String) -> Bool {
+  list.any(registry_skip_prefixes, fn(prefix) {
+    string.starts_with(module_path, prefix)
+  })
+}
+
+/// True if a type name is a primitive/builtin that needs no registration.
+fn is_primitive_type(name: String) -> Bool {
+  list.contains(registry_primitives, name)
+}
+
+/// Build module_path → file_path entries for one path dep's src/ directory.
+fn merge_dep_module_files(
+  acc acc: Dict(String, String),
+  dep dep: PathDep,
+) -> Dict(String, String) {
+  let src_root = dep.path <> "/src"
+  let files = walk_directory(path: src_root) |> result.unwrap([])
+  list.fold(files, acc, fn(acc2, file) {
+    let prefix = src_root <> "/"
+    use <- bool.guard(when: !string.starts_with(file, prefix), return: acc2)
+    let relative = string.drop_start(file, string.length(prefix))
+    use <- bool.guard(
+      when: !string.ends_with(relative, ".gleam"),
+      return: acc2,
+    )
+    let module_path = string.drop_end(relative, string.length(".gleam"))
+    dict.insert(acc2, module_path, file)
+  })
+}
+
+/// Walk the type graph rooted at the types referenced in @rpc signatures.
+/// Returns the list of all variants that need to be registered, in
+/// discovery order (suitable for deterministic emission).
+fn walk_registry_types(
+  rpcs rpcs: List(Rpc),
+  path_deps path_deps: List(PathDep),
+) -> Result(List(DiscoveredVariant), List(GenError)) {
+  // Build module_files: Dict(module_path, file_path) from all path deps.
+  let module_files =
+    list.fold(path_deps, dict.new(), fn(acc, dep) {
+      merge_dep_module_files(acc: acc, dep: dep)
+    })
+
+  // Seed the work queue from all stub_imports across all RPCs,
+  // filtering out skipped and primitive types.
+  let seed =
+    list.fold(rpcs, set.new(), fn(acc, rpc) {
+      dict.fold(rpc.stub_imports, acc, fn(acc2, module_path, type_names) {
+        use <- bool.guard(
+          when: is_skipped_module(module_path),
+          return: acc2,
+        )
+        set.fold(type_names, acc2, fn(acc3, type_name) {
+          use <- bool.guard(
+            when: is_primitive_type(type_name),
+            return: acc3,
+          )
+          set.insert(acc3, #(module_path, type_name))
+        })
+      })
+    })
+    |> set.to_list
+
+  // Run the BFS walk.
+  do_walk(
+    queue: seed,
+    visited: set.new(),
+    discovered: [],
+    module_files: module_files,
+    parsed_cache: dict.new(),
+    errors: [],
+  )
+}
+
+fn do_walk(
+  queue queue: List(#(String, String)),
+  visited visited: Set(#(String, String)),
+  discovered discovered: List(DiscoveredVariant),
+  module_files module_files: Dict(String, String),
+  parsed_cache parsed_cache: Dict(String, glance.Module),
+  errors errors: List(GenError),
+) -> Result(List(DiscoveredVariant), List(GenError)) {
+  case queue {
+    [] ->
+      case errors {
+        [] -> Ok(list.reverse(discovered))
+        _ -> Error(errors)
+      }
+    [#(module_path, type_name), ..rest_queue] -> {
+      let key = #(module_path, type_name)
+      // Skip already-visited items
+      use <- bool.guard(
+        when: set.contains(visited, key),
+        return: do_walk(
+          queue: rest_queue,
+          visited: visited,
+          discovered: discovered,
+          module_files: module_files,
+          parsed_cache: parsed_cache,
+          errors: errors,
+        ),
+      )
+      let new_visited = set.insert(visited, key)
+      process_type(
+        module_path: module_path,
+        type_name: type_name,
+        rest_queue: rest_queue,
+        visited: new_visited,
+        discovered: discovered,
+        module_files: module_files,
+        parsed_cache: parsed_cache,
+        errors: errors,
+      )
+    }
+  }
+}
+
+fn process_type(
+  module_path module_path: String,
+  type_name type_name: String,
+  rest_queue rest_queue: List(#(String, String)),
+  visited visited: Set(#(String, String)),
+  discovered discovered: List(DiscoveredVariant),
+  module_files module_files: Dict(String, String),
+  parsed_cache parsed_cache: Dict(String, glance.Module),
+  errors errors: List(GenError),
+) -> Result(List(DiscoveredVariant), List(GenError)) {
+  let continue_without_errors = fn(cache) {
+    do_walk(
+      queue: rest_queue,
+      visited: visited,
+      discovered: discovered,
+      module_files: module_files,
+      parsed_cache: cache,
+      errors: errors,
+    )
+  }
+  let continue_with_error = fn(cache, e) {
+    do_walk(
+      queue: rest_queue,
+      visited: visited,
+      discovered: discovered,
+      module_files: module_files,
+      parsed_cache: cache,
+      errors: list.append(errors, [e]),
+    )
+  }
+  // Resolve file path — if missing, record error and continue
+  case dict.get(module_files, module_path) {
+    Error(Nil) ->
+      continue_with_error(
+        parsed_cache,
+        UnresolvedTypeModule(module_path:, type_name:),
+      )
+    Ok(file_path) ->
+      process_type_file(
+        module_path: module_path,
+        type_name: type_name,
+        file_path: file_path,
+        rest_queue: rest_queue,
+        visited: visited,
+        discovered: discovered,
+        module_files: module_files,
+        parsed_cache: parsed_cache,
+        errors: errors,
+        continue_without_errors: continue_without_errors,
+        continue_with_error: continue_with_error,
+      )
+  }
+}
+
+fn process_type_file(
+  module_path module_path: String,
+  type_name type_name: String,
+  file_path file_path: String,
+  rest_queue rest_queue: List(#(String, String)),
+  visited visited: Set(#(String, String)),
+  discovered discovered: List(DiscoveredVariant),
+  module_files module_files: Dict(String, String),
+  parsed_cache parsed_cache: Dict(String, glance.Module),
+  errors errors: List(GenError),
+  continue_without_errors continue_without_errors: fn(Dict(String, glance.Module)) ->
+    Result(List(DiscoveredVariant), List(GenError)),
+  continue_with_error continue_with_error: fn(
+    Dict(String, glance.Module),
+    GenError,
+  ) ->
+    Result(List(DiscoveredVariant), List(GenError)),
+) -> Result(List(DiscoveredVariant), List(GenError)) {
+  // Parse or load from cache
+  case load_ast(module_path:, file_path:, parsed_cache:) {
+    Error(e) -> continue_with_error(parsed_cache, e)
+    Ok(#(ast, new_cache)) ->
+      process_type_ast(
+        module_path: module_path,
+        type_name: type_name,
+        ast: ast,
+        new_cache: new_cache,
+        rest_queue: rest_queue,
+        visited: visited,
+        discovered: discovered,
+        module_files: module_files,
+        errors: errors,
+        continue_without_errors: fn(c) { continue_without_errors(c) },
+        continue_with_error: fn(c, e) { continue_with_error(c, e) },
+      )
+  }
+}
+
+fn process_type_ast(
+  module_path module_path: String,
+  type_name type_name: String,
+  ast ast: glance.Module,
+  new_cache new_cache: Dict(String, glance.Module),
+  rest_queue rest_queue: List(#(String, String)),
+  visited visited: Set(#(String, String)),
+  discovered discovered: List(DiscoveredVariant),
+  module_files module_files: Dict(String, String),
+  errors errors: List(GenError),
+  continue_without_errors continue_without_errors: fn(Dict(String, glance.Module)) ->
+    Result(List(DiscoveredVariant), List(GenError)),
+  continue_with_error continue_with_error: fn(
+    Dict(String, glance.Module),
+    GenError,
+  ) ->
+    Result(List(DiscoveredVariant), List(GenError)),
+) -> Result(List(DiscoveredVariant), List(GenError)) {
+  // Check type alias — skip silently
+  let is_alias =
+    list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
+  use <- bool.guard(when: is_alias, return: continue_without_errors(new_cache))
+  // Find the custom type definition
+  case list.find(ast.custom_types, fn(d) { d.definition.name == type_name }) {
+    Error(Nil) ->
+      continue_with_error(new_cache, TypeNotFound(module_path:, type_name:))
+    Ok(ct_def) -> {
+      let custom_type = ct_def.definition
+      let resolver = build_type_resolver(ast.imports)
+      // Collect variants and field type refs
+      let #(new_discovered, new_queue_items) =
+        list.fold(custom_type.variants, #(discovered, []), fn(acc, variant) {
+          let #(disc_acc, queue_acc) = acc
+          let new_disc =
+            list.append(disc_acc, [
+              DiscoveredVariant(
+                module_path: module_path,
+                variant_name: variant.name,
+                atom_name: to_snake_case(variant.name),
+              ),
+            ])
+          let field_refs =
+            collect_variant_field_refs(
+              variant: variant,
+              resolver: resolver,
+              current_module: module_path,
+              visited: visited,
+            )
+          #(new_disc, list.append(queue_acc, field_refs))
+        })
+      do_walk(
+        queue: list.append(rest_queue, new_queue_items),
+        visited: visited,
+        discovered: new_discovered,
+        module_files: module_files,
+        parsed_cache: new_cache,
+        errors: errors,
+      )
+    }
+  }
+}
+
+/// Parse a module, returning the cached version if available.
+fn load_ast(
+  module_path module_path: String,
+  file_path file_path: String,
+  parsed_cache parsed_cache: Dict(String, glance.Module),
+) -> Result(#(glance.Module, Dict(String, glance.Module)), GenError) {
+  case dict.get(parsed_cache, module_path) {
+    Ok(ast) -> Ok(#(ast, parsed_cache))
+    Error(Nil) -> {
+      use source <- result.try(
+        simplifile.read(file_path)
+        |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
+      )
+      use ast <- result.map(
+        glance.module(source)
+        |> result.map_error(fn(cause) {
+          ParseFailed(path: file_path, cause:)
+        }),
+      )
+      #(ast, dict.insert(parsed_cache, module_path, ast))
+    }
+  }
+}
+
+/// Collect (module_path, type_name) refs from a variant's fields,
+/// filtering out visited, skipped, and primitive refs.
+fn collect_variant_field_refs(
+  variant variant: glance.Variant,
+  resolver resolver: TypeResolver,
+  current_module current_module: String,
+  visited visited: Set(#(String, String)),
+) -> List(#(String, String)) {
+  let field_refs =
+    list.flat_map(variant.fields, fn(field) {
+      let field_type = case field {
+        glance.LabelledVariantField(item:, ..) -> item
+        glance.UnlabelledVariantField(item:) -> item
+      }
+      collect_type_refs(t: field_type, resolver:, current_module:)
+    })
+  list.filter(field_refs, fn(ref) {
+    let #(ref_module, ref_type) = ref
+    !set.contains(visited, ref)
+    && !is_skipped_module(ref_module)
+    && !is_primitive_type(ref_type)
+  })
+}
+
+/// Resolve a type name (with optional module qualifier) to its full
+/// module path. Falls back to current_module when the name is unqualified
+/// and not in the resolver — meaning it's defined in the current module.
+fn resolve_type_module(
+  name name: String,
+  module module: option.Option(String),
+  resolver resolver: TypeResolver,
+  current_module current_module: String,
+) -> Result(String, Nil) {
+  case module {
+    Some(alias) -> dict.get(resolver.aliased, alias)
+    None ->
+      case dict.get(resolver.unqualified, name) {
+        Ok(mp) -> Ok(mp)
+        Error(Nil) -> Ok(current_module)
+      }
+  }
+}
+
+/// Walk a glance.Type and return (module_path, type_name) refs for any
+/// named custom types found. Uses resolver to map alias/unqualified names
+/// to their full module paths. `current_module` is the module path of the
+/// file being walked — used to resolve unqualified names that are defined
+/// in the same file (not in any import).
+fn collect_type_refs(
+  t t: glance.Type,
+  resolver resolver: TypeResolver,
+  current_module current_module: String,
+) -> List(#(String, String)) {
+  case t {
+    glance.NamedType(name:, module:, parameters:, ..) -> {
+      // Recurse into type parameters regardless
+      let param_refs =
+        list.flat_map(parameters, fn(p) {
+          collect_type_refs(t: p, resolver:, current_module:)
+        })
+      // Skip primitives/builtins
+      use <- bool.guard(when: is_primitive_type(name), return: param_refs)
+      // Resolve the module path
+      let module_path = resolve_type_module(
+        name: name,
+        module: module,
+        resolver: resolver,
+        current_module: current_module,
+      )
+      case module_path {
+        Error(Nil) -> param_refs
+        Ok(mp) -> {
+          use <- bool.guard(
+            when: is_skipped_module(mp),
+            return: param_refs,
+          )
+          list.append([#(mp, name)], param_refs)
+        }
+      }
+    }
+    glance.TupleType(elements:, ..) ->
+      list.flat_map(elements, fn(e) {
+        collect_type_refs(t: e, resolver:, current_module:)
+      })
+    glance.FunctionType(..) -> []
+    glance.VariableType(..) -> []
+    glance.HoleType(..) -> []
+  }
+}
+
+/// Convert a PascalCase variant name to snake_case for the wire atom.
+/// "AdminData" → "admin_data", "One" → "one", "TwoOrMore" → "two_or_more".
+fn to_snake_case(name: String) -> String {
+  let graphemes = string.to_graphemes(name)
+  list.index_fold(graphemes, "", fn(acc, g, i) {
+    case i == 0, is_upper_grapheme(g) {
+      True, _ -> acc <> string.lowercase(g)
+      False, True -> acc <> "_" <> string.lowercase(g)
+      False, False -> acc <> g
+    }
+  })
+}
+
+fn is_upper_grapheme(g: String) -> Bool {
+  g != string.lowercase(g)
+}
+
+fn write_register(
+  config config: Config,
+  rpcs rpcs: List(Rpc),
+) -> Result(Nil, List(GenError)) {
+  let client_toml = config.client_root <> "/gleam.toml"
+  use toml_source <- result.try(
+    simplifile.read(client_toml)
+    |> result.map_error(fn(cause) {
+      [CannotReadFile(path: client_toml, cause: cause)]
+    }),
+  )
+  let path_deps = parse_path_deps(toml_source: toml_source)
+  // Resolve each dep path relative to the generator's CWD (the server
+  // package root). A path dep of "../shared" in the client's gleam.toml
+  // is relative to the client package, not the server, so prepend
+  // client_root and normalize.
+  let resolved_deps =
+    list.map(path_deps, fn(dep) {
+      PathDep(name: dep.name, path: normalize_path_dep(config:, dep:))
+    })
+  use discovered <- result.try(walk_registry_types(
+    rpcs: rpcs,
+    path_deps: resolved_deps,
+  ))
+  io.println(
+    "  register: "
+    <> int.to_string(list.length(discovered))
+    <> " variants discovered from @rpc type graph",
+  )
+  use _ <- result.try(
+    write_register_gleam(config:) |> result.map_error(fn(e) { [e] }),
+  )
+  write_register_ffi(config:, discovered:) |> result.map_error(fn(e) { [e] })
+}
+
+/// Extract `name = { path = "..." }` entries from a gleam.toml source
+/// string. Intentionally line-based and forgiving: libero does not need
+/// a full TOML parser, only the set of path deps. Lines in `[dev-…]`
+/// sections are included (their types would still compile into the
+/// client bundle at dev-build time).
+fn parse_path_deps(toml_source toml_source: String) -> List(PathDep) {
+  string.split(toml_source, "\n")
+  |> list.filter_map(parse_path_dep_line)
+}
+
+fn parse_path_dep_line(line: String) -> Result(PathDep, Nil) {
+  // Examples:
+  //   shared = { path = "../shared" }
+  //   parrot = { path = "../lib/parrot" }
+  // Leading whitespace and optional version pins are not supported;
+  // path deps use the object form exclusively.
+  let trimmed = string.trim(line)
+  use #(name_part, rest1) <- result.try(split_once(string: trimmed, on: "="))
+  let name = string.trim(name_part)
+  case string.contains(rest1, "path") && string.contains(rest1, "{") {
+    False -> Error(Nil)
+    True -> {
+      use #(_, after_path) <- result.try(split_once(string: rest1, on: "path"))
+      use #(_, after_eq) <- result.try(split_once(string: after_path, on: "="))
+      let after_eq_trim = string.trim(after_eq)
+      use #(_, after_open) <- result.try(split_once(
+        string: after_eq_trim,
+        on: "\"",
+      ))
+      use #(path_value, _) <- result.try(split_once(
+        string: after_open,
+        on: "\"",
+      ))
+      case name {
+        "" -> Error(Nil)
+        _ -> Ok(PathDep(name:, path: path_value))
+      }
+    }
+  }
+}
+
+fn split_once(
+  string string: String,
+  on separator: String,
+) -> Result(#(String, String), Nil) {
+  case string.split_once(string, on: separator) {
+    Ok(pair) -> Ok(pair)
+    Error(Nil) -> Error(Nil)
+  }
+}
+
+/// Resolve a path dep path (from the client's gleam.toml) to a path
+/// relative to the generator's current working directory (which is
+/// the server package root).
+fn normalize_path_dep(config config: Config, dep dep: PathDep) -> String {
+  // The dep path is written relative to the client package root,
+  // but libero runs from the server package. So we prepend the
+  // client_root and then let the OS/simplifile walk the resulting
+  // path as-is. No canonicalization — simplifile tolerates `..` in
+  // paths on POSIX.
+  config.client_root <> "/" <> dep.path
+}
+
+/// Write the tiny Gleam wrapper that consumers call from main().
+fn write_register_gleam(config config: Config) -> Result(Nil, GenError) {
+  let content =
+    "//// Code generated by libero. DO NOT EDIT.
+////
+//// Registers every consumer custom type that might cross the wire
+//// for this namespace's @rpc calls, so libero's client-side rebuild
+//// function can reconstruct tagged JSON objects into Gleam class
+//// instances. Call register_all() exactly once at client boot,
+//// before the first RPC call fires.
+
+pub fn register_all() -> Nil {
+  do_register_all()
+}
+
+@external(javascript, \"./rpc_register_ffi.mjs\", \"registerAll\")
+fn do_register_all() -> Nil
+"
+  let output = config.register_gleam_output
+  ensure_parent_dir(path: output)
+  case simplifile.write(output, content) {
+    Ok(_) -> {
+      io.println("  wrote " <> output)
+      Ok(Nil)
+    }
+    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
+  }
+}
+
+/// Write the FFI .mjs file with explicit imports and registerConstructor
+/// calls for every variant discovered by the type graph walker.
+fn write_register_ffi(
+  config config: Config,
+  discovered discovered: List(DiscoveredVariant),
+) -> Result(Nil, GenError) {
+  let prefix = config.register_relpath_prefix
+  // Collect distinct modules in discovery order (first occurrence wins).
+  let distinct_modules =
+    list.fold(discovered, #([], set.new()), fn(acc, v) {
+      let #(modules_acc, seen) = acc
+      case set.contains(seen, v.module_path) {
+        True -> acc
+        False -> #(
+          list.append(modules_acc, [v.module_path]),
+          set.insert(seen, v.module_path),
+        )
+      }
+    })
+    |> fn(pair) { pair.0 }
+  // Assign JS aliases _m0, _m1, … per module
+  let module_aliases: Dict(String, String) =
+    list.index_fold(distinct_modules, dict.new(), fn(acc, module_path, i) {
+      dict.insert(acc, module_path, "_m" <> int.to_string(i))
+    })
+  let libero_import =
+    "import { registerConstructor } from \""
+    <> prefix
+    <> "libero/libero/rpc_ffi.mjs\";"
+  let module_imports =
+    list.map(distinct_modules, fn(module_path) {
+      let alias = dict.get(module_aliases, module_path) |> result.unwrap("_m0")
+      "import * as "
+      <> alias
+      <> " from \""
+      <> prefix
+      <> module_to_mjs_path(module_path)
+      <> "\";"
+    })
+  let register_calls =
+    list.map(discovered, fn(v) {
+      let alias =
+        dict.get(module_aliases, v.module_path) |> result.unwrap("_m0")
+      "  if ("
+      <> alias
+      <> "."
+      <> v.variant_name
+      <> ") registerConstructor(\""
+      <> v.atom_name
+      <> "\", "
+      <> alias
+      <> "."
+      <> v.variant_name
+      <> ");"
+    })
+  let content =
+    "// Code generated by libero. DO NOT EDIT.
+//
+// Registers every custom type that transitively crosses the wire for
+// this namespace's @rpc functions. Walked from @rpc signatures at
+// generation time — the consumer does not list types manually.
+
+"
+    <> libero_import
+    <> "\n"
+    <> string.join(module_imports, "\n")
+    <> "\n\nexport function registerAll() {\n"
+    <> string.join(register_calls, "\n")
+    <> "\n}\n"
+  let output = config.register_ffi_output
+  ensure_parent_dir(path: output)
+  case simplifile.write(output, content) {
+    Ok(_) -> {
+      io.println("  wrote " <> output)
+      Ok(Nil)
+    }
+    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
+  }
+}
+
+/// Convert a Gleam module path like "shared/discount" to its compiled
+/// .mjs bundle path "shared/shared/discount.mjs". The first segment
+/// is the package name (Gleam convention) and is repeated because
+/// the bundle layout is `<package>/<module_path>.mjs`.
+fn module_to_mjs_path(module_path: String) -> String {
+  case string.split_once(module_path, "/") {
+    // Single-segment module path: the whole thing IS the package name
+    // and its root module, e.g. "shared" → "shared/shared.mjs".
+    Error(Nil) -> module_path <> "/" <> module_path <> ".mjs"
+    // Multi-segment: first segment is package, the whole path is
+    // repeated under it, e.g. "shared/discount" → "shared/shared/discount.mjs".
+    Ok(#(package, _)) -> package <> "/" <> module_path <> ".mjs"
   }
 }
 
