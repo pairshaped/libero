@@ -161,9 +161,13 @@ function toJsPrimitive(v) {
   if (typeof v !== "object" && typeof v !== "function") return v;
   // JS array = Gleam tuple — recurse into elements
   if (Array.isArray(v)) return v.map(toJsPrimitive);
-  // Gleam linked list — flatten and recurse
+  // Gleam linked list — flatten and recurse. NonEmpty has .head,
+  // Empty is detected via the stored constructor reference.
   if (v.head !== undefined) {
     return gleamListToArray(v).map(toJsPrimitive);
+  }
+  if (Empty !== null && v instanceof Empty) {
+    return [];
   }
   // Gleam Dict (JS Map) — encode as tagged dict with [k, v] pairs
   if (v instanceof Map) {
