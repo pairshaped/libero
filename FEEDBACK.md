@@ -22,13 +22,9 @@ The success path in `main()` returned `Nil` without calling `halt(0)`. The BEAM 
 
 Clarified CLI help text, generated config comments, and README to make it clear that `--ws-url` is the client's runtime WebSocket endpoint, not a generator input. Libero does not connect to this URL; it writes it into the generated `rpc_config.gleam`.
 
-### 3. Silent failure when @inject label doesn't match (HIGH)
+### 3. ~~Silent failure when @inject label doesn't match~~ FIXED
 
-**Symptom:** If an `@rpc` function has a parameter whose label doesn't exactly match an `@inject` function name, libero silently doesn't inject anything — it treats the parameter as a wire parameter and requires the client to send it. No warning, no error, just wrong generated code.
-
-**Example:** Naming a parameter `tzdb tzdb:` instead of `tz_db tz_db:` silently produces a generated client that expects the caller to pass a `TzDatabase` over the wire. This was only caught when the generated client-side function signature looked wrong.
-
-**Suggestion:** Libero should either (a) warn when a parameter type matches a known inject function but the label doesn't, or (b) error out when a non-inject parameter has a type that can't cross the wire (`sqlight.Connection`, `tz_database.TzDatabase`, etc.).
+When a Wire parameter's rendered type matches an `@inject` function's return type but the label doesn't match, libero now emits a `LikelyInjectTypo` error with a suggested fix. This catches typos like `tzdb` vs `tz_db` at generation time instead of producing silently wrong code.
 
 ### 4. `InternalError(trace_id)` is opaque to the client (MEDIUM)
 

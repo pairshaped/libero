@@ -85,6 +85,9 @@ type InjectFn {
     module_path: String,
     /// Alias used to qualify the call, e.g. "rpc_inject".
     module_alias: String,
+    /// Rendered return type, e.g. "sqlight.Connection". Used to
+    /// detect likely label typos on @rpc params.
+    return_type: String,
   )
 }
 
@@ -180,6 +183,13 @@ type GenError {
   UnlabelledParam(path: String, fn_name: String, position: Int)
   UnknownType(path: String, fn_name: String, type_name: String)
   DuplicateWireName(wire_name: String)
+  LikelyInjectTypo(
+    path: String,
+    fn_name: String,
+    label: String,
+    type_: String,
+    inject_name: String,
+  )
   EmptyModulePath(path: String)
   UnresolvedTypeModule(module_path: String, type_name: String)
   TypeNotFound(module_path: String, type_name: String)
@@ -518,6 +528,24 @@ fn print_error(err: GenError) -> Nil {
       <> type_name
       <> "}` to "
       <> path
+    LikelyInjectTypo(path, fn_name, label, type_, inject_name) ->
+      path
+      <> ": @rpc function `"
+      <> fn_name
+      <> "` has parameter `"
+      <> label
+      <> "` of type `"
+      <> type_
+      <> "` which matches @inject function `"
+      <> inject_name
+      <> "` but the label doesn't match"
+      <> "\n  did you mean `"
+      <> inject_name
+      <> " "
+      <> inject_name
+      <> ": "
+      <> type_
+      <> "`?"
     DuplicateWireName(wire_name) ->
       "duplicate wire name: two @rpc functions both resolve to `"
       <> wire_name
@@ -1550,11 +1578,19 @@ fn build_inject_entry(
         glance.FunctionParameter(type_: option.Some(session_t), ..) -> {
           let #(rendered, imports) =
             render_type(t: session_t, resolver: resolver)
+          let return_rendered = case func.return {
+            Some(rt) -> {
+              let #(r, _) = render_type(t: rt, resolver: resolver)
+              r
+            }
+            None -> "Nil"
+          }
           let inject_fn =
             InjectFn(
               name: func.name,
               module_path: module_path,
               module_alias: module_alias,
+              return_type: return_rendered,
             )
           let session = SessionInfo(type_rendered: rendered, imports: imports)
           Ok(#(func.name, inject_fn, session))
@@ -1860,6 +1896,14 @@ fn build_rpc(
     |> result.replace_error([EmptyModulePath(path)]),
   )
 
+  // Build a reverse map from inject return type to inject fn name,
+  // so we can detect label typos where the type matches but the
+  // label doesn't.
+  let inject_types =
+    dict.fold(inject_map, dict.new(), fn(acc, _label, inject_fn) {
+      dict.insert(acc, inject_fn.return_type, inject_fn.name)
+    })
+
   // Classify each parameter as Injected (label matches an @inject
   // function) or Wire (carried over the wire). Collect errors for
   // any param missing a label.
@@ -1873,6 +1917,7 @@ fn build_rpc(
           param: param,
           i: i,
           inject_map: inject_map,
+          inject_types: inject_types,
           resolver: resolver,
           path: path,
           fn_name: fn_name,
@@ -1913,6 +1958,7 @@ fn classify_parameter(
   param param: glance.FunctionParameter,
   i i: Int,
   inject_map inject_map: InjectMap,
+  inject_types inject_types: Dict(String, String),
   resolver resolver: TypeResolver,
   path path: String,
   fn_name fn_name: String,
@@ -1927,7 +1973,10 @@ fn classify_parameter(
         label: label,
         type_: type_,
         inject_map: inject_map,
+        inject_types: inject_types,
         resolver: resolver,
+        path: path,
+        fn_name: fn_name,
       )
     _ -> #(
       classified_so_far,
@@ -1944,7 +1993,10 @@ fn classify_labelled_parameter(
   label label: String,
   type_ type_: glance.Type,
   inject_map inject_map: InjectMap,
+  inject_types inject_types: Dict(String, String),
   resolver resolver: TypeResolver,
+  path path: String,
+  fn_name fn_name: String,
 ) -> #(List(ClassifiedParam), ImportMap, List(GenError)) {
   case dict.get(inject_map, label) |> option.from_result {
     Some(inject_fn) -> #(
@@ -1957,12 +2009,27 @@ fn classify_labelled_parameter(
     None -> {
       let #(rendered, new_imports) = render_type(t: type_, resolver: resolver)
       let merged_imports = merge_imports(a: imports_so_far, b: new_imports)
+      // Check if the type matches an inject fn's return type but the
+      // label doesn't match. This catches typos like `tzdb` vs `tz_db`.
+      let errors = case dict.get(inject_types, rendered) |> option.from_result {
+        Some(inject_name) ->
+          list.append(errors_so_far, [
+            LikelyInjectTypo(
+              path: path,
+              fn_name: fn_name,
+              label: label,
+              type_: rendered,
+              inject_name: inject_name,
+            ),
+          ])
+        None -> errors_so_far
+      }
       #(
         list.append(classified_so_far, [
           Wire(Param(label: label, rendered_type: rendered)),
         ]),
         merged_imports,
-        errors_so_far,
+        errors,
       )
     }
   }
