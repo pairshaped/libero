@@ -14,15 +14,9 @@ Severity tags:
 
 ## Known issues
 
-### 1. Libero hangs at 99% CPU after code generation (BLOCKING)
+### 1. ~~Libero hangs at 99% CPU after code generation~~ FIXED
 
-**Symptom:** A consumer's `bin/dev` runs libero, libero writes all generated files successfully (reports "wrote …/client/src/…/rpc/*.gleam" for each section and the dispatch file), and then libero just… sits there at 99% CPU indefinitely. The parent build script waits forever on its child process. The only way forward is to kill libero manually (`pkill -9 -f libero`).
-
-**Impact:** Every build that triggers a libero regeneration requires manual intervention. During the v3 SPA port we accumulated ~10 stuck libero processes before noticing. This has been the #1 source of lost time for libero consumers.
-
-**Hypothesis:** Libero's `main` function may be entering a wait loop or WebSocket connection attempt after emitting the files, rather than exiting cleanly. The `--ws-url` parameter it takes suggests it has runtime WebSocket behaviour that shouldn't apply to one-shot code generation.
-
-**Workaround:** Consumers can touch their libero stamp file manually to skip the libero phase, or `pkill -9 -f libero` then rerun the build.
+The success path in `main()` returned `Nil` without calling `halt(0)`. The BEAM VM stays alive when `main` returns if any OTP processes or schedulers are running. Added `halt(0)` on the success path to match the error path's `halt(1)`.
 
 ### 2. `--ws-url` parameter on a code generator is confusing (MEDIUM)
 

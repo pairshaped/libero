@@ -350,6 +350,7 @@ pub fn main() -> Nil {
       io.println(
         "libero: done. generated " <> int.to_string(count) <> " RPC stubs",
       )
+      let _halt = halt(0)
     }
     Error(errors) -> {
       list.each(errors, print_error)
