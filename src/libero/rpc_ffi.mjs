@@ -671,36 +671,86 @@ try {
 
 // ---------- WebSocket + call queue ----------
 //
+// Responses are matched to requests by FIFO order — the server must
+// send responses in the same order it received requests. This holds
+// for the current architecture (one Erlang process per WebSocket
+// connection, sequential dispatch). If the server ever processes
+// requests concurrently, this would need message IDs for correlation.
+//
 // Every `call` receives the WebSocket URL as its first argument. On the
 // first call, the socket is opened lazily. Subsequent calls reuse the
 // existing connection (the URL is a compile-time const from Gleam's
 // rpc_config module, so it doesn't change across calls). Calls issued
 // before the socket's open event are queued and flushed once it opens.
+//
+// On disconnect, the socket reconnects with exponential backoff (100ms
+// to 5s cap). In-flight callbacks from before the disconnect stay in
+// the queue — they will receive the next responses after reconnection.
+// This means responses may not match their original requests after a
+// reconnect, but it is better than a permanently stuck Lustre app.
 
 let ws = null;
 let callbackQueue = [];
 let pendingSends = [];
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let currentUrl = null;
 
 function ensureSocket(url) {
+  currentUrl = url;
   if (ws !== null) return;
+
   ws = new WebSocket(url);
   ws.binaryType = "arraybuffer";
+
   ws.addEventListener("open", () => {
+    reconnectAttempts = 0;
     for (const payload of pendingSends) ws.send(payload);
     pendingSends = [];
   });
+
   ws.addEventListener("message", (event) => {
-    const value = decode(event.data);
+    const buffer = event.data instanceof ArrayBuffer
+      ? event.data
+      : event.data.buffer || event.data;
+    const value = decode(buffer);
     const cb = callbackQueue.shift();
     if (cb) cb(value);
   });
+
+  ws.addEventListener("close", () => {
+    ws = null;
+    scheduleReconnect();
+  });
+
+  ws.addEventListener("error", () => {
+    // Error is always followed by close, so reconnection happens there.
+    // Just close ws so the close handler can null it and reconnect.
+    if (ws) {
+      ws.close();
+    }
+  });
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer !== null) return;
+  if (currentUrl === null) return;
+
+  // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms, cap at 5s
+  const delay = Math.min(100 * Math.pow(2, reconnectAttempts), 5000);
+  reconnectAttempts++;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    ensureSocket(currentUrl);
+  }, delay);
 }
 
 export function call(url, name, args, onResponse) {
   ensureSocket(url);
   const payload = encode(name, args);
   callbackQueue.push(onResponse);
-  if (ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(payload);
   } else {
     pendingSends.push(payload);
