@@ -24,6 +24,7 @@
 //// output) and wraps it in the "dict" tag so the client's rebuild function
 //// can distinguish a real dict from an incidentally-shaped tuple array.
 
+import gleam/dict as map
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json.{type Json}
@@ -126,21 +127,76 @@ pub type DecodeError {
 }
 
 /// Parse `{"fn": "records.save", "args": [...]}` from text.
-/// Args come back as a `List(Dynamic)`. The dispatch table coerces each
-/// one to its expected type via `gleam_stdlib:identity`.
+/// Each arg is run through `rebuild` to convert tagged JSON objects
+/// (`{"@": "tag", "v": [...]}`) back into Erlang tuples that match the
+/// Gleam custom type representation (`{tag, field1, field2, ...}`).
+/// This mirrors the client-side `rebuild` in rpc_ffi.mjs, letting
+/// consumers pass custom types (records, enums, Option values) as
+/// @rpc arguments, not just primitives.
 pub fn decode_call(
   text: String,
 ) -> Result(#(String, List(Dynamic)), DecodeError) {
   let decoder = {
     use fn_name <- decode.field("fn", decode.string)
     use args <- decode.field("args", decode.list(decode.dynamic))
-    decode.success(#(fn_name, args))
+    decode.success(#(fn_name, list.map(args, rebuild)))
   }
   json.parse(text, decoder)
   |> result.map_error(fn(err) {
     DecodeError(message: "invalid call envelope", cause: err)
   })
 }
+
+/// Reconstruct a JSON-parsed Dynamic value into its Gleam-native shape.
+///
+/// - `{"@": "tag", "v": [f1, f2, ...]}` → Erlang tuple `{tag, rebuild(f1), ...}`
+///   which is how Gleam custom types are represented on BEAM.
+/// - `{"@": "dict", "v": [[k1, v1], ...]}` → Erlang map `%{k1 => v1, ...}`.
+/// - JSON array → Gleam List (via `list.map` which is already a Gleam list)
+/// - JSON null → Already decoded as `Nil` by gleam_json.
+/// - Primitives → Pass through unchanged.
+///
+/// This is the server-side counterpart of rpc_ffi.mjs's `rebuild()`.
+fn rebuild(value: Dynamic) -> Dynamic {
+  // Try tagged object first: {"@": "...", "v": [...]}
+  let tag_decoder = {
+    use tag <- decode.field("@", decode.string)
+    use fields <- decode.field("v", decode.list(decode.dynamic))
+    decode.success(#(tag, fields))
+  }
+  case decode.run(value, tag_decoder) {
+    Ok(#("dict", pairs)) -> {
+      // Reconstruct as Erlang map (Gleam Dict).
+      let map_entries =
+        list.filter_map(pairs, fn(pair) {
+          case decode.run(pair, decode.list(decode.dynamic)) {
+            Ok([k, v]) -> Ok(#(rebuild(k), rebuild(v)))
+            _ -> Error(Nil)
+          }
+        })
+      coerce(map.from_list(map_entries))
+    }
+    Ok(#(tag, fields)) -> {
+      // Reconstruct as Erlang tuple: {atom, field1, field2, ...}
+      let atom = binary_to_existing_atom(tag)
+      let rebuilt_fields = list.map(fields, rebuild)
+      list_to_tuple([atom, ..rebuilt_fields])
+    }
+    Error(_) -> {
+      // Not a tagged object — check if it's a list (recurse into elements)
+      case decode.run(value, decode.list(decode.dynamic)) {
+        Ok(items) -> coerce(list.map(items, rebuild))
+        Error(_) -> value
+      }
+    }
+  }
+}
+
+@external(erlang, "erlang", "binary_to_existing_atom")
+fn binary_to_existing_atom(name: String) -> Dynamic
+
+@external(erlang, "erlang", "list_to_tuple")
+fn list_to_tuple(elements: List(Dynamic)) -> Dynamic
 
 // ---------- Erlang FFI ----------
 
