@@ -1133,7 +1133,7 @@ fn write_register_gleam(config config: Config) -> Result(Nil, GenError) {
 ////
 //// Registers every consumer custom type that might cross the wire
 //// for this namespace's @rpc calls, so libero's client-side rebuild
-//// function can reconstruct tagged JSON objects into Gleam class
+//// function can reconstruct tagged ETF terms into Gleam class
 //// instances. Call register_all() exactly once at client boot,
 //// before the first RPC call fires.
 
@@ -2212,7 +2212,7 @@ fn render_stub_fn(rpc: Rpc) -> String {
 fn render_args_tuple(params: List(Param)) -> String {
   case params {
     [] -> "Nil"
-    [only] -> only.label
+    [only] -> "#(" <> only.label <> ")"
     _ -> {
       let names = list.map(params, fn(p) { p.label })
       "#(" <> string.join(names, ", ") <> ")"

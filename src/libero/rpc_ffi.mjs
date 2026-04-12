@@ -87,6 +87,8 @@ function gleamListToArray(list) {
 
 // ---------- ETF Decoder ----------
 
+const utf8Decoder = new TextDecoder();
+
 class ETFDecoder {
   constructor(buffer) {
     this.view = new DataView(buffer);
@@ -139,8 +141,7 @@ class ETFDecoder {
   }
 
   readString(n) {
-    const bytes = this.readBytes(n);
-    return new TextDecoder().decode(bytes);
+    return utf8Decoder.decode(this.readBytes(n));
   }
 
   decodeTerm() {
@@ -270,13 +271,12 @@ class ETFDecoder {
     for (let i = 0; i < count; i++) {
       elements.push(this.decodeTerm());
     }
-    // Read the tail (should be NIL_EXT for proper lists)
+    // Read the tail — must be NIL_EXT (106) for proper lists.
+    // Gleam cannot produce improper lists, so a non-nil tail indicates
+    // corrupted data or a non-Gleam sender.
     const tailTag = this.readUint8();
     if (tailTag !== 106) {
-      // Improper list — not expected from Gleam, but handle gracefully
-      this.offset -= 1;
-      // Decode the tail term and ignore it (shouldn't happen with Gleam)
-      this.decodeTerm();
+      throw new Error("ETF decode: improper list (non-nil tail) — Gleam cannot produce these");
     }
     return arrayToGleamList(elements);
   }
@@ -418,7 +418,10 @@ class ETFEncoder {
       return;
     }
 
-    // Gleam Dict (JS Map)
+    // Gleam Dict (JS Map).
+    // Gleam Dict compiles to JS Map (gleam_stdlib convention).
+    // If gleam_stdlib changes this, the encoder will throw "unsupported type"
+    // which makes the issue immediately visible.
     if (value instanceof Map) {
       this.encodeMap(value);
       return;
@@ -564,6 +567,10 @@ class ETFEncoder {
 
 // ---------- Helper ----------
 
+// Convert PascalCase (Gleam constructor convention) to snake_case.
+// Does not handle consecutive uppercase like "XMLParser" correctly,
+// but Gleam constructors are always PascalCase (e.g. "MyValue"), so
+// this edge case cannot arise in practice.
 function snakeCase(name) {
   return name
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")

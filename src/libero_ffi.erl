@@ -13,7 +13,7 @@ encode(Term) ->
     erlang:term_to_binary(Term).
 
 decode(Bin) ->
-    erlang:binary_to_term(Bin).
+    erlang:binary_to_term(Bin, [safe]).
 
 try_call(F) ->
     try F() of

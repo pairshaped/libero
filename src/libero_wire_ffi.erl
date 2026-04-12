@@ -5,7 +5,7 @@
 %% and return a Gleam-shaped Result: {ok, {Name, Args}} or
 %% {error, {decode_error, Message}}.
 decode_call(Bin) when is_binary(Bin) ->
-    try erlang:binary_to_term(Bin) of
+    try erlang:binary_to_term(Bin, [safe]) of
         {Name, Args} when is_binary(Name), is_list(Args) ->
             {ok, {Name, Args}};
         _ ->
