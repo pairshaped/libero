@@ -18,13 +18,9 @@ Severity tags:
 
 The success path in `main()` returned `Nil` without calling `halt(0)`. The BEAM VM stays alive when `main` returns if any OTP processes or schedulers are running. Added `halt(0)` on the success path to match the error path's `halt(1)`.
 
-### 2. `--ws-url` parameter on a code generator is confusing (MEDIUM)
+### 2. ~~`--ws-url` parameter on a code generator is confusing~~ FIXED
 
-**Symptom:** Libero is invoked as `gleam run -m libero -- --ws-url=... --namespace=admin`. A code generator shouldn't need a WebSocket URL — it's reading source files and emitting source files.
-
-**Hypothesis:** The WS URL is baked into the generated client config so the client knows where to connect. If that's the case, the parameter is legitimately needed but should probably be documented as "the generated client's runtime WS endpoint," not as a generator input.
-
-**Suggestion:** Either document it clearly or move the WS URL out of the generator's CLI and into a separate config file the generated client reads at runtime.
+Clarified CLI help text, generated config comments, and README to make it clear that `--ws-url` is the client's runtime WebSocket endpoint, not a generator input. Libero does not connect to this URL; it writes it into the generated `rpc_config.gleam`.
 
 ### 3. Silent failure when @inject label doesn't match (HIGH)
 

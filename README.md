@@ -145,7 +145,7 @@ pub fn handle_message(state, message, conn) {
 
 Libero's generator is driven by three flags:
 
-- **`--ws-url=<url>`** *(required, no default)*. WebSocket URL baked into the generated `rpc_config.gleam`. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL.
+- **`--ws-url=<url>`** *(required, no default)*. The WebSocket endpoint the generated client will connect to at runtime, baked into `rpc_config.gleam` as a compile-time constant. Libero itself does not connect to this URL; it only writes it into the generated config. Forcing it at the call site means nobody accidentally ships stubs pointing at a dev URL.
 - **`--namespace=<name>`** *(optional, no default)*. When set, drives every path by directory convention and prefixes wire names.
 - **`--client=<path>`** *(optional, defaults to `../client`)*. Path to the client package root. Only needed for non-standard layouts.
 
