@@ -62,15 +62,29 @@ Tested with realistic competition data modeled after a Brier event (18 teams, 80
 
 ### Key findings
 
-**ETF is faster on both server and client.** Previous benchmarks that omitted the JSON rebuild step made JSON appear faster on the client. With a faithful rebuild (constructor instantiation + linked list construction), ETF decode is faster across all payload sizes.
+**ETF is faster on both server and client.** With a faithful rebuild (constructor instantiation + linked list construction), ETF decode is faster across all payload sizes.
 
-**Server-side ETF advantage grows with payload size.** Encode speedup goes from 9.5x (small) to 24.6x (large) because JSON's tree-walk + string-building overhead compounds with nested structures, while `erlang:term_to_binary` is a single C-level pass. Decode speedup grows from 4.8x to 9.2x.
+**Server-side ETF advantage grows with payload size.** Encode speedup goes from 9.5x (small) to 24.6x (large). Decode speedup grows from 4.8x to 9.2x.
 
-**Client-side advantage is modest but consistent.** ETF decode is 6-30% faster than JSON parse+rebuild. The margin narrows for payloads dominated by small integers (shot data), where JSON.parse's native C advantage partially closes the gap.
+**Client-side advantage is modest but consistent.** ETF decode is 6-30% faster than JSON parse+rebuild. The margin narrows for payloads dominated by small integers (shot data).
 
-**JSON payloads are 19-69% larger.** The `{"@":"tag","v":[...]}` wrapper for every custom type adds overhead. The gap narrows for large payloads dominated by primitive values (small integers in shot data). WebSocket frames are not compressed by default (no `permessage-deflate`).
+**JSON payloads are 19-69% larger.** The `{"@":"tag","v":[...]}` wrapper for every custom type adds overhead. The gap narrows for large payloads dominated by primitive values. WebSocket frames are not compressed by default (no `permessage-deflate`).
 
 **ETF eliminates type-mapping bugs.** Beyond performance, ETF preserves BEAM type structure natively — no more None vs Nil confusion, tuple/list conflation, Dict encoding issues, 0-arity constructor ambiguity, or server-side rebuild failures. The JSON wire format required ~200 lines of server-side rebuild code and caused 5+ bugs during the v3 pilot.
+
+### Why ETF is faster
+
+**Server-side:** `erlang:term_to_binary` and `binary_to_term` are C-level BIFs that operate on BEAM terms in a single pass. The JSON path must do two passes: first a recursive Gleam/Erlang walk to build an intermediate JSON tree (allocating wrapper objects for every node), then serialization to a string. Decoding is the same story in reverse — `json:decode` produces generic maps and lists, then a second recursive pass (`rebuild`) must pattern-match tagged objects, call `binary_to_atom` and `list_to_tuple` to reconstruct the actual Erlang terms. ETF skips all intermediate representations.
+
+The advantage compounds with nesting depth and payload size because every level of structure means another layer of intermediate allocation and traversal for JSON, while ETF's single pass stays linear.
+
+**Client-side:** This one is counterintuitive — `JSON.parse` is a native C function in V8, while the ETF decoder is interpreted JavaScript walking an `ArrayBuffer` byte-by-byte. In isolation, `JSON.parse` is 1.6-2.1x faster than the ETF decoder.
+
+But `JSON.parse` produces plain JS objects and arrays, not Gleam-compatible values. The mandatory `rebuild` pass must walk every parsed value to convert `{"@":"tag","v":[...]}` objects into constructor instances (class allocation + property assignment) and convert JSON arrays into Gleam linked lists (right-to-left fold creating cons cells). This rebuild allocates heavily and touches every node a second time.
+
+The ETF decoder does equivalent work — constructor lookup, linked list construction — but in a single pass while reading the binary. One pass with allocation beats two passes with allocation, even when the first pass of the two is native C.
+
+The client-side margin narrows for shot-heavy payloads (6% vs 30%) because shots are flat tuples of small integers with minimal nesting. JSON.parse handles flat arrays of numbers efficiently, and the rebuild pass has little tag-matching work to do. For deeply nested custom types (discount records with Option fields, enum variants, lists of compound types), the rebuild overhead is proportionally larger and ETF's single-pass advantage is more pronounced.
 
 ### Test environment
 
