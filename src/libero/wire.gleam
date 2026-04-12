@@ -187,14 +187,13 @@ fn rebuild_non_null(value: Dynamic) -> Dynamic {
       coerce(map.from_list(map_entries))
     }
     Ok(#(tag, fields)) -> {
-      case tag, fields {
-        // None → atom `nil` (Gleam's Option.None representation on BEAM)
-        "none", [] -> coerce(Nil)
-        // 0-arity constructors (DiscountNotFound, NameRequired, Male, etc.)
-        // are bare atoms on BEAM, not 1-element tuples. Return the atom.
-        _, [] -> binary_to_atom(tag)
+      case fields {
+        // 0-arity constructors (None, DiscountNotFound, Male, etc.)
+        // are bare atoms on BEAM, not 1-element tuples.
+        // None → atom `none` (NOT `nil` — Nil is a separate type).
+        [] -> binary_to_atom(tag)
         // N-arity constructors → Erlang tuple {atom, field1, field2, ...}
-        _, _ -> {
+        _ -> {
           let atom = binary_to_atom(tag)
           let rebuilt_fields = list.map(fields, rebuild)
           list_to_tuple([atom, ..rebuilt_fields])
