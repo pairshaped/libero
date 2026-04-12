@@ -31,9 +31,9 @@ class ETFDecoder {
       case 98: return this.readInt32();
       case 104: return this.decodeTuple(this.readUint8());
       case 105: return this.decodeTuple(this.readUint32());
-      case 106: return [];
+      case 106: return null; // empty list (linked list nil)
       case 107: { const len = this.readUint16(); const a = []; for (let i = 0; i < len; i++) a.push(this.readUint8()); return a; }
-      case 108: return this.decodeList();
+      case 108: return this.decodeList(); // builds linked list
       case 109: return this.readString(this.readUint32());
       case 110: return this.decodeBigInt(this.readUint8());
       case 111: return this.decodeBigInt(this.readUint32());
@@ -67,16 +67,40 @@ class ETFDecoder {
     const e = []; for (let i = 0; i < arity; i++) e.push(this.decodeTerm());
     return e;
   }
-  decodeList() { const c = this.readUint32(); const e = []; for (let i = 0; i < c; i++) e.push(this.decodeTerm()); this.decodeTerm(); return e; }
+  decodeList() { const c = this.readUint32(); const e = []; for (let i = 0; i < c; i++) e.push(this.decodeTerm()); this.decodeTerm(); let list = null; for (let i = e.length - 1; i >= 0; i--) list = { head: e[i], tail: list }; return list; }
   decodeMap() { const a = this.readUint32(); const m = new Map(); for (let i = 0; i < a; i++) { m.set(this.decodeTerm(), this.decodeTerm()); } return m; }
   decodeBigInt(n) { const s = this.readUint8(); const d = this.readBytes(n); let v = 0; for (let i = d.length - 1; i >= 0; i--) v = v * 256 + d[i]; return s === 1 ? -v : v; }
 }
 
-function jsonRebuild(value) {
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && "@" in value) {
-    return { __tag: value["@"], fields: (value.v || []).map(jsonRebuild) };
+class FakeConstructor {
+  constructor(...fields) {
+    for (let i = 0; i < fields.length; i++) this[`f${i}`] = fields[i];
   }
-  if (Array.isArray(value)) return value.map(jsonRebuild);
+}
+
+function arrayToLinkedList(arr) {
+  let list = null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    list = { head: arr[i], tail: list };
+  }
+  return list;
+}
+
+function jsonRebuild(value) {
+  if (value === null) return undefined;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return arrayToLinkedList(value.map(jsonRebuild));
+  }
+  if ("@" in value) {
+    const tag = value["@"];
+    if (tag === "dict") {
+      const pairs = (value.v || []).map(pair => [jsonRebuild(pair[0]), jsonRebuild(pair[1])]);
+      return new Map(pairs);
+    }
+    const fields = (value.v || []).map(jsonRebuild);
+    return new FakeConstructor(...fields);
+  }
   return value;
 }
 

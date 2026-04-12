@@ -13,8 +13,8 @@ run() ->
     %% Realistic admin RPC response: 5 discounts with ~20 fields each,
     %% plus item options, question options, and a dict of question values.
     D = {discount, 1, 1, <<"Early Bird">>, {some, <<"Inscription native">>},
-         10.0, 0, true, false, false, false, [], {none}, {none}, {none},
-         {none}, {none}, false, {none}, {none}, {none}, 1712000000, 1712000000},
+         10.0, 0, true, false, false, false, [], none, none, none,
+         none, none, false, none, none, none, 1712000000, 1712000000},
     Discounts = [D, D, D, D, D],
     Response = {ok, {admin_data, Discounts, Discounts,
       [{item_option, 1, <<"League A">>}, {item_option, 2, <<"League B">>},
@@ -64,7 +64,7 @@ run() ->
       erlang:term_to_binary(Response),
       erlang:binary_to_term(erlang:term_to_binary(Response)),
       J:to_string(Walk(Response)),
-      json:decode(iolist_to_binary(J:to_string(Walk(Response))))
+      rebuild_term(json:decode(iolist_to_binary(J:to_string(Walk(Response)))))
     end, lists:seq(1, Warmup)),
 
     %% --- JSON encode (walk + to_string) ---
@@ -76,10 +76,10 @@ run() ->
     end),
     JsonBin = iolist_to_binary(J:to_string(Walk(Response))),
 
-    %% --- JSON decode (parse only, no rebuild) ---
+    %% --- JSON decode + rebuild (parse then reconstruct Erlang terms) ---
     {JsonDecTime, _} = timer:tc(fun() ->
       lists:foreach(fun(_) ->
-        json:decode(JsonBin)
+        rebuild_term(json:decode(JsonBin))
       end, lists:seq(1, N))
     end),
 
@@ -106,6 +106,26 @@ run() ->
     Pct = round((byte_size(JsonBin) - byte_size(ETF)) / byte_size(ETF) * 100),
     io:format("JSON is ~B% larger on the wire~n", [Pct]),
     ok.
+
+%% --- JSON rebuild (mirrors libero's wire.gleam JSON decoder) ---
+
+rebuild_term(null) -> nil;
+rebuild_term(V) when is_number(V); is_binary(V); is_boolean(V) -> V;
+rebuild_term(V) when is_list(V) -> [rebuild_term(E) || E <- V];
+rebuild_term(V) when is_map(V) ->
+    case V of
+        #{<<"@">> := <<"dict">>, <<"v">> := Pairs} ->
+            maps:from_list([{rebuild_term(K), rebuild_term(Val)}
+                            || [K, Val] <- Pairs]);
+        #{<<"@">> := Tag, <<"v">> := Fields} when is_binary(Tag) ->
+            case Fields of
+                [] -> binary_to_atom(Tag);
+                _ -> list_to_tuple([binary_to_atom(Tag)
+                                    | [rebuild_term(F) || F <- Fields]])
+            end;
+        _ -> V
+    end;
+rebuild_term(V) -> V.
 
 commas(N) when N < 1000 -> integer_to_list(N);
 commas(N) ->

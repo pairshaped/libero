@@ -14,8 +14,8 @@ import { execSync } from "child_process";
 const erlCode = `
   J = 'gleam@json',
   D = {discount, 1, 1, <<"Early Bird">>, {some, <<"Inscription native">>},
-       10.0, 0, true, false, false, false, [], {none}, {none}, {none},
-       {none}, {none}, false, {none}, {none}, {none}, 1712000000, 1712000000},
+       10.0, 0, true, false, false, false, [], none, none, none,
+       none, none, false, none, none, none, 1712000000, 1712000000},
   Discounts = [D, D, D, D, D],
   Response = {ok, {admin_data, Discounts, Discounts,
     [{item_option, 1, <<"League A">>}, {item_option, 2, <<"League B">>},
@@ -92,9 +92,9 @@ class ETFDecoder {
       case 98: return this.readInt32();
       case 104: return this.decodeTuple(this.readUint8());
       case 105: return this.decodeTuple(this.readUint32());
-      case 106: return [];
+      case 106: return null; // empty list (linked list nil)
       case 107: { const len = this.readUint16(); const a = []; for (let i = 0; i < len; i++) a.push(this.readUint8()); return a; }
-      case 108: return this.decodeList();
+      case 108: return this.decodeList(); // builds linked list
       case 109: return this.readString(this.readUint32());
       case 110: return this.decodeBigInt(this.readUint8());
       case 111: return this.decodeBigInt(this.readUint32());
@@ -134,7 +134,10 @@ class ETFDecoder {
   decodeList() {
     const c = this.readUint32(); const e = [];
     for (let i = 0; i < c; i++) e.push(this.decodeTerm());
-    this.decodeTerm(); return e;
+    this.decodeTerm(); // tail
+    let list = null;
+    for (let i = e.length - 1; i >= 0; i--) list = { head: e[i], tail: list };
+    return list;
   }
 
   decodeMap() {
@@ -149,14 +152,38 @@ class ETFDecoder {
   }
 }
 
-// --- JSON rebuild (simulates rpc_ffi.mjs rebuild without registry) ---
+// --- JSON rebuild (simulates rpc_ffi.mjs rebuild with constructor
+//     instantiation, linked list construction, and Dict reconstruction) ---
+
+class FakeConstructor {
+  constructor(...fields) {
+    for (let i = 0; i < fields.length; i++) this[`f${i}`] = fields[i];
+  }
+}
+
+function arrayToLinkedList(arr) {
+  let list = null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    list = { head: arr[i], tail: list };
+  }
+  return list;
+}
 
 function jsonRebuild(value) {
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && "@" in value) {
-    const fields = (value.v || []).map(jsonRebuild);
-    return { __tag: value["@"], fields };
+  if (value === null) return undefined; // null -> Nil
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return arrayToLinkedList(value.map(jsonRebuild));
   }
-  if (Array.isArray(value)) return value.map(jsonRebuild);
+  if ("@" in value) {
+    const tag = value["@"];
+    if (tag === "dict") {
+      const pairs = (value.v || []).map(pair => [jsonRebuild(pair[0]), jsonRebuild(pair[1])]);
+      return new Map(pairs);
+    }
+    const fields = (value.v || []).map(jsonRebuild);
+    return new FakeConstructor(...fields);
+  }
   return value;
 }
 

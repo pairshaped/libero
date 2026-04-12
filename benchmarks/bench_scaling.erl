@@ -52,7 +52,7 @@ bench(Label, Response, N) ->
       erlang:term_to_binary(Response),
       erlang:binary_to_term(ETFWarm),
       J:to_string(Walk(Response)),
-      json:decode(JsonWarm)
+      rebuild_term(json:decode(JsonWarm))
     end, lists:seq(1, Warmup)),
 
     %% ETF encode
@@ -72,9 +72,9 @@ bench(Label, Response, N) ->
     end),
     JsonBin = iolist_to_binary(J:to_string(Walk(Response))),
 
-    %% JSON decode
+    %% JSON decode + rebuild
     {JsonDecUs, _} = timer:tc(fun() ->
-      lists:foreach(fun(_) -> json:decode(JsonBin) end, lists:seq(1, N))
+      lists:foreach(fun(_) -> rebuild_term(json:decode(JsonBin)) end, lists:seq(1, N))
     end),
 
     E_enc = ETFEncUs / N, J_enc = JsonEncUs / N,
@@ -137,7 +137,7 @@ make_discount(I) ->
      10.0 + float(I), I * 100, true, false, false, false, [],
      {some, 5}, {some, 65}, {some, male},
      {some, 14}, {some, two_or_more}, false,
-     {some, <<"gender">>}, {some, <<"male">>}, {none},
+     {some, <<"gender">>}, {some, <<"male">>}, none,
      1712000000 + I, 1712000000 + I}.
 
 make_competition_response(TeamCount, GameCount) ->
@@ -175,7 +175,7 @@ make_team(I) ->
 make_curler(TeamI, Position) ->
     {curler, 1000 + TeamI * 10, Position, TeamI =:= 1,
      iolist_to_binary(["Player ", integer_to_list(TeamI)]),
-     {none}, <<"Right">>, <<"Club">>, <<"male">>}.
+     none, <<"Right">>, <<"Club">>, <<"male">>}.
 
 make_standing(I) ->
     {standing, 113000 + I, I, 8, max(0, 9 - I), 0, min(8, I - 1),
@@ -193,6 +193,26 @@ make_game(I, Shots) ->
 
 make_shot(EndNum, ShotNum) ->
     {shot, <<"in">>, <<"draw">>, 3, 1781, EndNum, ShotNum}.
+
+%% --- JSON rebuild (mirrors libero's wire.gleam JSON decoder) ---
+
+rebuild_term(null) -> nil;
+rebuild_term(V) when is_number(V); is_binary(V); is_boolean(V) -> V;
+rebuild_term(V) when is_list(V) -> [rebuild_term(E) || E <- V];
+rebuild_term(V) when is_map(V) ->
+    case V of
+        #{<<"@">> := <<"dict">>, <<"v">> := Pairs} ->
+            maps:from_list([{rebuild_term(K), rebuild_term(Val)}
+                            || [K, Val] <- Pairs]);
+        #{<<"@">> := Tag, <<"v">> := Fields} when is_binary(Tag) ->
+            case Fields of
+                [] -> binary_to_atom(Tag);
+                _ -> list_to_tuple([binary_to_atom(Tag)
+                                    | [rebuild_term(F) || F <- Fields]])
+            end;
+        _ -> V
+    end;
+rebuild_term(V) -> V.
 
 %% --- Formatting ---
 
