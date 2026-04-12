@@ -26,6 +26,9 @@ export function registerConstructor(atomName, ctor) {
 // Gleam list constructors — set at module load time from the prelude.
 let Empty = null;
 let NonEmpty = null;
+// Gleam CustomType base class — set from the prelude so the encoder
+// can detect custom type instances and serialize them as tagged objects.
+let GleamCustomType = null;
 
 export function setListCtors(empty, nonEmpty) {
   Empty = empty;
@@ -145,11 +148,47 @@ function normalizeArgs(args) {
   return [toJsPrimitive(args)];
 }
 
+function snakeCase(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+}
+
 function toJsPrimitive(v) {
+  // null / undefined / primitives — pass through
+  if (v === null || v === undefined) return v;
+  if (typeof v !== "object" && typeof v !== "function") return v;
+  // JS array = Gleam tuple — recurse into elements
   if (Array.isArray(v)) return v.map(toJsPrimitive);
-  if (v && typeof v === "object" && v.head !== undefined) {
+  // Gleam linked list — flatten and recurse
+  if (v.head !== undefined) {
     return gleamListToArray(v).map(toJsPrimitive);
   }
+  // Gleam Dict (JS Map) — encode as tagged dict with [k, v] pairs
+  if (v instanceof Map) {
+    const pairs = [];
+    v.forEach((val, key) => {
+      pairs.push([toJsPrimitive(key), toJsPrimitive(val)]);
+    });
+    return { "@": "dict", v: pairs };
+  }
+  // Gleam custom type instance — encode as tagged object
+  if (GleamCustomType && v instanceof GleamCustomType) {
+    const ctorName = snakeCase(v.constructor.name);
+    const keys = Object.keys(v);
+    // 0-arity constructors (like None) — Gleam encodes as atom, server
+    // encodes as null for "nil" and {"@": name, "v": []} for others.
+    // Follow the server convention.
+    if (keys.length === 0) {
+      // "none" → null (matches server's nil → null encoding)
+      if (ctorName === "none") return null;
+      return { "@": ctorName, v: [] };
+    }
+    const fields = keys.map((k) => toJsPrimitive(v[k]));
+    return { "@": ctorName, v: fields };
+  }
+  // Unknown object — return as-is (JSON.stringify will handle it)
   return v;
 }
 
@@ -174,6 +213,7 @@ try {
   }
   if (prelude.Ok) registerConstructor("ok", prelude.Ok);
   if (prelude.Error) registerConstructor("error", prelude.Error);
+  if (prelude.CustomType) GleamCustomType = prelude.CustomType;
 } catch (_) {
   // Standalone mode (Node REPL) — prelude unavailable.
 }
