@@ -4,6 +4,10 @@ Typed RPC for Gleam + Lustre SPAs, generated from `/// @rpc` annotations. No RES
 
 Libero is the defensive specialist in volleyball, who handles passes and digs so the rest of the team can focus on hits. This library handles the wire plumbing (serialization, dispatch, error envelopes, panic recovery) so your app can focus on its domain logic.
 
+## What it does
+
+Mark a `pub fn` with `/// @rpc` and libero generates a dispatch case on the server side and a typed stub on the client side. Both talk to each other over WebSocket.
+
 ```gleam
 // server/src/server/fizzbuzz.gleam
 import gleam/int
@@ -32,10 +36,6 @@ Classify ->
 ```
 
 The client stub's signature (`n: Int`, `on_response: fn(Result(String, RpcError(Never))) -> msg`) is generated at build time from the server function's signature. Types go in, types come out, and the compiler catches every mismatch.
-
-## What it does
-
-Mark a `pub fn` with `/// @rpc` and libero generates a dispatch case on the server side and a typed stub on the client side. Both talk to each other over WebSocket.
 
 Every response is `Result(T, RpcError(E))`, where `RpcError` covers domain errors, malformed traffic, unknown functions, and server panics. A panic becomes a typed `InternalError(trace_id)` for the client and a `PanicInfo` bubble for your handler to log — the WebSocket connection is never dropped.
 
