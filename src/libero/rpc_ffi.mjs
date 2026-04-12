@@ -177,12 +177,11 @@ function toJsPrimitive(v) {
   if (GleamCustomType && v instanceof GleamCustomType) {
     const ctorName = snakeCase(v.constructor.name);
     const keys = Object.keys(v);
-    // 0-arity constructors (like None) — Gleam encodes as atom, server
-    // encodes as null for "nil" and {"@": name, "v": []} for others.
-    // Follow the server convention.
+    // 0-arity constructors (like None) are tagged objects with empty
+    // field arrays. Don't special-case None as null — the server's
+    // rebuild function converts {"@":"none","v":[]} back to the atom
+    // `nil` (Gleam's None representation on BEAM).
     if (keys.length === 0) {
-      // "none" → null (matches server's nil → null encoding)
-      if (ctorName === "none") return null;
       return { "@": ctorName, v: [] };
     }
     const fields = keys.map((k) => toJsPrimitive(v[k]));

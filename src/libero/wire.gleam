@@ -158,6 +158,16 @@ pub fn decode_call(
 ///
 /// This is the server-side counterpart of rpc_ffi.mjs's `rebuild()`.
 fn rebuild(value: Dynamic) -> Dynamic {
+  // JSON null → Gleam Nil (Erlang atom `nil`). gleam_json decodes
+  // null as the atom `null`, but Gleam's Nil/None is the atom `nil`.
+  // Translate before anything else.
+  case is_null(value) {
+    True -> coerce(Nil)
+    False -> rebuild_non_null(value)
+  }
+}
+
+fn rebuild_non_null(value: Dynamic) -> Dynamic {
   // Try tagged object first: {"@": "...", "v": [...]}
   let tag_decoder = {
     use tag <- decode.field("@", decode.string)
@@ -199,6 +209,9 @@ fn rebuild(value: Dynamic) -> Dynamic {
 /// reuses the same atom.
 @external(erlang, "erlang", "binary_to_atom")
 fn binary_to_atom(name: String) -> Dynamic
+
+@external(erlang, "libero_ffi", "is_null")
+fn is_null(value: Dynamic) -> Bool
 
 @external(erlang, "erlang", "list_to_tuple")
 fn list_to_tuple(elements: List(Dynamic)) -> Dynamic

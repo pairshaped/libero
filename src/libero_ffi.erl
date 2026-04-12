@@ -7,7 +7,12 @@
 %% Erlang term shapes.
 
 -module(libero_ffi).
--export([try_call/1]).
+-export([try_call/1, is_null/1]).
+
+%% gleam_json decodes JSON null as the atom `null`. Gleam's Nil is `nil`.
+%% This predicate lets wire.rebuild detect null values and convert them.
+is_null(null) -> true;
+is_null(_) -> false.
 
 try_call(F) ->
     try F() of
