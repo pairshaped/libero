@@ -168,7 +168,7 @@ pub fn roundtrip_nested_list_test() {
 }
 
 // ============================================================================
-// Tuple type (ETF preserves tuples — no degradation to lists!)
+// Tuple type (ETF preserves tuples - no degradation to lists!)
 // ============================================================================
 
 pub fn roundtrip_2_tuple_test() {
@@ -224,7 +224,7 @@ pub fn roundtrip_dict_with_tuple_values_test() {
 }
 
 // ============================================================================
-// Custom types (0-arity — bare atoms on BEAM)
+// Custom types (0-arity - bare atoms on BEAM)
 // ============================================================================
 
 pub fn roundtrip_none_is_distinct_from_nil_test() {
@@ -235,7 +235,7 @@ pub fn roundtrip_none_is_distinct_from_nil_test() {
 }
 
 // ============================================================================
-// Custom types (N-arity — tuples on BEAM)
+// Custom types (N-arity - tuples on BEAM)
 // ============================================================================
 
 pub fn roundtrip_some_with_option_value_test() {
@@ -244,7 +244,7 @@ pub fn roundtrip_some_with_option_value_test() {
 }
 
 pub fn roundtrip_ok_with_complex_value_test() {
-  // Ok wrapping a tuple — ETF preserves tuples!
+  // Ok wrapping a tuple - ETF preserves tuples!
   let result: Result(#(String, Int, Bool), Nil) =
     unsafe_coerce(roundtrip(Ok(#("a", 1, True))))
   let assert Ok(#("a", 1, True)) = result

@@ -1,13 +1,13 @@
 //// ETF (Erlang Term Format) wire codec for Libero RPC.
 ////
 //// Encoding walks any Gleam value through `erlang:term_to_binary/1`,
-//// which preserves the full Erlang type structure — atoms, tuples,
-//// maps, lists — natively. Decoding uses `erlang:binary_to_term/1`
+//// which preserves the full Erlang type structure - atoms, tuples,
+//// maps, lists - natively. Decoding uses `erlang:binary_to_term/1`
 //// to reconstruct the original terms. No manual walk or rebuild is
 //// needed because ETF is the BEAM's native serialization format.
 ////
 //// **Wire shape:**
-//// - The call envelope is `{fn_name_binary, args_list}` — a 2-tuple
+//// - The call envelope is `{fn_name_binary, args_list}` - a 2-tuple
 ////   where the first element is a UTF-8 binary (Gleam String) and the
 ////   second is a list of arbitrary terms.
 //// - The response is the Gleam value directly (e.g. `Ok(value)` or
@@ -30,7 +30,7 @@ pub type DecodeError {
 
 /// Parse a `{<<"fn_name">>, [arg1, arg2, ...]}` tuple from an ETF binary.
 /// Returns the function name and args list. Since `binary_to_term`
-/// returns real Erlang terms, no rebuild step is needed — atoms are
+/// returns real Erlang terms, no rebuild step is needed - atoms are
 /// atoms, tuples are tuples, maps are maps.
 pub fn decode_call(
   data: BitArray,

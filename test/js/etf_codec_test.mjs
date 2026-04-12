@@ -1,6 +1,6 @@
 // ETF codec tests for libero's rpc_ffi.mjs
 //
-// Standalone Node.js test — inlines the decoder/encoder classes from rpc_ffi.mjs
+// Standalone Node.js test - inlines the decoder/encoder classes from rpc_ffi.mjs
 // because top-level await imports in rpc_ffi.mjs prevent direct import.
 //
 // Run: cd server && node ../lib/libero/test/js/etf_codec_test.mjs
@@ -9,7 +9,7 @@ import { execSync } from "child_process";
 import { strict as assert } from "assert";
 
 // ============================================================
-// Inlined from rpc_ffi.mjs — decoder, encoder, helpers
+// Inlined from rpc_ffi.mjs - decoder, encoder, helpers
 // ============================================================
 
 const floatFieldRegistry = new Map();
@@ -24,7 +24,7 @@ function registerConstructor(atomName, ctor) {
   registry.set(atomName, ctor);
 }
 
-// Standalone mode — no Gleam prelude
+// Standalone mode - no Gleam prelude
 const Empty = null;
 const NonEmpty = null;
 const GleamCustomType = null;
@@ -199,7 +199,7 @@ class ETFDecoder {
     }
     const tailTag = this.readUint8();
     if (tailTag !== 106) {
-      throw new Error("ETF decode: improper list (non-nil tail) — Gleam cannot produce these");
+      throw new Error("ETF decode: improper list (non-nil tail) - Gleam cannot produce these");
     }
     return arrayToGleamList(elements);
   }
@@ -899,7 +899,7 @@ test("FloatRegistry", "whole-number float encoded as NEW_FLOAT_EXT when register
   // Simulate a custom type with a float field at index 0
   // The encoder checks floatFieldRegistry when encoding custom type fields.
   // Since we don't have GleamCustomType in standalone, we'll test the
-  // encoder's encodeNumber directly — a whole number gets INTEGER_EXT,
+  // encoder's encodeNumber directly - a whole number gets INTEGER_EXT,
   // but with float field registry it should get NEW_FLOAT_EXT.
 
   // First, verify that 2 encodes as SMALL_INTEGER_EXT (tag 97) normally

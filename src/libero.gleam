@@ -578,7 +578,7 @@ pub const ws_url: String = \"" <> config.ws_url <> "\"
 // The walker starts from the types referenced in each @rpc stub_imports
 // dict, then walks each custom type's variant fields transitively to
 // discover all types that can appear on the wire. Only path deps of the
-// client package are walked — hex deps (gleam_stdlib etc.) are skipped
+// client package are walked - hex deps (gleam_stdlib etc.) are skipped
 // because their types are handled by the auto-wire block in rpc_ffi.mjs.
 
 /// Single path dependency from a gleam.toml file, e.g.
@@ -603,11 +603,11 @@ type DiscoveredVariant {
   )
 }
 
-/// Module prefixes that should never be walked — their types are
+/// Module prefixes that should never be walked - their types are
 /// handled by libero's auto-wire blocks in rpc_ffi.mjs.
 const registry_skip_prefixes = ["libero/", "gleam/"]
 
-/// Primitive/builtin type names — not custom types, never walked.
+/// Primitive/builtin type names - not custom types, never walked.
 const registry_primitives = [
   "Int", "Float", "String", "Bool", "Nil", "BitArray", "List", "Result",
   "Option", "Dict",
@@ -762,7 +762,7 @@ fn process_type(
       errors: list.append(errors, [e]),
     )
   }
-  // Resolve file path — if missing, record error and continue
+  // Resolve file path - if missing, record error and continue
   case dict.get(module_files, module_path) {
     Error(Nil) ->
       continue_with_error(
@@ -842,7 +842,7 @@ fn process_type_ast(
   ) ->
     Result(List(DiscoveredVariant), List(GenError)),
 ) -> Result(List(DiscoveredVariant), List(GenError)) {
-  // Check type alias — skip silently
+  // Check type alias - skip silently
   let is_alias =
     list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
   use <- bool.guard(when: is_alias, return: continue_without_errors(new_cache))
@@ -965,7 +965,7 @@ fn collect_variant_field_refs(
 
 /// Resolve a type name (with optional module qualifier) to its full
 /// module path. Falls back to current_module when the name is unqualified
-/// and not in the resolver — meaning it's defined in the current module.
+/// and not in the resolver - meaning it's defined in the current module.
 fn resolve_type_module(
   name name: String,
   module module: option.Option(String),
@@ -985,7 +985,7 @@ fn resolve_type_module(
 /// Walk a glance.Type and return (module_path, type_name) refs for any
 /// named custom types found. Uses resolver to map alias/unqualified names
 /// to their full module paths. `current_module` is the module path of the
-/// file being walked — used to resolve unqualified names that are defined
+/// file being walked - used to resolve unqualified names that are defined
 /// in the same file (not in any import).
 fn collect_type_refs(
   t t: glance.Type,
@@ -1142,7 +1142,7 @@ fn normalize_path_dep(config config: Config, dep dep: PathDep) -> String {
   // The dep path is written relative to the client package root,
   // but libero runs from the server package. So we prepend the
   // client_root and then let the OS/simplifile walk the resulting
-  // path as-is. No canonicalization — simplifile tolerates `..` in
+  // path as-is. No canonicalization - simplifile tolerates `..` in
   // paths on POSIX.
   config.client_root <> "/" <> dep.path
 }
@@ -1256,7 +1256,7 @@ fn write_register_ffi(
 //
 // Registers every custom type that transitively crosses the wire for
 // this namespace's @rpc functions. Walked from @rpc signatures at
-// generation time — the consumer does not list types manually.
+// generation time - the consumer does not list types manually.
 
 "
     <> libero_import

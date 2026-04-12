@@ -15,7 +15,7 @@ export function identity(x) {
 
 // ---------- Float field registry ----------
 //
-// JS has no int/float distinction — `2.0 === 2` and
+// JS has no int/float distinction - `2.0 === 2` and
 // `Number.isInteger(2.0) === true`. But ETF does distinguish them,
 // and Gleam's BEAM runtime treats Int and Float as different types.
 //
@@ -25,7 +25,7 @@ export function identity(x) {
 // floats like `2.0` are encoded as NEW_FLOAT_EXT (tag 70) instead of
 // INTEGER_EXT (tags 97/98).
 //
-// This is ETF-specific metadata — a JSON encoder would ignore it
+// This is ETF-specific metadata - a JSON encoder would ignore it
 // since JSON has only one number type.
 
 const floatFieldRegistry = new Map();
@@ -42,10 +42,10 @@ export function registerConstructor(atomName, ctor) {
   registry.set(atomName, ctor);
 }
 
-// Gleam list constructors — set at module load time from the prelude.
+// Gleam list constructors - set at module load time from the prelude.
 let Empty = null;
 let NonEmpty = null;
-// Gleam CustomType base class — set from the prelude so the encoder
+// Gleam CustomType base class - set from the prelude so the encoder
 // can detect custom type instances and serialize them as tagged tuples.
 let GleamCustomType = null;
 
@@ -54,7 +54,7 @@ export function setListCtors(empty, nonEmpty) {
   NonEmpty = nonEmpty;
 }
 
-// gleam/dict's `from_list` — set at module load time. The server
+// gleam/dict's `from_list` - set at module load time. The server
 // encodes Dict values as MAP_EXT. The decoder converts them back to
 // a Gleam Dict instance via from_list.
 let dictFromList = null;
@@ -170,7 +170,7 @@ class ETFDecoder {
 
       case 107: { // STRING_EXT (list of small ints encoded as bytes)
         // Erlang optimizes lists of bytes (0-255) into this compact form.
-        // Decode as a Gleam List(Int) — same semantics as LIST_EXT of SMALL_INTEGER_EXT.
+        // Decode as a Gleam List(Int) - same semantics as LIST_EXT of SMALL_INTEGER_EXT.
         const len = this.readUint16();
         const elements = [];
         for (let i = 0; i < len; i++) {
@@ -211,7 +211,7 @@ class ETFDecoder {
     // 0-arity constructor
     const Ctor = registry.get(name);
     if (Ctor) return new Ctor();
-    // Unknown atom — return as string (shouldn't normally happen)
+    // Unknown atom - return as string (shouldn't normally happen)
     return name;
   }
 
@@ -221,7 +221,7 @@ class ETFDecoder {
     // Peek at first element to check for atom tag (constructor)
     const firstTag = this.bytes[this.offset];
     if (firstTag === 118 || firstTag === 119) {
-      // First element is an atom — read the atom name directly
+      // First element is an atom - read the atom name directly
       this.offset += 1; // skip the tag byte
       const atomLen = firstTag === 119 ? this.readUint8() : this.readUint16();
       const atomName = this.readString(atomLen);
@@ -248,7 +248,7 @@ class ETFDecoder {
         return new Ctor(...fields);
       }
 
-      // Unknown atom-tagged tuple — decode remaining and return array
+      // Unknown atom-tagged tuple - decode remaining and return array
       // Use the atom name as first element (string representation)
       const elements = [atomName];
       for (let i = 1; i < arity; i++) {
@@ -257,7 +257,7 @@ class ETFDecoder {
       return elements;
     }
 
-    // Not atom-tagged — decode all elements as plain JS array (Gleam tuple)
+    // Not atom-tagged - decode all elements as plain JS array (Gleam tuple)
     const elements = [];
     for (let i = 0; i < arity; i++) {
       elements.push(this.decodeTerm());
@@ -271,12 +271,12 @@ class ETFDecoder {
     for (let i = 0; i < count; i++) {
       elements.push(this.decodeTerm());
     }
-    // Read the tail — must be NIL_EXT (106) for proper lists.
+    // Read the tail - must be NIL_EXT (106) for proper lists.
     // Gleam cannot produce improper lists, so a non-nil tail indicates
     // corrupted data or a non-Gleam sender.
     const tailTag = this.readUint8();
     if (tailTag !== 106) {
-      throw new Error("ETF decode: improper list (non-nil tail) — Gleam cannot produce these");
+      throw new Error("ETF decode: improper list (non-nil tail) - Gleam cannot produce these");
     }
     return arrayToGleamList(elements);
   }
@@ -306,7 +306,7 @@ class ETFDecoder {
       pairs.push([key, val]);
     }
     if (dictFromList === null) {
-      // Standalone mode — fall back to JS Map
+      // Standalone mode - fall back to JS Map
       return new Map(pairs);
     }
     return dictFromList(arrayToGleamList(pairs));
@@ -445,7 +445,7 @@ class ETFEncoder {
           this.writeUint32(arity);
         }
         this.writeAtom(ctorName);
-        // Check float field registry — fields at registered indices
+        // Check float field registry - fields at registered indices
         // must be encoded as floats even if Number.isInteger is true.
         const floatIndices = floatFieldRegistry.get(ctorName);
         keys.forEach((k, i) => {
@@ -462,7 +462,7 @@ class ETFEncoder {
       return;
     }
 
-    // Fallback: try to encode as a generic object — shouldn't happen
+    // Fallback: try to encode as a generic object - shouldn't happen
     // with well-typed Gleam, but encode as a string representation
     this.encodeBinary(String(value));
   }
@@ -495,7 +495,7 @@ class ETFEncoder {
         this.writeUint8(98); // INTEGER_EXT
         this.writeInt32(n);
       } else {
-        // Large integer — use bigint encoding
+        // Large integer - use bigint encoding
         this.encodeBigInt(BigInt(n));
       }
     } else {
@@ -513,7 +513,7 @@ class ETFEncoder {
       abs >>= 8n;
     }
     if (digits.length === 0) {
-      // Zero — encode as SMALL_INTEGER_EXT
+      // Zero - encode as SMALL_INTEGER_EXT
       this.writeUint8(97);
       this.writeUint8(0);
       return;
@@ -603,13 +603,13 @@ export function encode(name, args) {
 function normalizeArgs(args) {
   // Nil in Gleam compiles to undefined on JS.
   if (args === undefined) return [];
-  // JS array = Gleam tuple — already positional, just walk.
+  // JS array = Gleam tuple - already positional, just walk.
   if (Array.isArray(args)) return args;
-  // Gleam linked list — flatten.
+  // Gleam linked list - flatten.
   if (args && typeof args === "object" && args.head !== undefined) {
     return gleamListToArray(args);
   }
-  // Single scalar arg — wrap in a one-element array.
+  // Single scalar arg - wrap in a one-element array.
   return [args];
 }
 
@@ -636,7 +636,7 @@ try {
   if (prelude.Error) registerConstructor("error", prelude.Error);
   if (prelude.CustomType) GleamCustomType = prelude.CustomType;
 } catch (_) {
-  // Standalone mode (Node REPL) — prelude unavailable.
+  // Standalone mode (Node REPL) - prelude unavailable.
 }
 
 try {
@@ -649,7 +649,7 @@ try {
   if (errorMod.InternalError)
     registerConstructor("internal_error", errorMod.InternalError);
 } catch (_) {
-  // Standalone mode — libero error unavailable.
+  // Standalone mode - libero error unavailable.
 }
 
 try {
@@ -657,21 +657,21 @@ try {
   if (optionMod.Some) registerConstructor("some", optionMod.Some);
   if (optionMod.None) registerConstructor("none", optionMod.None);
 } catch (_) {
-  // Standalone mode — gleam_stdlib unavailable.
+  // Standalone mode - gleam_stdlib unavailable.
 }
 
 try {
   const dictMod = await import("../../gleam_stdlib/gleam/dict.mjs");
   if (dictMod.from_list) setDictFromList(dictMod.from_list);
 } catch (_) {
-  // Standalone mode — gleam_stdlib unavailable. decode will fall
+  // Standalone mode - gleam_stdlib unavailable. decode will fall
   // back to `new Map(...)` for dict values, which is fine for tests
   // but won't produce a genuine Gleam Dict instance.
 }
 
 // ---------- WebSocket + call queue ----------
 //
-// Responses are matched to requests by FIFO order — the server must
+// Responses are matched to requests by FIFO order - the server must
 // send responses in the same order it received requests. This holds
 // for the current architecture (one Erlang process per WebSocket
 // connection, sequential dispatch). If the server ever processes
@@ -685,7 +685,7 @@ try {
 //
 // On disconnect, the socket reconnects with exponential backoff (100ms
 // to 5s cap). In-flight callbacks from before the disconnect stay in
-// the queue — they will receive the next responses after reconnection.
+// the queue - they will receive the next responses after reconnection.
 // This means responses may not match their original requests after a
 // reconnect, but it is better than a permanently stuck Lustre app.
 

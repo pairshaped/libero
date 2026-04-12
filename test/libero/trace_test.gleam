@@ -1,4 +1,4 @@
-//// Tests for libero/trace — the panic-catching + trace_id primitives.
+//// Tests for libero/trace - the panic-catching + trace_id primitives.
 ////
 //// These are the building blocks behind the generated dispatch's
 //// panic handling: every /// @rpc call runs inside try_call, and a
@@ -32,7 +32,7 @@ pub fn try_call_catches_division_by_zero_test() {
   // Gleam's / operator on integers is defined to return 0 on
   // division by zero (deliberately total), so this tests that
   // SUCCESSFUL integer division through a function body still
-  // comes back as Ok — it should not be mistaken for a panic.
+  // comes back as Ok - it should not be mistaken for a panic.
   let assert Ok(0) = trace.try_call(fn() { 10 / 0 })
 }
 
