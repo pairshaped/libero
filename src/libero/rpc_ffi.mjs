@@ -13,6 +13,27 @@ export function identity(x) {
   return x;
 }
 
+// ---------- Float field registry ----------
+//
+// JS has no int/float distinction — `2.0 === 2` and
+// `Number.isInteger(2.0) === true`. But ETF does distinguish them,
+// and Gleam's BEAM runtime treats Int and Float as different types.
+//
+// The generator discovers which constructor fields are typed as Float
+// and emits registerFloatFields() calls. The ETF encoder checks this
+// registry when encoding custom type fields, ensuring whole-number
+// floats like `2.0` are encoded as NEW_FLOAT_EXT (tag 70) instead of
+// INTEGER_EXT (tags 97/98).
+//
+// This is ETF-specific metadata — a JSON encoder would ignore it
+// since JSON has only one number type.
+
+const floatFieldRegistry = new Map();
+
+export function registerFloatFields(atomName, fieldIndices) {
+  floatFieldRegistry.set(atomName, new Set(fieldIndices));
+}
+
 // ---------- Constructor registry ----------
 
 const registry = new Map();
@@ -145,6 +166,17 @@ class ETFDecoder {
 
       case 108: // LIST_EXT
         return this.decodeList();
+
+      case 107: { // STRING_EXT (list of small ints encoded as bytes)
+        // Erlang optimizes lists of bytes (0-255) into this compact form.
+        // Decode as a Gleam List(Int) — same semantics as LIST_EXT of SMALL_INTEGER_EXT.
+        const len = this.readUint16();
+        const elements = [];
+        for (let i = 0; i < len; i++) {
+          elements.push(this.readUint8());
+        }
+        return arrayToGleamList(elements);
+      }
 
       case 109: // BINARY_EXT (Gleam string)
         return this.readString(this.readUint32());
@@ -410,9 +442,19 @@ class ETFEncoder {
           this.writeUint32(arity);
         }
         this.writeAtom(ctorName);
-        for (const k of keys) {
-          this.encodeTerm(value[k]);
-        }
+        // Check float field registry — fields at registered indices
+        // must be encoded as floats even if Number.isInteger is true.
+        const floatIndices = floatFieldRegistry.get(ctorName);
+        keys.forEach((k, i) => {
+          const fieldValue = value[k];
+          if (floatIndices && floatIndices.has(i)
+              && typeof fieldValue === "number") {
+            this.writeUint8(70); // NEW_FLOAT_EXT
+            this.writeFloat64(fieldValue);
+          } else {
+            this.encodeTerm(fieldValue);
+          }
+        });
       }
       return;
     }
