@@ -32,6 +32,17 @@ export function setListCtors(empty, nonEmpty) {
   NonEmpty = nonEmpty;
 }
 
+// gleam/dict's `from_list` — set at module load time. The encoder on
+// the server side emits Dict values as `{"@": "dict", "v": [[k, v], ...]}`
+// so the client rebuild function can distinguish a real Dict from an
+// incidentally-shaped tuple array. Rebuild calls this to turn the
+// decoded list-of-pairs back into a Gleam Dict instance.
+let dictFromList = null;
+
+export function setDictFromList(fn) {
+  dictFromList = fn;
+}
+
 function arrayToGleamList(arr) {
   if (Empty === null || NonEmpty === null) {
     return arr; // standalone mode (Node REPL)
@@ -69,6 +80,27 @@ function rebuild(value) {
     && "@" in value
   ) {
     const tag = value["@"];
+    // "dict" is a reserved framework tag for Gleam Dict values. Rather
+    // than going through the constructor registry, we rebuild each
+    // [k, v] pair and hand the resulting array to gleam/dict.from_list.
+    if (tag === "dict") {
+      // Each element of `v` is a 2-element JSON array [k, v]. Rebuild
+      // each side first so keys and values can themselves be custom
+      // types, nested dicts, lists, etc. Gleam tuples compile to plain
+      // JS arrays, so the rebuilt pair is exactly the shape
+      // `gleam/dict.from_list` expects as an element of its List input.
+      const pairs = (value.v || []).map((pair) => [
+        rebuild(pair[0]),
+        rebuild(pair[1]),
+      ]);
+      if (dictFromList === null) {
+        // Standalone mode (Node REPL / tests) — fall back to a plain
+        // JS Map. Production consumers auto-wire setDictFromList from
+        // the gleam_stdlib dict module below.
+        return new Map(pairs);
+      }
+      return dictFromList(arrayToGleamList(pairs));
+    }
     const fields = (value.v || []).map(rebuild);
     const Ctor = registry.get(tag);
     if (!Ctor) throw new Error(`rebuild: unknown constructor "${tag}"`);
@@ -165,6 +197,15 @@ try {
   if (optionMod.None) registerConstructor("none", optionMod.None);
 } catch (_) {
   // Standalone mode — gleam_stdlib unavailable.
+}
+
+try {
+  const dictMod = await import("../../gleam_stdlib/gleam/dict.mjs");
+  if (dictMod.from_list) setDictFromList(dictMod.from_list);
+} catch (_) {
+  // Standalone mode — gleam_stdlib unavailable. rebuild will fall
+  // back to `new Map(...)` for dict values, which is fine for tests
+  // but won't produce a genuine Gleam Dict instance.
 }
 
 // ---------- WebSocket + call queue ----------

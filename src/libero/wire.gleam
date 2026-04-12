@@ -10,6 +10,7 @@
 //// - Gleam `List(a)` → JSON array of encoded elements
 //// - Plain tuple `#(a, b, c)` → JSON array of encoded elements (no tag)
 //// - Gleam custom type `Record(1, "alice", ...)` → `{"@": "record", "v": [1, "alice", ...]}`
+//// - Gleam `Dict(k, v)` → `{"@": "dict", "v": [[k1, v1], [k2, v2], ...]}`
 ////
 //// The distinction between "Gleam custom type" and "plain tuple" is made at
 //// encode time: if the first element of a tuple is a non-boolean atom, the
@@ -17,6 +18,11 @@
 //// name). Otherwise it's serialized as a plain array. This mirrors Gleam's
 //// BEAM compilation: `Record(...)` becomes `{record, ...}` with the lowercase
 //// atom in position 0.
+////
+//// `Dict(k, v)` is an Erlang map at runtime. The encoder flattens the map
+//// to a list of [key, value] pairs (sorted by key for deterministic wire
+//// output) and wraps it in the "dict" tag so the client's rebuild function
+//// can distinguish a real dict from an incidentally-shaped tuple array.
 
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
@@ -41,6 +47,7 @@ fn walk(value: Dynamic) -> Json {
   let is_binary_v = is_binary(value)
   let is_list_v = is_list(value)
   let is_tuple_v = is_tuple(value)
+  let is_map_v = is_map(value)
 
   case
     is_bool_v,
@@ -49,18 +56,38 @@ fn walk(value: Dynamic) -> Json {
     is_float_v,
     is_binary_v,
     is_list_v,
-    is_tuple_v
+    is_tuple_v,
+    is_map_v
   {
-    True, _, _, _, _, _, _ -> json.bool(to_bool(value))
-    _, True, _, _, _, _, _ -> atom_to_json(atom_name(value))
-    _, _, True, _, _, _, _ -> json.int(to_int(value))
-    _, _, _, True, _, _, _ -> json.float(to_float(value))
-    _, _, _, _, True, _, _ -> json.string(to_string(value))
-    _, _, _, _, _, True, _ ->
+    True, _, _, _, _, _, _, _ -> json.bool(to_bool(value))
+    _, True, _, _, _, _, _, _ -> atom_to_json(atom_name(value))
+    _, _, True, _, _, _, _, _ -> json.int(to_int(value))
+    _, _, _, True, _, _, _, _ -> json.float(to_float(value))
+    _, _, _, _, True, _, _, _ -> json.string(to_string(value))
+    _, _, _, _, _, True, _, _ ->
       json.preprocessed_array(list.map(to_list(value), walk))
-    _, _, _, _, _, _, True -> tuple_to_json(tuple_to_list(value))
-    _, _, _, _, _, _, _ -> panic as "wire_json: unsupported term in encoder"
+    _, _, _, _, _, _, True, _ -> tuple_to_json(tuple_to_list(value))
+    _, _, _, _, _, _, _, True -> dict_to_json(map_to_list(value))
+    _, _, _, _, _, _, _, _ -> panic as "wire_json: unsupported term in encoder"
   }
+}
+
+/// Encode a Gleam Dict as `{"@": "dict", "v": [[k1, v1], [k2, v2], ...]}`.
+/// The pairs arrive from Erlang's `maps:to_list/1` as 2-element tuples; we
+/// walk each to recursively encode keys and values, then emit a tuple
+/// element for each pair. The "dict" tag lets the client rebuild the
+/// Gleam Dict via `dict.from_list` instead of mistaking it for a plain
+/// list of tuples.
+fn dict_to_json(pairs: List(#(Dynamic, Dynamic))) -> Json {
+  let encoded_pairs =
+    list.map(pairs, fn(pair) {
+      let #(k, v) = pair
+      json.preprocessed_array([walk(k), walk(v)])
+    })
+  json.object([
+    #("@", json.string("dict")),
+    #("v", json.preprocessed_array(encoded_pairs)),
+  ])
 }
 
 fn atom_to_json(name: String) -> Json {
@@ -138,11 +165,17 @@ fn is_list(value: Dynamic) -> Bool
 @external(erlang, "erlang", "is_tuple")
 fn is_tuple(value: Dynamic) -> Bool
 
+@external(erlang, "erlang", "is_map")
+fn is_map(value: Dynamic) -> Bool
+
 @external(erlang, "erlang", "atom_to_binary")
 fn atom_name(value: Dynamic) -> String
 
 @external(erlang, "erlang", "tuple_to_list")
 fn tuple_to_list(value: Dynamic) -> List(Dynamic)
+
+@external(erlang, "maps", "to_list")
+fn map_to_list(value: Dynamic) -> List(#(Dynamic, Dynamic))
 
 // Identity-based unsafe coercions. The `is_*` checks above have already
 // confirmed the runtime shape, we just need to tell Gleam's type system.
