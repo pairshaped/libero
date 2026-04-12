@@ -172,6 +172,16 @@ cd server
 gleam run -m libero -- --ws-url=wss://your.host/ws/rpc
 ```
 
+## Build integration
+
+Most consumers wrap `gleam run -m libero` in a build script that skips regeneration when no source files have changed. If your build script uses mtime-based staleness checks (e.g. comparing a stamp file against `src/server/**/*.gleam`), make sure to also watch your `@inject` module(s). Changes to inject function signatures affect every generated dispatch case and stub, even if no `@rpc` files changed.
+
+Files your staleness check should cover:
+
+- `src/server/<namespace>/**/*.gleam` (or `src/server/**/*.gleam` without a namespace) for `@rpc` functions
+- Any file containing `/// @inject` functions (e.g. `src/server/rpc_inject.gleam`)
+- The libero dependency itself (version bump, submodule update)
+
 ## Multi-SPA
 
 When your project has multiple SPAs sharing a server (admin + public, say), invoke libero once per namespace:

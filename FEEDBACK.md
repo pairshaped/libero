@@ -34,13 +34,9 @@ Added a `message: String` field to `InternalError`, populated with a default cli
 
 Root cause was #1 (missing `halt(0)` on success). Additionally, `main()` now installs SIGTERM and SIGHUP handlers via a spawned Erlang signal loop that calls `halt(1)` on receipt, so libero exits cleanly even when killed mid-generation.
 
-### 6. Dependency invalidation is consumer-managed (LOW)
+### 6. ~~Dependency invalidation is consumer-managed~~ FIXED
 
-**Symptom:** Adding a new `@inject` function to the consumer's inject module doesn't invalidate libero's generated output unless the consumer knows to delete their stamp file manually. Consumer build scripts typically watch `.gleam` files under the RPC root for staleness, but logically any change to inject function signatures affects every generated dispatch case.
-
-**Impact:** Easy to forget after adding an inject. The v3 port hit this when adding `tz_db` and `storage_config` injects.
-
-**Suggestion:** Either (a) mention this in libero docs so consumers know to watch their inject module too, (b) have libero itself track input file mtimes and short-circuit when nothing's stale, so consumers don't need to stamp-manage.
+Added a "Build integration" section to the README documenting that consumer staleness checks must also watch `@inject` modules, not just `@rpc` files. The inject module's mtime should be included in any stamp-based invalidation logic.
 
 ## Ideas for future libero capabilities
 
