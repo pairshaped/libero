@@ -28,8 +28,7 @@ pub fn inputs_manifest_format_contract_test() {
 
   // Read back and verify contract
   let assert Ok(read_content) = simplifile.read(path)
-  let lines =
-    string.split(string.trim(read_content), "\n")
+  let lines = string.split(string.trim(read_content), "\n")
 
   // Should have 3 lines
   let assert 3 = list_length(lines)

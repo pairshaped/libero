@@ -10,24 +10,22 @@ import gleam/bool
 /// When the guard condition is true, lazy_guard should return the
 /// thunk's value WITHOUT evaluating the continuation.
 pub fn lazy_guard_skips_continuation_when_true_test() {
-  let result =
-    {
-      use <- bool.lazy_guard(when: True, return: fn() { "skipped" })
-      panic as "continuation was evaluated when it should have been skipped"
-    }
+  let result = {
+    use <- bool.lazy_guard(when: True, return: fn() { "skipped" })
+    panic as "continuation was evaluated when it should have been skipped"
+  }
   let assert "skipped" = result
 }
 
 /// When the guard condition is false, lazy_guard should NOT call
 /// the thunk and should continue to the next expression.
 pub fn lazy_guard_continues_when_false_test() {
-  let result =
-    {
-      use <- bool.lazy_guard(when: False, return: fn() {
-        panic as "thunk was evaluated when it should have been skipped"
-      })
-      "continued"
-    }
+  let result = {
+    use <- bool.lazy_guard(when: False, return: fn() {
+      panic as "thunk was evaluated when it should have been skipped"
+    })
+    "continued"
+  }
   let assert "continued" = result
 }
 

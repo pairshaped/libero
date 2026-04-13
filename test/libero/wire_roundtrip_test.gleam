@@ -177,8 +177,7 @@ pub fn roundtrip_2_tuple_test() {
 }
 
 pub fn roundtrip_3_tuple_test() {
-  let result: #(Int, String, Bool) =
-    unsafe_coerce(roundtrip(#(1, "two", True)))
+  let result: #(Int, String, Bool) = unsafe_coerce(roundtrip(#(1, "two", True)))
   let assert #(1, "two", True) = result
 }
 
