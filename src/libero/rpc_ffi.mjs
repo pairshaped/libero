@@ -713,13 +713,21 @@ try {
   // Standalone mode - libero error unavailable.
 }
 
-try {
-  const wireMod = await import("./wire.mjs");
-  if (wireMod.DecodeError)
-    registerConstructor("decode_error", wireMod.DecodeError);
-} catch (_) {
-  // Standalone mode - libero wire unavailable.
-}
+// wire.mjs statically imports decode_safe from this module, so an
+// `await import("./wire.mjs")` here would deadlock: this module's
+// top-level await would block wire.mjs from loading, and wire.mjs
+// would block this module's decode_safe binding from resolving. Fire
+// the dynamic import without awaiting so the DecodeError constructor
+// registers after both modules have settled. decode_safe is only
+// called after the client boots, well after this microtask resolves.
+import("./wire.mjs")
+  .then((wireMod) => {
+    if (wireMod.DecodeError)
+      registerConstructor("decode_error", wireMod.DecodeError);
+  })
+  .catch(() => {
+    // Standalone mode - libero wire unavailable.
+  });
 
 try {
   const optionMod = await import("../../gleam_stdlib/gleam/option.mjs");
