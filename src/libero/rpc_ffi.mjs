@@ -90,9 +90,26 @@ function gleamListToArray(list) {
 const utf8Decoder = new TextDecoder();
 
 class ETFDecoder {
-  constructor(buffer) {
-    this.view = new DataView(buffer);
-    this.bytes = new Uint8Array(buffer);
+  constructor(input) {
+    // Accept any of: ArrayBuffer (WebSocket onmessage with binaryType
+    // "arraybuffer"), Uint8Array, or a Gleam JS BitArray (which exposes
+    // its bytes as `rawBuffer`, a Uint8Array). Normalising here lets the
+    // public `wire.decode` primitive take a Gleam BitArray directly,
+    // matching the cross-target promise of the Gleam-side function.
+    let bytes;
+    if (input instanceof Uint8Array) {
+      bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+      bytes = new Uint8Array(input);
+    } else if (input && input.rawBuffer instanceof Uint8Array) {
+      bytes = input.rawBuffer;
+    } else {
+      throw new Error(
+        "ETFDecoder: input must be ArrayBuffer, Uint8Array, or Gleam BitArray",
+      );
+    }
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.offset = 0;
   }
 

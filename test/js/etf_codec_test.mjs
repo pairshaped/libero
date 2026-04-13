@@ -47,9 +47,21 @@ function gleamListToArray(list) {
 const utf8Decoder = new TextDecoder();
 
 class ETFDecoder {
-  constructor(buffer) {
-    this.view = new DataView(buffer);
-    this.bytes = new Uint8Array(buffer);
+  constructor(input) {
+    let bytes;
+    if (input instanceof Uint8Array) {
+      bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+      bytes = new Uint8Array(input);
+    } else if (input && input.rawBuffer instanceof Uint8Array) {
+      bytes = input.rawBuffer;
+    } else {
+      throw new Error(
+        "ETFDecoder: input must be ArrayBuffer, Uint8Array, or Gleam BitArray",
+      );
+    }
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.offset = 0;
   }
 
@@ -1007,6 +1019,64 @@ test("Decode", "0-arity tuple", () => {
   const decoder = new ETFDecoder(buf);
   const result = decoder.decode();
   assert.deepEqual(result, []);
+});
+
+// ============================================================
+// Constructor input shapes — regression for `wire.decode` from
+// Gleam JS. The Gleam BitArray exposes its bytes as a Uint8Array
+// at `.rawBuffer`, NOT as an ArrayBuffer, so a naive `new DataView(input)`
+// throws. ETFDecoder must accept all three shapes the codec sees in
+// the wild: ArrayBuffer (WebSocket onmessage), Uint8Array, BitArray.
+// ============================================================
+
+console.log("\nConstructor input shape tests:");
+
+// Build a small ETF binary once to feed into each shape variant.
+// Encoding for the integer 42: <<131, 97, 42>> (version, SMALL_INTEGER_EXT, value).
+function makeIntegerArrayBuffer() {
+  const buf = new ArrayBuffer(3);
+  const view = new DataView(buf);
+  view.setUint8(0, 131);
+  view.setUint8(1, 97);
+  view.setUint8(2, 42);
+  return buf;
+}
+
+test("Decode", "constructor accepts ArrayBuffer", () => {
+  const decoder = new ETFDecoder(makeIntegerArrayBuffer());
+  assert.equal(decoder.decode(), 42);
+});
+
+test("Decode", "constructor accepts Uint8Array", () => {
+  const u8 = new Uint8Array(makeIntegerArrayBuffer());
+  const decoder = new ETFDecoder(u8);
+  assert.equal(decoder.decode(), 42);
+});
+
+test("Decode", "constructor accepts Gleam BitArray (mock)", () => {
+  // Gleam JS BitArray exposes its data as `rawBuffer` (a Uint8Array).
+  // Mocking it here avoids depending on the Gleam prelude.
+  const mockBitArray = { rawBuffer: new Uint8Array(makeIntegerArrayBuffer()) };
+  const decoder = new ETFDecoder(mockBitArray);
+  assert.equal(decoder.decode(), 42);
+});
+
+test("Decode", "constructor handles Uint8Array with non-zero byteOffset", () => {
+  // Important edge case: a Uint8Array sliced from a larger ArrayBuffer
+  // has byteOffset != 0. The DataView must be constructed with the
+  // matching offset/length, not over the whole underlying buffer.
+  const wide = new Uint8Array(10);
+  wide.set([0, 0, 0, 131, 97, 42, 0, 0, 0, 0]); // ETF payload at offset 3
+  const slice = wide.subarray(3, 6); // length 3, byteOffset 3
+  assert.equal(slice.byteOffset, 3);
+  const decoder = new ETFDecoder(slice);
+  assert.equal(decoder.decode(), 42);
+});
+
+test("Decode", "constructor rejects unsupported input", () => {
+  assert.throws(() => new ETFDecoder("not a buffer"), /input must be/);
+  assert.throws(() => new ETFDecoder(null), /input must be/);
+  assert.throws(() => new ETFDecoder({}), /input must be/);
 });
 
 // ============================================================
