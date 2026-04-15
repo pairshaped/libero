@@ -5,8 +5,8 @@ target = "erlang"
 [dependencies]
 gleam_stdlib = ">= 0.69.0 and < 1.0.0"
 gleam_erlang = "~> 1.0"
-gleam_otp = "~> 1.0"
+gleam_otp = "~> 1.2"
+mist = "~> 6.0"
+gleam_http = "~> 4.0"
 shared = { path = "../shared" }
 libero = { path = "../../.." }
-# mist and wisp omitted from skeleton — will be added when server wiring is implemented
-# (mist ~> 4.x requires gleam_otp < 1.0, which conflicts with lustre/libero requirements)
