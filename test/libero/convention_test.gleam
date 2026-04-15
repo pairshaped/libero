@@ -15,7 +15,7 @@ pub fn scan_empty_dir_returns_no_modules_error_test() {
 }
 
 pub fn scan_todos_example_finds_todos_module_test() {
-  let assert Ok(modules) =
+  let assert Ok(#(modules, _module_files)) =
     libero.scan_message_modules(
       shared_src: "examples/todos/shared/src/shared",
     )
@@ -28,7 +28,7 @@ pub fn scan_todos_example_finds_todos_module_test() {
 }
 
 pub fn validate_todos_example_passes_test() {
-  let assert Ok(modules) =
+  let assert Ok(#(modules, _module_files)) =
     libero.scan_message_modules(
       shared_src: "examples/todos/shared/src/shared",
     )

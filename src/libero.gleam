@@ -333,7 +333,7 @@ fn run_v3(
   config config: Config,
   shared_src shared_src: String,
 ) -> Result(Int, List(GenError)) {
-  use message_modules <- result.try(
+  use #(message_modules, module_files) <- result.try(
     scan_message_modules(shared_src: shared_src),
   )
   io.println(
@@ -348,9 +348,6 @@ fn run_v3(
   case validation_errors {
     [_, ..] -> Error(validation_errors)
     [] -> {
-      // Build module_files dict for the type walker from the shared src directory.
-      let module_files = build_module_files(dir: shared_src)
-
       use discovered <- result.try(
         walk_message_registry_types(
           message_modules: message_modules,
@@ -399,18 +396,6 @@ fn run_v3(
       Ok(list.length(message_modules))
     }
   }
-}
-
-/// Build a Dict(module_path, file_path) by walking a directory.
-/// The module path is derived by stripping up to and including "/src/"
-/// and dropping the ".gleam" extension.
-fn build_module_files(dir dir: String) -> Dict(String, String) {
-  walk_directory(path: dir)
-  |> result.unwrap(or: [])
-  |> list.fold(dict.new(), fn(acc, file_path) {
-    let module_path = derive_module_path(file_path: file_path)
-    dict.insert(acc, module_path, file_path)
-  })
 }
 
 /// Write the client-side type registration files for v3 (gleam wrapper + mjs FFI).
@@ -1361,18 +1346,24 @@ fn extract_dir(path: String) -> String {
 /// `Error([NoMessageModules(...)])` if no message modules are found.
 pub fn scan_message_modules(
   shared_src shared_src: String,
-) -> Result(List(MessageModule), List(GenError)) {
+) -> Result(#(List(MessageModule), Dict(String, String)), List(GenError)) {
   let files =
     walk_directory(path: shared_src)
     |> result.map_error(fn(cause) { [cause, NoMessageModules(shared_path: shared_src)] })
   use files <- result.try(files)
+  // Build module_files dict from all discovered .gleam files
+  let module_files =
+    list.fold(files, dict.new(), fn(acc, file_path) {
+      let module_path = derive_module_path(file_path: file_path)
+      dict.insert(acc, module_path, file_path)
+    })
   let modules =
     list.filter_map(files, fn(file_path) {
       parse_message_module(file_path: file_path)
     })
   case modules {
     [] -> Error([NoMessageModules(shared_path: shared_src)])
-    _ -> Ok(modules)
+    _ -> Ok(#(modules, module_files))
   }
 }
 
