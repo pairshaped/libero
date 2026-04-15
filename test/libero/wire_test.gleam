@@ -1,61 +1,12 @@
 //// Wire-format tests for libero/wire (ETF).
 ////
-//// ETF encoding is opaque binary, so we test by verifying encode
-//// produces non-empty output, and decode_call correctly parses
-//// ETF-encoded call envelopes and rejects invalid input.
+//// Encode→decode roundtrips live in wire_roundtrip_test.gleam.
+//// This file covers decode_call envelope parsing, error handling,
+//// and the encode_call/decode_call symmetric pair.
 
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{None, Some}
 import libero/wire
-
-// ---------- Encode produces non-empty BitArray ----------
-
-pub fn encode_int_test() {
-  let bits = wire.encode(42)
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_string_test() {
-  let bits = wire.encode("hello")
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_bool_test() {
-  let bits = wire.encode(True)
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_nil_test() {
-  let bits = wire.encode(Nil)
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_list_test() {
-  let bits = wire.encode([1, 2, 3])
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_none_test() {
-  let bits = wire.encode(None)
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_some_test() {
-  let bits = wire.encode(Some(7))
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_ok_test() {
-  let value: Result(Int, String) = Ok(42)
-  let bits = wire.encode(value)
-  let assert True = bit_array_byte_size(bits) > 0
-}
-
-pub fn encode_error_test() {
-  let value: Result(Int, String) = Error("nope")
-  let bits = wire.encode(value)
-  let assert True = bit_array_byte_size(bits) > 0
-}
 
 // ---------- Call envelope decoding (v3 format: {module, value}) ----------
 
@@ -99,7 +50,7 @@ pub fn decode_call_wrong_shape_test() {
 // These exercise the public `wire.encode` and `wire.decode` functions
 // as a symmetric pair, the way consumers use them for non-RPC paths
 // (e.g. passing server-rendered state into a Lustre SPA via flags).
-// Distinct from the call-envelope round-trips in wire_roundtrip_test —
+// Distinct from the call-envelope round-trips in wire_roundtrip_test.
 // those wrap the value in `{name, args}` and use `decode_call`.
 
 pub fn roundtrip_int_via_decode_test() {
@@ -152,9 +103,6 @@ fn coerce(value: a) -> Dynamic
 
 @external(erlang, "gleam_stdlib", "identity")
 fn unsafe_coerce(value: Dynamic) -> a
-
-@external(erlang, "erlang", "byte_size")
-fn bit_array_byte_size(bits: BitArray) -> Int
 
 pub fn encode_call_decode_call_roundtrip_string_test() {
   let encoded = wire.encode_call(module: "shared/todos", msg: "hello")

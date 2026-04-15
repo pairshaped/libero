@@ -41,7 +41,7 @@ pub fn encode(value: a) -> BitArray
 /// Decode an ETF binary into an arbitrary Gleam value.
 ///
 /// Works on both Erlang and JavaScript targets. Use this for non-RPC
-/// paths — for example, reading server-rendered state from Lustre
+/// paths - for example, reading server-rendered state from Lustre
 /// flags on client boot. For decoding incoming RPC call envelopes
 /// specifically, use `decode_call` instead.
 ///
@@ -65,7 +65,7 @@ pub fn decode(data: BitArray) -> a
 /// `Result` instead of panicking on malformed input.
 ///
 /// Use this for non-RPC paths where the input may be untrusted or
-/// user-influenced — for example, reading server-rendered state from
+/// user-influenced - for example, reading server-rendered state from
 /// Lustre flags on client boot where the binary may have been
 /// corrupted in transit.
 pub fn decode_safe(data: BitArray) -> Result(a, DecodeError) {
@@ -76,7 +76,7 @@ pub fn decode_safe(data: BitArray) -> Result(a, DecodeError) {
 @external(javascript, "./rpc_ffi.mjs", "decode_safe")
 fn ffi_decode_safe(data: BitArray) -> Result(a, DecodeError) {
   let _ = data
-  panic as "libero/wire.ffi_decode_safe is unreachable — externals handle both targets"
+  panic as "libero/wire.ffi_decode_safe is unreachable - externals handle both targets"
 }
 
 // ---------- Decoder (incoming call envelope) ----------
@@ -104,7 +104,7 @@ fn ffi_decode_call(
 ) -> Result(#(String, Dynamic), DecodeError) {
   // JS fallback. `decode_call` is specifically for parsing incoming
   // RPC call envelopes, which only the server does. JavaScript
-  // consumers never call this — they call the generated client
+  // consumers never call this - they call the generated client
   // stubs, which handle response decoding via the internal `decode`
   // helper in rpc_ffi.mjs, not via this Gleam-level function.
   let _ = data

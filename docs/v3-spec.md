@@ -6,7 +6,7 @@ Replace annotation-based codegen (`@rpc`, `@inject`) with a message-type convent
 
 ## Conventions
 
-### Message Modules
+### Message modules
 
 Any module in the shared package that exports a `ToServer` and/or `ToClient` type is a message module. The codegen scans `shared/src/` recursively and identifies these modules via glance AST parsing.
 
@@ -23,7 +23,7 @@ shared/src/shared/
   account.gleam
 ```
 
-### Handler Modules
+### Handler modules
 
 For each message module, a corresponding handler must exist on the server. The path is conventional:
 
@@ -41,7 +41,7 @@ pub fn handle(
 
 The handler is NOT generated. The developer writes it. The generated dispatch imports and calls it.
 
-### SharedState and AppError
+### SharedState and AppError conventions
 
 Defined by the developer at conventional paths:
 
@@ -50,9 +50,9 @@ Defined by the developer at conventional paths:
 
 The codegen verifies these files exist and export the expected types before generating dispatch code. Missing files produce clear error messages.
 
-## Codegen Pipeline
+## Codegen pipeline
 
-### CLI Interface
+### CLI interface
 
 ```
 libero --shared=../shared --server=../server --client=../client --ws-path=/ws
@@ -67,7 +67,7 @@ Flags:
 Retained from v2: `--namespace` (optional, scopes generated output paths).
 Removed from v2: `--write-inputs`.
 
-### Pipeline Steps
+### Pipeline steps
 
 1. **Scan shared package**: recursively find all `.gleam` files in `shared/src/`, parse with glance, identify modules exporting `ToServer` or `ToClient` types.
 
@@ -84,7 +84,7 @@ Removed from v2: `--write-inputs`.
 
 5. **Report**: errors collected across all steps, reported together. Same error-accumulation pattern as v2.
 
-## Wire Envelope
+## Wire envelope
 
 ### v2 Format
 
@@ -108,7 +108,7 @@ Example: `todo.send(todo.Delete(id: 42))` sends:
 {"shared/todo", Delete(42)}
 ```
 
-### Response Format
+### Response format
 
 Same as v2: ETF-encoded `Result(ToClient, RpcError(AppError))`.
 
@@ -117,9 +117,9 @@ Same as v2: ETF-encoded `Result(ToClient, RpcError(AppError))`.
 - Framework errors: `Error(MalformedRequest)`, `Error(UnknownFunction(name))`
 - Panics: `Error(InternalError(trace_id, message))`
 
-## Generated Code
+## Generated code
 
-### Server Dispatch
+### Server dispatch
 
 Output: `server/src/server/generated/libero/dispatch.gleam`
 
@@ -165,7 +165,7 @@ fn dispatch(
 }
 ```
 
-### Client Send Functions
+### Client send functions
 
 One generated file per message module.
 
@@ -196,7 +196,7 @@ import client/generated/libero/todo as todo_rpc
 todo_rpc.send(todo.Delete(id: 42))
 ```
 
-### Client Receive Dispatch
+### Client receive dispatch
 
 Output: `client/src/client/generated/libero/receive.gleam`
 
@@ -221,7 +221,7 @@ pub fn decode(data: BitArray) -> ServerMessage {
 }
 ```
 
-### Wire Codec Registration
+### Wire codec registration
 
 Same structure as v2, different seed types.
 
@@ -238,7 +238,7 @@ Same structure as v2, different seed types.
 - Framework atoms (ok, error, some, none, etc.)
 - Called once per VM via persistent_term guard
 
-### RPC Config
+### RPC config
 
 Output: `client/src/client/generated/libero/config.gleam`
 
@@ -250,7 +250,7 @@ pub fn ws_url() -> String {
 }
 ```
 
-## Changes to libero/rpc (Client Runtime)
+## Changes to libero/rpc (client runtime)
 
 The `rpc` module needs a new `send` function that takes a module name and a message value (instead of a wire name and an args tuple):
 
@@ -276,7 +276,7 @@ v3: `fn decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError)`
 
 Returns the module name and the raw `ToServer` value as Dynamic (not a list of arguments). The dispatch coerces it to the correct type.
 
-## Deleted Code
+## Deleted code
 
 - Annotation scanner (`find_annotated_functions`): line-based `@rpc`/`@inject` detection
 - Inject system: `extract_inject_map`, inject function extraction, session type inference, label matching
@@ -285,7 +285,7 @@ Returns the module name and the raw `ToServer` value as Dynamic (not a list of a
 - `call_by_name` in `libero/rpc`
 - `--write-inputs` CLI handling
 
-## Example Project: Todos
+## Example project: todos
 
 Three-package example replacing fizzbuzz.
 
@@ -375,7 +375,7 @@ Lustre SPA with:
 - `error_test.gleam`: error envelope
 - `levenshtein_test.gleam`: typo detection (used for "did you mean?" on unknown modules)
 
-### New Tests
+### New tests
 
 **Convention validation errors:**
 - Missing `shared_state.gleam` produces correct error
@@ -402,7 +402,7 @@ Lustre SPA with:
 - Generated dispatch routes messages to correct handlers
 - Generated send function produces correct wire envelope
 
-### Deleted Tests
+### Deleted tests
 
 - Annotation scanning tests
 - Inject-related tests

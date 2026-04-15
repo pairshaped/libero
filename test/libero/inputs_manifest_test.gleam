@@ -3,6 +3,7 @@
 //// Verifies that when libero runs with --write-inputs, it writes
 //// a .inputs file listing every source file it scanned.
 
+import gleam/list
 import gleam/string
 import simplifile
 
@@ -31,7 +32,7 @@ pub fn inputs_manifest_format_contract_test() {
   let lines = string.split(string.trim(read_content), "\n")
 
   // Should have 3 lines
-  let assert 3 = list_length(lines)
+  let assert 3 = list.length(lines)
 
   // Should be sorted
   let assert [
@@ -58,15 +59,4 @@ pub fn inputs_manifest_empty_sources_test() {
   let assert "\n" = read_content
 
   let assert Ok(Nil) = simplifile.delete(path)
-}
-
-fn list_length(items: List(a)) -> Int {
-  do_length(items, 0)
-}
-
-fn do_length(items: List(a), acc: Int) -> Int {
-  case items {
-    [] -> acc
-    [_, ..rest] -> do_length(rest, acc + 1)
-  }
 }

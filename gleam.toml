@@ -4,7 +4,7 @@ description = "Typed Gleam RPC for Lustre SPAs without REST, JSON codecs, or han
 licences = ["MIT"]
 repository = { type = "github", user = "pairshaped", repo = "libero" }
 
-# No target specified — cross-target package.
+# No target specified - cross-target package.
 # Erlang-only modules: libero/trace, libero (the generator main)
 # JS-only modules: libero/rpc
 # Cross-target modules: libero/error, libero/wire
@@ -48,7 +48,7 @@ unused_exports = "off"
 ]
 "src/libero/trace.gleam" = [
   # try_call catches arbitrary Erlang panics from the runtime. The
-  # reason comes back as a stringified diagnostic — there's no
+  # reason comes back as a stringified diagnostic - there's no
   # meaningful structured type for an arbitrary catch, and building
   # one would require parsing Erlang term format at runtime for
   # marginal benefit.
@@ -66,7 +66,7 @@ unused_exports = "off"
   # `ffi_decode_call` has an Erlang-target external for the real
   # implementation and a Gleam fallback body (panic + discarded
   # param) for the JavaScript target. JavaScript consumers never
-  # call this function — it's server-only — but the fallback must
+  # call this function - it's server-only - but the fallback must
   # exist for the module to compile cross-target now that the
   # sibling `encode` and `decode` functions are cross-target.
   "avoid_panic",

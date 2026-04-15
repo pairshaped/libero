@@ -294,7 +294,7 @@ pub fn main() -> Nil {
   // scans shared message modules instead of server function annotations.
   case config.shared_src {
     Some(shared_src) -> {
-      io.println("libero: v3 mode — scanning shared message modules at " <> shared_src)
+      io.println("libero: v3 mode - scanning shared message modules at " <> shared_src)
       case run_v3(config: config, shared_src: shared_src) {
         Ok(count) -> {
           io.println(
@@ -620,7 +620,7 @@ fn do_walk(
     [] ->
       case errors {
         [] -> Ok(list.reverse(discovered))
-        _ -> Error(errors)
+        _ -> Error(list.reverse(errors))
       }
     [#(module_path, type_name), ..rest_queue] -> {
       let key = #(module_path, type_name)
@@ -677,7 +677,7 @@ fn process_type(
       discovered: discovered,
       module_files: module_files,
       parsed_cache: cache,
-      errors: list.append(errors, [e]),
+      errors: [e, ..errors],
     )
   }
   // Resolve file path - if missing, record error and continue
@@ -1259,10 +1259,8 @@ fn visit_file(
   entry entry: String,
   child child: String,
 ) -> List(String) {
-  case string.ends_with(entry, ".gleam") {
-    True -> [child, ..acc]
-    False -> acc
-  }
+  use <- bool.guard(when: !string.ends_with(entry, ".gleam"), return: acc)
+  [child, ..acc]
 }
 
 // ---------- Type resolver ----------
@@ -1332,7 +1330,11 @@ fn ensure_parent_dir(path path: String) -> Nil {
 
 pub fn extract_dir(path: String) -> String {
   case string.split(path, "/") |> list.reverse {
-    [_last, ..rest_rev] -> string.join(list.reverse(rest_rev), "/")
+    [_last, ..rest_rev] ->
+      case rest_rev {
+        [] -> "."
+        _ -> string.join(list.reverse(rest_rev), "/")
+      }
     [] -> "."
   }
 }

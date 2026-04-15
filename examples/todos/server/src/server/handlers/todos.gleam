@@ -38,7 +38,7 @@ pub fn handle(
             })
           Ok(#(Toggled(toggled), SharedState(..state, todos: new_todos)))
         }
-        _ -> Ok(#(TodoFailed(NotFound), state))
+        _ -> Error(NotFound)
       }
     }
     Delete(id:) -> {
@@ -47,7 +47,7 @@ pub fn handle(
           let new_todos = list.filter(state.todos, fn(t) { t.id != id })
           Ok(#(Deleted(id), SharedState(..state, todos: new_todos)))
         }
-        _ -> Ok(#(TodoFailed(NotFound), state))
+        _ -> Error(NotFound)
       }
     }
     LoadAll -> Ok(#(AllLoaded(state.todos), state))

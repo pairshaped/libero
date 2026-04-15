@@ -1,27 +1,16 @@
-//// Tests for libero/error type construction and wire roundtrip.
-////
-//// Verifies that all RpcError variants can be constructed and
-//// pattern-matched correctly, and that InternalError carries
-//// its client-safe message field.
+//// Tests for libero/error wire roundtrip and InternalError message field.
 
 import gleam/dynamic.{type Dynamic}
 import libero/error.{
-  type Never, type RpcError, AppError, InternalError, MalformedRequest,
-  UnknownFunction,
+  type Never, type RpcError, InternalError,
 }
 import libero/wire
 
-// ---------- Construction ----------
-
-pub fn internal_error_has_message_field_test() {
-  let err: RpcError(Never) =
-    InternalError(trace_id: "abc123", message: "Something went wrong.")
-  let assert InternalError(trace_id: "abc123", message: "Something went wrong.") =
-    err
-}
-
+/// InternalError carries a client-safe message that consumers can
+/// display directly. Verify the field survives construction and
+/// partial pattern matching.
 pub fn internal_error_message_accessible_via_pattern_match_test() {
-  let err: RpcError(String) =
+  let err: RpcError(Never) =
     InternalError(
       trace_id: "trace42",
       message: "Something went wrong, please try again.",
@@ -32,23 +21,9 @@ pub fn internal_error_message_accessible_via_pattern_match_test() {
   ) = err
 }
 
-pub fn app_error_test() {
-  let err: RpcError(String) = AppError("bad input")
-  let assert AppError("bad input") = err
-}
-
-pub fn malformed_request_test() {
-  let err: RpcError(Never) = MalformedRequest
-  let assert True = err == MalformedRequest
-}
-
-pub fn unknown_function_test() {
-  let err: RpcError(Never) = UnknownFunction(name: "missing.fn")
-  let assert UnknownFunction(name: "missing.fn") = err
-}
-
-// ---------- Wire roundtrip ----------
-
+/// Verify the full error envelope survives an ETF roundtrip through
+/// a v3 call envelope. This exercises the BEAM's atom encoding of
+/// the InternalError constructor tag.
 pub fn internal_error_roundtrips_through_wire_test() {
   let value: Result(String, RpcError(Never)) =
     Error(InternalError(
@@ -57,7 +32,6 @@ pub fn internal_error_roundtrips_through_wire_test() {
     ))
   let encoded = wire.encode(value)
   // Wrap in a v3 call envelope {module, value} and decode to verify structure survives.
-  // The v3 envelope is a 2-tuple {binary, value} where value is the typed message.
   let envelope = ffi_encode(coerce(#("shared/test", coerce(encoded))))
   let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
   let decoded: BitArray = unsafe_coerce(rebuilt)

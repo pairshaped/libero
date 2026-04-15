@@ -592,22 +592,45 @@ class ETFEncoder {
 
 // ---------- Helper ----------
 
-// Convert PascalCase (Gleam constructor convention) to snake_case.
-// Does not handle consecutive uppercase like "XMLParser" correctly,
-// but Gleam constructors are always PascalCase (e.g. "MyValue"), so
-// this edge case cannot arise in practice.
+// Convert PascalCase to snake_case. Mirrors the Gleam `to_snake_case`
+// algorithm so runtime encoding and codegen-time registration agree.
+// Handles consecutive uppercase: "XMLParser" → "xml_parser",
+// "HTTPSConnection" → "https_connection".
 function snakeCase(name) {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
-    .toLowerCase();
+  let result = "";
+  for (let i = 0; i < name.length; i++) {
+    const ch = name[i];
+    const isUpper = ch !== ch.toLowerCase();
+    if (i === 0) {
+      result += ch.toLowerCase();
+      continue;
+    }
+    if (isUpper) {
+      const prevUpper = name[i - 1] !== name[i - 1].toLowerCase();
+      const nextLower = i + 1 < name.length
+        && name[i + 1] === name[i + 1].toLowerCase();
+      if (prevUpper && nextLower) {
+        // UPPER→UPPER→lower: start of new word after acronym
+        result += "_" + ch.toLowerCase();
+      } else if (prevUpper) {
+        // UPPER→UPPER→(UPPER|end): still in acronym
+        result += ch.toLowerCase();
+      } else {
+        // lower→UPPER: normal camelCase boundary
+        result += "_" + ch.toLowerCase();
+      }
+    } else {
+      result += ch;
+    }
+  }
+  return result;
 }
 
 // ---------- Public codec API ----------
 
 // Encode a standalone Gleam value to an ETF binary. Used by the
 // public `libero.wire.encode` function. Unlike `encode_call`, there
-// is no envelope — the result is the raw ETF encoding of a single
+// is no envelope - the result is the raw ETF encoding of a single
 // value. Intended for non-RPC paths like passing state into a
 // Lustre SPA via init flags.
 export function encode_value(value) {
@@ -619,7 +642,7 @@ export function encode_value(value) {
 
 // Decode a standalone Gleam value from an ETF binary. Used by the
 // public `libero.wire.decode` function. Symmetric with `encode_value`
-// above — decodes a single value, not a call envelope. Custom type
+// above - decodes a single value, not a call envelope. Custom type
 // constructors must have been registered via `register_all()` at
 // boot for the decoder to rebuild them correctly.
 export function decode_value(buffer) {
@@ -629,6 +652,17 @@ export function decode_value(buffer) {
 
 // Safe variant of decode_value that returns a Result instead of throwing.
 // Used by the public `libero.wire.decode_safe` function.
+//
+// NOTE: This function looks up Ok/Error/DecodeError constructors from the
+// registry, falling back to plain objects if they aren't registered yet.
+// Ok and Error are registered via top-level `await` above (guaranteed
+// before any consumer code runs). DecodeError is registered via a
+// fire-and-forget dynamic import to avoid a circular dependency with
+// wire.mjs - it resolves after module init but before any client boot
+// code calls decode_safe. If this function is ever called during module
+// initialization (before register_all), the plain-object fallback won't
+// match Gleam pattern matching. In practice this can't happen because
+// decode_safe is only reachable after the consumer calls register_all().
 export function decode_safe(buffer) {
   try {
     const decoder = new ETFDecoder(buffer);
@@ -723,6 +757,13 @@ try {
 // connection. The URL is a compile-time constant from Gleam's
 // rpc_config module, so it doesn't change across calls. Sends issued
 // before the socket's open event are queued and flushed once it opens.
+//
+// NOTE: Responses are matched to requests by FIFO order - no request
+// IDs or correlation tokens. This works because the server processes
+// requests sequentially over a single WebSocket and never sends
+// unsolicited pushes. If the architecture changes to support
+// concurrent request processing or server-initiated pushes, this
+// must be replaced with a correlation-based scheme (e.g. request IDs).
 
 let ws = null;
 let pendingSends = [];    // [{payload, callback, timer}]
@@ -791,7 +832,7 @@ function ensureSocket(url) {
 
 // Send a message and queue a callback for the server's response.
 // Responses are matched to sends in FIFO order. Each request has a
-// 30-second timeout — if no response arrives, the callback receives
+// 30-second timeout - if no response arrives, the callback receives
 // an InternalError so the UI doesn't hang indefinitely.
 export function send(url, module, msg, callback) {
   ensureSocket(url);

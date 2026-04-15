@@ -17,7 +17,7 @@ This works, but has friction:
 
 ## v3 (Vision): Message-Type-Driven
 
-### The Convention
+### The convention
 
 The codegen scans all modules in `shared/` for types named `ToServer` and `ToClient`. Any module exporting these types is a message module. Everything else in `shared/` is just domain types, untouched by the codegen.
 
@@ -26,7 +26,7 @@ The codegen scans all modules in `shared/` for types named `ToServer` and `ToCli
 
 That is the entire framework convention. Two type names.
 
-### File Organization
+### File organization
 
 The developer decides how to organize message modules. Libero does not enforce a directory structure. One file, split by domain, split by direction: all valid. The type names are the convention, not the file layout.
 
@@ -42,7 +42,7 @@ shared/src/shared/
   items.gleam               -- ToServer + ToClient alongside domain types
 ```
 
-### Domain-Organized Example
+### Domain-organized example
 
 A domain module contains types and wire messages together.
 
@@ -126,7 +126,7 @@ pub fn handle(msg: discounts.ToServer, state: SharedState) -> Result(discounts.T
 }
 ```
 
-### Why Only Two Type Names
+### Why only two type names
 
 A full-stack Gleam project with `client/`, `server/`, and `shared/` packages already has implicit separation:
 
@@ -137,7 +137,7 @@ A full-stack Gleam project with `client/`, `server/`, and `shared/` packages alr
 
 The package split handles four of the six concerns. Only the two wire types need a naming convention: `ToServer` (what crosses the wire going up) and `ToClient` (what crosses the wire going down).
 
-### ToClient: Responses and Push
+### ToClient: responses and push
 
 `ToClient` serves two purposes:
 
@@ -146,7 +146,7 @@ The package split handles four of the six concerns. Only the two wire types need
 
 Same type, two delivery modes. HTTP clients (CLI, SDK, agents) only receive responses. WebSocket clients can also receive unsolicited push. No separate types needed for this distinction.
 
-### Multi-Client Support
+### Multi-client support
 
 The same message types work over multiple transports:
 
@@ -155,7 +155,7 @@ The same message types work over multiple transports:
 
 Same handler function, different transport. The server dispatch is identical regardless of how the message arrived.
 
-### What Gets Generated
+### What gets generated
 
 The codegen runs before `gleam build`, producing normal Gleam source files that the compiler type-checks alongside application code:
 
@@ -164,7 +164,7 @@ The codegen runs before `gleam build`, producing normal Gleam source files that 
 - **Client dispatch**: decodes incoming `ToClient` messages, routes to the correct domain handler
 - **Wire codecs**: ETF codec registration for all types reachable from `ToServer` and `ToClient` across all modules
 
-### Compile-Time Safety
+### Compile-time safety
 
 Because generated files exist on disk before compilation, the Gleam compiler type-checks the entire chain:
 
@@ -175,7 +175,7 @@ Because generated files exist on disk before compilation, the Gleam compiler typ
 
 The codegen produces typed glue. The compiler validates everything. No runtime surprises.
 
-### What v3 Eliminates from v2
+### What v3 eliminates from v2
 
 | v2 | v3 |
 |---|---|
@@ -185,7 +185,7 @@ The codegen produces typed glue. The compiler validates everything. No runtime s
 | Dispatch with per-function label matching | Pattern match on `ToServer` per domain |
 | `rpc_register` for JS codec registration | Still needed: ETF codec registration for JS target |
 
-### Why Not Stateful Processes
+### Why not stateful processes
 
 We evaluated a stateful process-per-client model (similar to Phoenix Channels or LiveView). The `@inject` system already defines what a process would hold: database connection, authenticated user, org context, language, preferences. A stateful process would hold the same data, just mutably.
 
@@ -197,7 +197,7 @@ The conclusion: no client type benefits from per-account server state.
 
 Server push for per-account context changes (role revoked, preferences changed mid-session) is not worth the lifecycle complexity. Handle it on the next RPC failure.
 
-### Open Questions
+### Open questions
 
 - **Send function naming**: `discounts.send` vs other verbs. TBD.
 - **SharedState passing**: server handlers need session context (db connection, authenticated user, language). Convention: first argument typed `SharedState`, or the dispatch wrapper provides it.

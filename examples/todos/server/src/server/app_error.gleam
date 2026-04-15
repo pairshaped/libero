@@ -1,5 +1,4 @@
 import shared/todos
 
-pub type AppError {
-  TodoError(todos.TodoError)
-}
+pub type AppError =
+  todos.TodoError

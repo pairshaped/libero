@@ -1022,7 +1022,7 @@ test("Decode", "0-arity tuple", () => {
 });
 
 // ============================================================
-// Constructor input shapes — regression for `wire.decode` from
+// Constructor input shapes - regression for `wire.decode` from
 // Gleam JS. The Gleam BitArray exposes its bytes as a Uint8Array
 // at `.rawBuffer`, NOT as an ArrayBuffer, so a naive `new DataView(input)`
 // throws. ETFDecoder must accept all three shapes the codec sees in
@@ -1078,6 +1078,48 @@ test("Decode", "constructor rejects unsupported input", () => {
   assert.throws(() => new ETFDecoder(null), /input must be/);
   assert.throws(() => new ETFDecoder({}), /input must be/);
 });
+
+// ============================================================
+// snakeCase tests - must match Gleam to_snake_case
+// ============================================================
+
+// Inline the snakeCase function from rpc_ffi.mjs
+function snakeCase(name) {
+  let result = "";
+  for (let i = 0; i < name.length; i++) {
+    const ch = name[i];
+    const isUpper = ch !== ch.toLowerCase();
+    if (i === 0) { result += ch.toLowerCase(); continue; }
+    if (isUpper) {
+      const prevUpper = name[i - 1] !== name[i - 1].toLowerCase();
+      const nextLower = i + 1 < name.length && name[i + 1] === name[i + 1].toLowerCase();
+      if (prevUpper && nextLower) { result += "_" + ch.toLowerCase(); }
+      else if (prevUpper) { result += ch.toLowerCase(); }
+      else { result += "_" + ch.toLowerCase(); }
+    } else { result += ch; }
+  }
+  return result;
+}
+
+const snakeCases = [
+  ["AdminData", "admin_data"],
+  ["One", "one"],
+  ["TwoOrMore", "two_or_more"],
+  ["XMLParser", "xml_parser"],
+  ["ABC", "abc"],
+  ["A", "a"],
+  ["lowercase", "lowercase"],
+  ["HTTPSConnection", "https_connection"],
+  ["MyXMLParser", "my_xml_parser"],
+  ["Page2Title", "page2_title"],
+  ["HTTPRequest", "http_request"],
+];
+
+for (const [input, expected] of snakeCases) {
+  test("snakeCase", `${input} → ${expected}`, () => {
+    assert.equal(snakeCase(input), expected);
+  });
+}
 
 // ============================================================
 // Summary

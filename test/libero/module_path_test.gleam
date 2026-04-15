@@ -50,7 +50,7 @@ pub fn extract_dir_nested_test() {
 }
 
 pub fn extract_dir_single_file_test() {
-  let assert "" = libero.extract_dir("file.gleam")
+  let assert "." = libero.extract_dir("file.gleam")
 }
 
 pub fn extract_dir_one_level_test() {

@@ -1,16 +1,16 @@
 # Feedback
 
-A running log of issues, gotchas, and improvement ideas hit while using libero in real projects. This is the intake queue for libero evolution — entries here become issues, PRs, and changelog entries over time.
+A running log of issues, gotchas, and improvement ideas hit while using libero in real projects. Entries here become issues, PRs, and changelog entries over time.
 
 The first batch of entries comes from the Curling IO v3 SPA port (late 2026), where libero is consumed as a git submodule and used to wire the admin panel's RPC layer. Future entries should come from any consumer that hits something surprising or time-wasting.
 
-Add to this file whenever you hit something surprising, time-wasting, or improvable about libero. Keep entries short — one paragraph plus a severity tag.
+Add to this file whenever you hit something surprising, time-wasting, or improvable about libero. Keep entries short: one paragraph plus a severity tag.
 
 Severity tags:
-- **BLOCKING** — stops forward progress until worked around
-- **HIGH** — causes lost time or confusion every time it happens
-- **MEDIUM** — annoying but not time-consuming
-- **LOW** — nice-to-have polish
+- BLOCKING: stops forward progress until worked around
+- HIGH: causes lost time or confusion every time it happens
+- MEDIUM: annoying but not time-consuming
+- LOW: nice-to-have polish
 
 ## Known issues
 
@@ -46,21 +46,21 @@ The type-only check from issue #3 now also requires the label to be within Leven
 
 Added `--ws-path` flag as an alternative to `--ws-url`. When used, the generated `rpc_config.gleam` resolves the full WebSocket URL at runtime from `window.location` (scheme + host + path), so one compiled bundle works across all subdomains. Breaking change: `rpc_config.ws_url` is now a function (`rpc_config.ws_url()`) instead of a constant, for both modes.
 
-### 9. ~~Walker hangs silently~~ FIXED — was exponential blowup from eager bool.guard evaluation
+### 9. ~~Walker hangs silently~~ FIXED (exponential blowup from eager bool.guard evaluation)
 
-**Was:** Walker hung indefinitely when a consumer had multiple modules reachable from @rpc signatures. Symptom looked like a name-collision issue but the real root cause was unrelated.
+Walker hung indefinitely when a consumer had multiple modules reachable from @rpc signatures. Symptom looked like a name-collision issue but the real root cause was unrelated.
 
-**Root cause:** `do_walk` and `process_type_ast` both used `bool.guard(when:, return: ...)` where the `return:` argument was a recursive call to `do_walk`. Because Gleam evaluates function arguments eagerly, the recursive `do_walk` fired on EVERY call regardless of the `when:` condition. Each call to `do_walk` effectively ran `do_walk(rest_queue)` as a side effect of constructing the `bool.guard` arguments, before the skip check even ran. The result was exponential blowup: each level of the BFS forked into redundant chains that all eventually ran. For a graph with N reachable types the walker did O(2^N) work and hung long before finishing.
+Root cause: `do_walk` and `process_type_ast` both used `bool.guard(when:, return: ...)` where the `return:` argument was a recursive call to `do_walk`. Because Gleam evaluates function arguments eagerly, the recursive `do_walk` fired on EVERY call regardless of the `when:` condition. Each call to `do_walk` effectively ran `do_walk(rest_queue)` as a side effect of constructing the `bool.guard` arguments, before the skip check even ran. The result was exponential blowup: each level of the BFS forked into redundant chains that all eventually ran. For a graph with N reachable types the walker did O(2^N) work and hung long before finishing.
 
 With the v3 consumer, 8 seed types and ~20 reachable types produced millions of redundant process_type_ast calls. Looked like a hang, was actually just very slow exponential work.
 
-**Fix:** Replace `bool.guard(when:, return: expr)` with `bool.lazy_guard(when:, return: fn() { expr })` in both call sites. `lazy_guard` takes a thunk and only evaluates it when the condition matches. This is the correct primitive whenever the `return` expression has side effects or is expensive. Two sites in `src/libero.gleam`:
-- `do_walk` — visited-set skip check (line ~803)
-- `process_type_ast` — is_alias early return (line ~944)
+Fix: replace `bool.guard(when:, return: expr)` with `bool.lazy_guard(when:, return: fn() { expr })` in both call sites. `lazy_guard` takes a thunk and only evaluates it when the condition matches. This is the correct primitive whenever the `return` expression has side effects or is expensive. Two sites in `src/libero.gleam`:
+- `do_walk`: visited-set skip check (line ~803)
+- `process_type_ast`: is_alias early return (line ~944)
 
 With the fix, the v3 consumer's full 8-section type graph (33 @rpc functions, 104 variants) processes in well under a second, as expected.
 
-**Lesson:** Any `bool.guard` with a non-trivial `return:` expression is a latent bug. A good audit for libero: `grep -n "bool.guard" src/libero.gleam` and confirm each `return:` is either a constant or a trivially-cheap expression with no recursive calls or side effects. When in doubt, use `lazy_guard`.
+Lesson: any `bool.guard` with a non-trivial `return:` expression is a latent bug. A good audit for libero: `grep -n "bool.guard" src/libero.gleam` and confirm each `return:` is either a constant or a trivially-cheap expression with no recursive calls or side effects. When in doubt, use `lazy_guard`.
 
 ## Ideas for future libero capabilities
 
@@ -74,7 +74,7 @@ Libero currently generates a single `handle_<namespace>` function that takes bin
 
 ### Test helpers
 
-Every `@rpc` function tends to want integration tests on the consumer side. Libero could generate test fixtures — e.g. a mock session builder, a way to call RPCs with decoded params directly, and a way to assert on the response shape.
+Every `@rpc` function tends to want integration tests on the consumer side. Libero could generate test fixtures - e.g. a mock session builder, a way to call RPCs with decoded params directly, and a way to assert on the response shape.
 
 ### Schema snapshot for client-generated types
 
@@ -88,9 +88,9 @@ Consumers building typical admin CRUD sections end up writing the same `rpc_erro
 
 When you hit something, add an entry above the "Ideas for future libero capabilities" section with:
 - A short title ending in `(SEVERITY)`
-- **Symptom:** what you observed
-- **Impact:** what it cost (if non-obvious)
-- **Hypothesis** or **Workaround** if you have one
-- **Suggestion** if you have one
+- Symptom: what you observed
+- Impact: what it cost (if non-obvious)
+- Hypothesis or workaround if you have one
+- Suggestion if you have one
 
-Keep entries grounded in what actually happened — speculation is fine but mark it as hypothesis.
+Keep entries grounded in what actually happened - speculation is fine but mark it as hypothesis.
