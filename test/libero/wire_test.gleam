@@ -8,16 +8,16 @@ import gleam/dynamic.{type Dynamic}
 import gleam/option.{None, Some}
 import libero/wire
 
-// ---------- Call envelope decoding (v3 format: {module, value}) ----------
+// ---------- Call envelope decoding (call envelope format: {module, value}) ----------
 
 pub fn decode_call_with_nil_value_test() {
-  // v3 envelope: {<<"shared/records">>, nil}
+  // call envelope: {<<"shared/records">>, nil}
   let envelope = encode_call_envelope("shared/records", coerce(Nil))
   let assert Ok(#("shared/records", _value)) = wire.decode_call(envelope)
 }
 
 pub fn decode_call_with_int_value_test() {
-  // v3 envelope: {<<"shared/fizzbuzz">>, 15}
+  // call envelope: {<<"shared/fizzbuzz">>, 15}
   let envelope = encode_call_envelope("shared/fizzbuzz", coerce(15))
   let assert Ok(#("shared/fizzbuzz", value)) = wire.decode_call(envelope)
   let result: Int = unsafe_coerce(value)
@@ -25,7 +25,7 @@ pub fn decode_call_with_int_value_test() {
 }
 
 pub fn decode_call_with_string_value_test() {
-  // v3 envelope: {<<"shared/records">>, "hello"}
+  // call envelope: {<<"shared/records">>, "hello"}
   let envelope = encode_call_envelope("shared/records", coerce("hello"))
   let assert Ok(#("shared/records", value)) = wire.decode_call(envelope)
   let result: String = unsafe_coerce(value)

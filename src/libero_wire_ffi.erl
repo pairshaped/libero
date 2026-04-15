@@ -5,7 +5,7 @@
 %% and return a Gleam-shaped Result: {ok, {Name, Value}} or
 %% {error, {decode_error, Message}}.
 %%
-%% The v3 wire envelope is {module_name_binary, toserver_value} - a 2-tuple
+%% The wire envelope is {module_name_binary, toserver_value} - a 2-tuple
 %% where the second element is a single value (not a list). This allows
 %% the dispatch to coerce the value directly to the typed ToServer message.
 %%

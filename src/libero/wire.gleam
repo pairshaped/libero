@@ -6,7 +6,7 @@
 //// to reconstruct the original terms. No manual walk or rebuild is
 //// needed because ETF is the BEAM's native serialization format.
 ////
-//// **Wire shape (v3):**
+//// **Wire shape:**
 //// - The call envelope is `{module_name_binary, toserver_value}` - a
 ////   2-tuple where the first element is a UTF-8 binary (Gleam String)
 ////   naming the shared module, and the second is the typed ToServer
@@ -113,7 +113,7 @@ fn ffi_decode_call(
 
 // ---------- Call envelope encoder ----------
 
-/// Encode a v3 call envelope: `{module_name, msg}` as ETF binary.
+/// Encode a call envelope: `{module_name, msg}` as ETF binary.
 /// Used by generated client send functions to pack a ToServer value
 /// for transport to the server.
 pub fn encode_call(module module: String, msg msg: a) -> BitArray {

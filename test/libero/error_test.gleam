@@ -22,7 +22,7 @@ pub fn internal_error_message_accessible_via_pattern_match_test() {
 }
 
 /// Verify the full error envelope survives an ETF roundtrip through
-/// a v3 call envelope. This exercises the BEAM's atom encoding of
+/// a call envelope. This exercises the BEAM's atom encoding of
 /// the InternalError constructor tag.
 pub fn internal_error_roundtrips_through_wire_test() {
   let value: Result(String, RpcError(Never)) =
@@ -31,7 +31,7 @@ pub fn internal_error_roundtrips_through_wire_test() {
       message: "Something went wrong, please try again.",
     ))
   let encoded = wire.encode(value)
-  // Wrap in a v3 call envelope {module, value} and decode to verify structure survives.
+  // Wrap in a call envelope {module, value} and decode to verify structure survives.
   let envelope = ffi_encode(coerce(#("shared/test", coerce(encoded))))
   let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
   let decoded: BitArray = unsafe_coerce(rebuilt)

@@ -1,9 +1,10 @@
 //// Message-type code generator.
 ////
-//// Scans `shared/src/shared/**/*.gleam` for modules that export
-//// `ToServer` or `ToClient` custom types and produces server dispatch,
-//// client send stubs, wire codec registration, and atom pre-registration
-//// files. See the README for conventions and usage.
+//// Scans the shared package source directory (configured via `--shared`)
+//// for modules that export `ToServer` or `ToClient` custom types and
+//// produces server dispatch, client send stubs, wire codec registration,
+//// and atom pre-registration files. See the README for conventions and
+//// usage.
 
 import gleam/int
 import gleam/io

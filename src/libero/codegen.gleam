@@ -105,13 +105,7 @@ fn dispatch(
 
   let output = server_generated <> "/dispatch.gleam"
   ensure_parent_dir(path: output)
-  case simplifile.write(output, content) {
-    Ok(_) -> {
-      io.println("  wrote " <> output)
-      Ok(Nil)
-    }
-    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
-  }
+  write_file(path: output, content: content)
 }
 
 // ---------- Client send function generator ----------
@@ -207,13 +201,7 @@ fn do_register_all() -> Nil
 "
   let output = config.register_gleam_output
   ensure_parent_dir(path: output)
-  case simplifile.write(output, content) {
-    Ok(_) -> {
-      io.println("  wrote " <> output)
-      Ok(Nil)
-    }
-    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
-  }
+  write_file(path: output, content: content)
 }
 
 /// Write the FFI .mjs file with explicit imports and registerConstructor
@@ -302,13 +290,7 @@ fn write_register_ffi(
     ) <> "\n}\n"
   let output = config.register_ffi_output
   ensure_parent_dir(path: output)
-  case simplifile.write(output, content) {
-    Ok(_) -> {
-      io.println("  wrote " <> output)
-      Ok(Nil)
-    }
-    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
-  }
+  write_file(path: output, content: content)
 }
 
 // ---------- Config file ----------
@@ -428,13 +410,7 @@ do_ensure() ->
 "
   let output = config.atoms_output
   ensure_parent_dir(path: output)
-  case simplifile.write(output, content) {
-    Ok(_) -> {
-      io.println("  wrote " <> output)
-      Ok(Nil)
-    }
-    Error(cause) -> Error(CannotWriteFile(path: output, cause: cause))
-  }
+  write_file(path: output, content: content)
 }
 
 // ---------- File utilities ----------

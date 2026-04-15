@@ -1,4 +1,4 @@
-//// Tests for the full v3 pipeline - walk the type graph on the todos
+//// Tests for the full pipeline - walk the type graph on the todos
 //// example and verify the discovered variants include all expected
 //// constructors (ToServer, ToClient, and transitive types).
 
