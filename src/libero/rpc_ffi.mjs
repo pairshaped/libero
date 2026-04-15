@@ -725,8 +725,34 @@ try {
 // before the socket's open event are queued and flushed once it opens.
 
 let ws = null;
-let pendingSends = [];    // [{payload, callback}]
-let responseCallbacks = [];
+let pendingSends = [];    // [{payload, callback, timer}]
+let responseCallbacks = []; // [{callback, timer}]
+const REQUEST_TIMEOUT_MS = 30_000;
+
+// Build a connection-error value using registered constructors.
+// Falls back to a plain object if constructors aren't registered yet.
+function makeConnectionError(message) {
+  const errCtor = registry.get("error");
+  const intErrCtor = registry.get("internal_error");
+  if (errCtor && intErrCtor) {
+    return new errCtor(new intErrCtor("", message));
+  }
+  return { type: "Error", 0: { type: "InternalError", 0: "", 1: message } };
+}
+
+function clearAllPending(reason) {
+  const error = makeConnectionError(reason);
+  for (const entry of pendingSends) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.callback(error);
+  }
+  for (const entry of responseCallbacks) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.callback(error);
+  }
+  pendingSends = [];
+  responseCallbacks = [];
+}
 
 function ensureSocket(url) {
   if (ws !== null) return;
@@ -735,27 +761,28 @@ function ensureSocket(url) {
   ws.binaryType = "arraybuffer";
 
   ws.addEventListener("open", () => {
-    for (const { payload, callback } of pendingSends) {
-      ws.send(payload);
-      responseCallbacks.push(callback);
+    for (const entry of pendingSends) {
+      ws.send(entry.payload);
+      responseCallbacks.push({ callback: entry.callback, timer: entry.timer });
     }
     pendingSends = [];
   });
 
   ws.addEventListener("message", (event) => {
     const decoded = decode_value(new Uint8Array(event.data));
-    const callback = responseCallbacks.shift();
-    if (callback) callback(decoded);
+    const entry = responseCallbacks.shift();
+    if (entry) {
+      if (entry.timer) clearTimeout(entry.timer);
+      entry.callback(decoded);
+    }
   });
 
   ws.addEventListener("close", () => {
     ws = null;
-    pendingSends = [];
-    responseCallbacks = [];
+    clearAllPending("WebSocket connection closed");
   });
 
   ws.addEventListener("error", () => {
-    // Error is always followed by close, so cleanup happens there.
     if (ws) {
       ws.close();
     }
@@ -763,15 +790,30 @@ function ensureSocket(url) {
 }
 
 // Send a message and queue a callback for the server's response.
-// Responses are matched to sends in FIFO order.
+// Responses are matched to sends in FIFO order. Each request has a
+// 30-second timeout — if no response arrives, the callback receives
+// an InternalError so the UI doesn't hang indefinitely.
 export function send(url, module, msg, callback) {
   ensureSocket(url);
   const payload = encode_call(module, msg);
+  const timer = setTimeout(() => {
+    // Remove from whichever queue this entry is in
+    const pendingIdx = pendingSends.findIndex(e => e.callback === callback);
+    if (pendingIdx !== -1) {
+      pendingSends.splice(pendingIdx, 1);
+    }
+    const responseIdx = responseCallbacks.findIndex(e => e.callback === callback);
+    if (responseIdx !== -1) {
+      responseCallbacks.splice(responseIdx, 1);
+    }
+    callback(makeConnectionError("Request timed out"));
+  }, REQUEST_TIMEOUT_MS);
+
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(payload);
-    responseCallbacks.push(callback);
+    responseCallbacks.push({ callback, timer });
   } else {
-    pendingSends.push({ payload, callback });
+    pendingSends.push({ payload, callback, timer });
   }
 }
 
