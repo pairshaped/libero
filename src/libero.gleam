@@ -277,7 +277,7 @@ fn build_config(
 }
 
 /// Extract a `--name=value` flag from the argument list.
-fn find_flag(args args: List(String), name name: String) -> Result(String, Nil) {
+pub fn find_flag(args args: List(String), name name: String) -> Result(String, Nil) {
   let prefix = name <> "="
   args
   |> list.find(fn(arg) { string.starts_with(arg, prefix) })
@@ -955,7 +955,7 @@ fn collect_type_refs(
 /// "AdminData" → "admin_data", "One" → "one", "TwoOrMore" → "two_or_more".
 /// Handles consecutive uppercase: "XMLParser" → "xml_parser".
 /// Must stay aligned with `snakeCase()` in rpc_ffi.mjs.
-fn to_snake_case(name: String) -> String {
+pub fn to_snake_case(name: String) -> String {
   let graphemes = string.to_graphemes(name)
   // Build triples of (prev, current, next) so we can detect acronym
   // boundaries without random access. prev/next are "" at edges.
@@ -1190,7 +1190,7 @@ do_ensure() ->
 /// .mjs bundle path "shared/shared/discount.mjs". The first segment
 /// is the package name (Gleam convention) and is repeated because
 /// the bundle layout is `<package>/<module_path>.mjs`.
-fn module_to_mjs_path(module_path: String) -> String {
+pub fn module_to_mjs_path(module_path: String) -> String {
   case string.split_once(module_path, "/") {
     // Single-segment module path: the whole thing IS the package name
     // and its root module, e.g. "shared" → "shared/shared.mjs".
@@ -1330,7 +1330,7 @@ fn ensure_parent_dir(path path: String) -> Nil {
   Nil
 }
 
-fn extract_dir(path: String) -> String {
+pub fn extract_dir(path: String) -> String {
   case string.split(path, "/") |> list.reverse {
     [_last, ..rest_rev] -> string.join(list.reverse(rest_rev), "/")
     [] -> "."
@@ -1405,7 +1405,7 @@ fn parse_message_module(
 /// Derive the Gleam module path from a file path by finding `/src/` and
 /// taking everything after it, then stripping the `.gleam` extension.
 /// E.g. `examples/todos/shared/src/shared/todos.gleam` -> `shared/todos`.
-fn derive_module_path(file_path file_path: String) -> String {
+pub fn derive_module_path(file_path file_path: String) -> String {
   let without_extension = case string.ends_with(file_path, ".gleam") {
     True ->
       string.slice(
