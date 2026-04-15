@@ -444,6 +444,14 @@ class ETFEncoder {
       return;
     }
 
+    // Gleam BitArray (has rawBuffer: Uint8Array)
+    if (value && value.rawBuffer instanceof Uint8Array) {
+      this.writeUint8(109); // BINARY_EXT
+      this.writeUint32(value.rawBuffer.length);
+      this.writeBytes(value.rawBuffer);
+      return;
+    }
+
     // Gleam custom type instance
     if (GleamCustomType && value instanceof GleamCustomType) {
       const ctorName = snakeCase(value.constructor.name);
