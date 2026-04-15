@@ -20,7 +20,7 @@ pub fn distance(from a: String, to b: String) -> Int {
         list.fold(b_chars, #([i], 1), fn(inner, b_char) {
           let row_so_far = inner.0
           let col = inner.1
-          let above = head(row_so_far)
+          let above = head_or_zero(row_so_far)
           let diag = at(items: prev_row, index: col - 1)
           let left = above
           let up = at(items: prev_row, index: col)
@@ -49,7 +49,7 @@ fn build_range(from from: Int, to to: Int) -> List(Int) {
   }
 }
 
-fn head(items: List(Int)) -> Int {
+fn head_or_zero(items: List(Int)) -> Int {
   case items {
     [x, ..] -> x
     [] -> 0
