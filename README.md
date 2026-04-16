@@ -17,15 +17,16 @@ pub type MsgFromClient {
 }
 
 pub type MsgFromServer {
-  Created(Todo)
-  Toggled(Todo)
-  Deleted(id: Int)
-  AllLoaded(List(Todo))
-  TodoFailed(TodoError)
+  TodoCreated(Result(Todo, TodoError))
+  TodoToggled(Result(Todo, TodoError))
+  TodoDeleted(Result(Int, TodoError))
+  TodosLoaded(Result(List(Todo), TodoError))
 }
 ```
 
 [`MsgFromClient`](https://github.com/pairshaped/libero/blob/master/examples/todos/shared/src/shared/todos.gleam) contains messages from the client to the server. `MsgFromServer` contains messages the server sends back, both as responses and as server-initiated pushes. A module can define one or both.
+
+Each `MsgFromServer` variant wraps a single value. Dispatch strips the variant tag before sending the response (the client already knows which response type to expect via FIFO pairing). Wrapping a `Result(payload, error)` lets the client use `RemoteData` to collapse success, domain error, and framework error into one typed state. If a response needs multiple values, group them in a record or tuple inside the single field.
 
 ## Example usage
 
@@ -44,7 +45,7 @@ The server handles it in [`store.gleam`](https://github.com/pairshaped/libero/bl
 ```gleam
 // server/src/server/store.gleam
 
-import shared/todos.{type MsgFromClient, type MsgFromServer}
+import shared/todos.{type MsgFromClient, type MsgFromServer, TodosLoaded, TodoCreated}
 import server/shared_state.{type SharedState}
 import server/app_error.{type AppError}
 
@@ -53,8 +54,8 @@ pub fn update_from_client(
   state state: SharedState,
 ) -> Result(#(MsgFromServer, SharedState), AppError) {
   case msg {
-    todos.LoadAll -> Ok(#(AllLoaded(all()), state))
-    todos.Create(params:) -> ...
+    todos.LoadAll -> Ok(#(TodosLoaded(Ok(all())), state))
+    todos.Create(params:) -> Ok(#(TodoCreated(Ok(insert(params.title))), state))
     todos.Toggle(id:) -> ...
     todos.Delete(id:) -> ...
   }
