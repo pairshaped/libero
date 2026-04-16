@@ -26,15 +26,23 @@ pub fn main() {
     ["create", title] -> do_create(title)
     ["toggle", id_str] -> do_with_id("toggle", id_str, fn(id) { Toggle(id:) })
     ["delete", id_str] -> do_with_id("delete", id_str, fn(id) { Delete(id:) })
+    ["help"] | ["--help"] | ["-h"] -> usage()
     _ -> {
-      io.println_error("Usage:")
-      io.println_error("  gleam run -- list")
-      io.println_error("  gleam run -- create <title>")
-      io.println_error("  gleam run -- toggle <id>")
-      io.println_error("  gleam run -- delete <id>")
+      usage()
       halt(1)
     }
   }
+}
+
+fn usage() {
+  io.println("Todos CLI — libero example using HTTP POST + native ETF")
+  io.println("")
+  io.println("Usage:")
+  io.println("  gleam run -- list              List all todos")
+  io.println("  gleam run -- create <title>    Create a new todo")
+  io.println("  gleam run -- toggle <id>       Toggle completed status")
+  io.println("  gleam run -- delete <id>       Delete a todo")
+  io.println("  gleam run -- help              Show this help")
 }
 
 fn do_list() {
