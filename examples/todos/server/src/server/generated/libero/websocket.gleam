@@ -38,7 +38,10 @@ pub fn upgrade(
     request: req,
     handler: handler,
     on_init: on_init(state, topics, logger),
-    on_close: fn(_) { logger.debug("WebSocket: disconnected") },
+    on_close: fn(state) {
+      list.each(state.topics, fn(t) { push.leave(topic: t) })
+      logger.debug("WebSocket: disconnected")
+    },
   )
 }
 
@@ -99,10 +102,7 @@ fn handler(
       mist.continue(state)
     }
     mist.Custom(Ignored) -> mist.continue(state)
-    mist.Closed | mist.Shutdown -> {
-      list.each(state.topics, fn(t) { push.leave(topic: t) })
-      mist.stop()
-    }
+    mist.Closed | mist.Shutdown -> mist.stop()
     mist.Text(_) -> mist.continue(state)
   }
 }
