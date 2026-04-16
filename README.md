@@ -9,14 +9,14 @@ Every shared module that participates in libero's codegen exports two types by c
 ```gleam
 // shared/src/shared/todos.gleam
 
-pub type ToServer {
+pub type MsgFromClient {
   Create(params: TodoParams)
   Toggle(id: Int)
   Delete(id: Int)
   LoadAll
 }
 
-pub type ToClient {
+pub type MsgFromServer {
   Created(Todo)
   Toggled(Todo)
   Deleted(id: Int)
@@ -25,7 +25,7 @@ pub type ToClient {
 }
 ```
 
-`ToServer` contains messages the client sends to the server. `ToClient` contains messages the server pushes back to the client. A module can define one or both.
+`MsgFromClient` contains messages from the client to the server. `MsgFromServer` contains messages the server pushes back to the client. A module can define one or both.
 
 ## Example usage
 
@@ -36,7 +36,7 @@ The client sends a message using the generated stub:
 import client/generated/libero/todos as todos_rpc
 
 ToggleTodo(id) ->
-  #(model, todos_rpc.send(Toggle(id:)))
+  #(model, todos_rpc.send_to_server(Toggle(id:)))
 ```
 
 The server handles it in the handler module:
@@ -44,11 +44,11 @@ The server handles it in the handler module:
 ```gleam
 // server/src/server/handlers/todos.gleam
 
-import shared/todos.{type ToServer}
+import shared/todos.{type MsgFromClient}
 import server/shared_state.{type SharedState}
 import server/app_error.{type AppError}
 
-pub fn handle(msg msg: ToServer, state state: SharedState) -> Result(Nil, AppError) {
+pub fn update_from_client(msg msg: MsgFromClient, state state: SharedState) -> Result(Nil, AppError) {
   case msg {
     todos.Create(params:) -> create_todo(state.db, params)
     todos.Toggle(id:) -> toggle_todo(state.db, id)
@@ -58,7 +58,7 @@ pub fn handle(msg msg: ToServer, state state: SharedState) -> Result(Nil, AppErr
 }
 ```
 
-The server pushes `ToClient` messages back to the client over the same WebSocket connection via the `SharedState`.
+The server pushes `MsgFromServer` messages back to the client over the same WebSocket connection via the `SharedState`.
 
 See [`examples/todos/`](./examples/todos/) for a complete runnable example.
 
@@ -97,7 +97,7 @@ gleam run -m libero -- \
 From a shared module at `shared/src/shared/todos.gleam`, libero writes:
 
 - `server/src/server/generated/libero/dispatch.gleam`: routes incoming wire calls to handler modules.
-- `client/src/client/generated/libero/todos.gleam`: typed `send` stub for the client.
+- `client/src/client/generated/libero/todos.gleam`: typed `send_to_server` stub for the client.
 - `client/src/client/generated/libero/rpc_config.gleam`: WebSocket URL configuration.
 - `client/src/client/generated/libero/rpc_register.gleam` + `rpc_register_ffi.mjs`: registers every custom type that may appear on the wire so the client can reconstruct ETF terms.
 
@@ -105,9 +105,9 @@ From a shared module at `shared/src/shared/todos.gleam`, libero writes:
 
 The wire format is Erlang External Term Format (ETF) over binary WebSocket frames. Gleam's custom types, lists, options, and primitives all serialize reflectively without explicit codecs.
 
-The client sends a `{module_path, ToServer_value}` tuple. The server dispatch decodes it, routes by module path, calls the handler, and the handler uses `SharedState` to push `ToClient` messages back.
+The client sends a `{module_path, MsgFromClient_value}` tuple. The server dispatch decodes it, routes by module path, calls the handler, and the handler uses `SharedState` to push `MsgFromServer` messages back.
 
-The generator scans shared modules for `ToServer` and `ToClient` types, walks their type graphs transitively to find all types that need codec registration, and emits the dispatch and stub files.
+The generator scans shared modules for `MsgFromClient` and `MsgFromServer` types, walks their type graphs transitively to find all types that need codec registration, and emits the dispatch and stub files.
 
 ## License
 

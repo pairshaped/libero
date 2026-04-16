@@ -2,13 +2,13 @@
 
 ## Goal
 
-Replace annotation-based codegen (`@rpc`, `@inject`) with a message-type convention. The entire framework surface is two type names: `ToServer` and `ToClient`. Modules in `shared/` that export these types define the wire contract. The codegen generates dispatch, send functions, and wire codecs from these types.
+Replace annotation-based codegen (`@rpc`, `@inject`) with a message-type convention. The entire framework surface is two type names: `MsgFromClient` and `MsgFromServer`. Modules in `shared/` that export these types define the wire contract. The codegen generates dispatch, send functions, and wire codecs from these types.
 
 ## Conventions
 
 ### Message modules
 
-Any module in the shared package that exports a `ToServer` and/or `ToClient` type is a message module. The codegen scans `shared/src/` recursively and identifies these modules via glance AST parsing.
+Any module in the shared package that exports a `MsgFromClient` and/or `MsgFromServer` type is a message module. The codegen scans `shared/src/` recursively and identifies these modules via glance AST parsing.
 
 File organization is up to the developer. One file with all messages, split by domain, split by direction: all valid. The type names are the convention, not the file layout.
 
@@ -33,10 +33,10 @@ For each message module, a corresponding handler must exist on the server. The p
 Handler signature:
 
 ```gleam
-pub fn handle(
-  msg msg: todo.ToServer,
+pub fn update_from_client(
+  msg msg: todo.MsgFromClient,
   state state: SharedState,
-) -> Result(todo.ToClient, AppError)
+) -> Result(todo.MsgFromServer, AppError)
 ```
 
 The handler is NOT generated. The developer writes it. The generated dispatch imports and calls it.
@@ -69,16 +69,16 @@ Removed from v2: `--write-inputs`.
 
 ### Pipeline steps
 
-1. **Scan shared package**: recursively find all `.gleam` files in `shared/src/`, parse with glance, identify modules exporting `ToServer` or `ToClient` types.
+1. **Scan shared package**: recursively find all `.gleam` files in `shared/src/`, parse with glance, identify modules exporting `MsgFromClient` or `MsgFromServer` types.
 
 2. **Validate conventions**: check that `server/shared_state.gleam` and `server/app_error.gleam` exist and export expected types. Check that a handler module exists for each message module.
 
-3. **Walk type graph**: BFS from all types referenced in `ToServer` and `ToClient` constructors. Same algorithm as v2 (handles recursive types, caches parsed modules, detects float fields). Collect all reachable types for codec registration.
+3. **Walk type graph**: BFS from all types referenced in `MsgFromClient` and `MsgFromServer` constructors. Same algorithm as v2 (handles recursive types, caches parsed modules, detects float fields). Collect all reachable types for codec registration.
 
 4. **Generate outputs**:
    - Server dispatch
    - Client send functions (one per message module)
-   - Client receive dispatch (for `ToClient` messages)
+   - Client receive dispatch (for `MsgFromServer` messages)
    - Wire codec registration (JS: registerConstructor FFI, Erlang: atoms file)
    - RPC config (ws_url)
 
@@ -97,12 +97,12 @@ String-based function name, flat argument list.
 ### v3 Format
 
 ```
-{module_name_binary, toserver_value}
+{module_name_binary, msg_from_client_value}
 ```
 
-Module name identifies the domain handler. The value is the full `ToServer` union type instance (ETF-encoded with constructor atom tag), not a flat argument list.
+Module name identifies the domain handler. The value is the full `MsgFromClient` union type instance (ETF-encoded with constructor atom tag), not a flat argument list.
 
-Example: `todo.send(todo.Delete(id: 42))` sends:
+Example: `todo.send_to_server(todo.Delete(id: 42))` sends:
 
 ```
 {"shared/todo", Delete(42)}
@@ -110,9 +110,9 @@ Example: `todo.send(todo.Delete(id: 42))` sends:
 
 ### Response format
 
-Same as v2: ETF-encoded `Result(ToClient, RpcError(AppError))`.
+Same as v2: ETF-encoded `Result(MsgFromServer, RpcError(AppError))`.
 
-- Success: `Ok(todo_client_value)`
+- Success: `Ok(todo_msg_from_server_value)`
 - App error: `Error(AppError(app_error_value))`
 - Framework errors: `Error(MalformedRequest)`, `Error(UnknownFunction(name))`
 - Panics: `Error(InternalError(trace_id, message))`
@@ -138,9 +138,9 @@ pub fn handle(
 ) -> #(BitArray, Option(PanicInfo)) {
   case wire.decode_call(data) {
     Ok(#("shared/todo", msg)) ->
-      dispatch(fn() { todo_handler.handle(msg: wire.coerce(msg), state:) })
+      dispatch(fn() { todo_handler.update_from_client(msg: wire.coerce(msg), state:) })
     Ok(#("shared/account", msg)) ->
-      dispatch(fn() { account_handler.handle(msg: wire.coerce(msg), state:) })
+      dispatch(fn() { account_handler.update_from_client(msg: wire.coerce(msg), state:) })
     Ok(#(name, _)) ->
       #(wire.encode(Error(UnknownFunction(name))), None)
     Error(_) ->
@@ -177,7 +177,7 @@ import libero/rpc
 import libero/rpc_config
 import lustre/effect.{type Effect}
 
-pub fn send(msg: todo.ToServer) -> Effect(msg) {
+pub fn send_to_server(msg: todo.MsgFromClient) -> Effect(msg) {
   rpc.send(
     url: rpc_config.ws_url(),
     module: "shared/todo",
@@ -193,14 +193,14 @@ import shared/todo
 import client/generated/libero/todo as todo_rpc
 
 // In update:
-todo_rpc.send(todo.Delete(id: 42))
+todo_rpc.send_to_server(todo.Delete(id: 42))
 ```
 
 ### Client receive dispatch
 
 Output: `client/src/client/generated/libero/receive.gleam`
 
-Decodes incoming `ToClient` messages from the server. Returns a tagged value so the client app can route to the correct domain handler.
+Decodes incoming `MsgFromServer` messages from the server. Returns a tagged value so the client app can route to the correct domain handler.
 
 ```gleam
 import shared/todo
@@ -209,8 +209,8 @@ import libero/wire
 import libero/error.{type RpcError}
 
 pub type ServerMessage {
-  TodoMessage(Result(todo.ToClient, RpcError(AppError)))
-  AccountMessage(Result(account.ToClient, RpcError(AppError)))
+  TodoMessage(Result(todo.MsgFromServer, RpcError(AppError)))
+  AccountMessage(Result(account.MsgFromServer, RpcError(AppError)))
 }
 
 pub fn decode(data: BitArray) -> ServerMessage {
@@ -227,7 +227,7 @@ Same structure as v2, different seed types.
 
 **JS FFI** (`client/src/client/generated/libero/register_ffi.mjs`):
 - Import constructor classes from shared package MJS output
-- `registerConstructor("todo", _m0.Todo)` for each discovered variant
+- `registerConstructor("todo", _m0.Todo)` for each discovered variant (seeded from `MsgFromClient`/`MsgFromServer` constructors)
 - `registerFloatFields(...)` for variants with Float fields
 
 **Gleam wrapper** (`client/src/client/generated/libero/register.gleam`):
@@ -252,7 +252,7 @@ pub fn ws_url() -> String {
 
 ## Changes to libero/rpc (client runtime)
 
-The `rpc` module needs a new `send` function that takes a module name and a message value (instead of a wire name and an args tuple):
+The `rpc` module's `send` function takes a module name and a message value (instead of a wire name and an args tuple):
 
 ```gleam
 pub fn send(
@@ -274,7 +274,7 @@ v2: `fn decode_call(data: BitArray) -> Result(#(String, List(Dynamic)), DecodeEr
 
 v3: `fn decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError)`
 
-Returns the module name and the raw `ToServer` value as Dynamic (not a list of arguments). The dispatch coerces it to the correct type.
+Returns the module name and the raw `MsgFromClient` value as Dynamic (not a list of arguments). The dispatch coerces it to the correct type.
 
 ## Deleted code
 
@@ -305,14 +305,14 @@ pub type TodoError {
   TitleRequired
 }
 
-pub type ToServer {
+pub type MsgFromClient {
   Create(params: TodoParams)
   Toggle(id: Int)
   Delete(id: Int)
   LoadAll
 }
 
-pub type ToClient {
+pub type MsgFromServer {
   Created(Todo)
   Toggled(Todo)
   Deleted(id: Int)
@@ -345,10 +345,10 @@ pub type AppError {
 ### server/src/server/handlers/todo.gleam
 
 ```gleam
-pub fn handle(
-  msg msg: todo.ToServer,
+pub fn update_from_client(
+  msg msg: todo.MsgFromClient,
   state state: SharedState,
-) -> Result(todo.ToClient, AppError) {
+) -> Result(todo.MsgFromServer, AppError) {
   case msg {
     todo.Create(params:) -> ...
     todo.Toggle(id:) -> ...
@@ -361,7 +361,7 @@ pub fn handle(
 ### client/src/client/app.gleam
 
 Lustre SPA with:
-- Local `Msg` type wrapping `todo.ToClient` via `FromServer` variant
+- Local `Msg` type wrapping `todo.MsgFromServer` via `FromServer` variant
 - `update` handling local UI messages and server responses
 - `view` rendering the todo list with add/toggle/delete controls
 
@@ -384,15 +384,15 @@ Lustre SPA with:
 - Error messages include expected file path and type signature
 
 **Type scanning:**
-- Module with `ToServer` only is detected as message module
-- Module with `ToClient` only is detected as message module
+- Module with `MsgFromClient` only is detected as message module
+- Module with `MsgFromServer` only is detected as message module
 - Module with both is detected
 - Module with neither is ignored
-- Types referenced in `ToServer`/`ToClient` constructors seed the type walker correctly
+- Types referenced in `MsgFromClient`/`MsgFromServer` constructors seed the type walker correctly
 
 **Type walker (modified seed):**
-- All types reachable from `ToServer` constructors are discovered
-- All types reachable from `ToClient` constructors are discovered
+- All types reachable from `MsgFromClient` constructors are discovered
+- All types reachable from `MsgFromServer` constructors are discovered
 - Recursive types handled (visited set prevents cycles)
 - Float fields detected correctly
 

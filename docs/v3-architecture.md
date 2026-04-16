@@ -4,7 +4,7 @@
 
 Libero is a type-safe RPC and messaging framework for Gleam applications with separate client, server, and shared packages. It uses Erlang Term Format (ETF) over WebSocket for efficient binary serialization, with codegen that produces typed dispatch and transport glue from shared type definitions.
 
-v2 uses annotation-based codegen (`@rpc`, `@inject`). v3 replaces this with a message-type-driven approach where the entire framework surface is two type names: `ToServer` and `ToClient`.
+v2 uses annotation-based codegen (`@rpc`, `@inject`). v3 replaces this with a message-type-driven approach where the entire framework surface is two type names: `MsgFromClient` and `MsgFromServer`.
 
 ## v2 (Current): Annotation-Based RPC
 
@@ -19,10 +19,10 @@ This works, but has friction:
 
 ### The convention
 
-The codegen scans all modules in `shared/` for types named `ToServer` and `ToClient`. Any module exporting these types is a message module. Everything else in `shared/` is just domain types, untouched by the codegen.
+The codegen scans all modules in `shared/` for types named `MsgFromClient` and `MsgFromServer`. Any module exporting these types is a message module. Everything else in `shared/` is just domain types, untouched by the codegen.
 
-- `ToServer`: messages the client sends to the server (replaces `@rpc`)
-- `ToClient`: messages the server sends to the client (responses and push)
+- `MsgFromClient`: messages from the client to the server (replaces `@rpc`)
+- `MsgFromServer`: messages the server sends to the client (responses and push)
 
 That is the entire framework convention. Two type names.
 
@@ -33,13 +33,13 @@ The developer decides how to organize message modules. Libero does not enforce a
 ```
 // Starting simple (one file):
 shared/src/shared/
-  message.gleam             -- ToServer + ToClient for everything
+  message.gleam             -- MsgFromClient + MsgFromServer for everything
 
 // Growing by domain:
 shared/src/shared/
-  discounts.gleam           -- ToServer + ToClient alongside domain types
-  accounts.gleam            -- ToServer + ToClient alongside domain types
-  items.gleam               -- ToServer + ToClient alongside domain types
+  discounts.gleam           -- MsgFromClient + MsgFromServer alongside domain types
+  accounts.gleam            -- MsgFromClient + MsgFromServer alongside domain types
+  items.gleam               -- MsgFromClient + MsgFromServer alongside domain types
 ```
 
 ### Domain-organized example
@@ -53,13 +53,13 @@ pub type Discount { ... }
 pub type DiscountParams { ... }
 pub type DiscountError { ... }
 
-pub type ToServer {
+pub type MsgFromClient {
   Save(id: Int, params: DiscountParams)
   Delete(id: Int)
   LoadAll
 }
 
-pub type ToClient {
+pub type MsgFromServer {
   Saved(Discount)
   Deleted(id: Int)
   AllLoaded(List(Discount))
@@ -81,14 +81,14 @@ pub type Msg {
   UserEditedName(String)
 
   // Server responses
-  FromServer(discounts.ToClient)
+  FromServer(discounts.MsgFromServer)
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     UserClickedDelete(id) -> #(
       Model(..model, deleting: Some(id)),
-      discounts.send(discounts.Delete(id:)),
+      discounts.send_to_server(discounts.Delete(id:)),
     )
     FromServer(discounts.Deleted(id)) -> #(
       remove_from_list(model, id),
@@ -108,7 +108,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 // server/src/server/discounts_handler.gleam
 import shared/discounts
 
-pub fn handle(msg: discounts.ToServer, state: SharedState) -> Result(discounts.ToClient, AppError) {
+pub fn update_from_client(msg: discounts.MsgFromClient, state: SharedState) -> Result(discounts.MsgFromServer, AppError) {
   case msg {
     discounts.Delete(id:) -> {
       use _ <- result.try(core_discounts.delete(db: state.db, org: state.org, id:))
@@ -135,14 +135,14 @@ A full-stack Gleam project with `client/`, `server/`, and `shared/` packages alr
 - Client-only messages: Lustre `Msg` in `client/`
 - Server-only messages: internal messages in `server/`
 
-The package split handles four of the six concerns. Only the two wire types need a naming convention: `ToServer` (what crosses the wire going up) and `ToClient` (what crosses the wire going down).
+The package split handles four of the six concerns. Only the two wire types need a naming convention: `MsgFromClient` (what crosses the wire going up) and `MsgFromServer` (what crosses the wire going down).
 
-### ToClient: responses and push
+### MsgFromServer: responses and push
 
-`ToClient` serves two purposes:
+`MsgFromServer` serves two purposes:
 
-1. **Response**: the server handles a `ToServer` message and returns a `ToClient` value. This works over both WebSocket and HTTP.
-2. **Push**: the server sends a `ToClient` message without a preceding request. WebSocket-only.
+1. **Response**: the server handles a `MsgFromClient` message and returns a `MsgFromServer` value. This works over both WebSocket and HTTP.
+2. **Push**: the server sends a `MsgFromServer` message without a preceding request. WebSocket-only.
 
 Same type, two delivery modes. HTTP clients (CLI, SDK, agents) only receive responses. WebSocket clients can also receive unsolicited push. No separate types needed for this distinction.
 
@@ -150,8 +150,8 @@ Same type, two delivery modes. HTTP clients (CLI, SDK, agents) only receive resp
 
 The same message types work over multiple transports:
 
-- **WebSocket clients**: `discounts.send(msg)` over a persistent connection
-- **HTTP clients**: POST the `ToServer` message as the request body, receive `ToClient` as the response
+- **WebSocket clients**: `discounts.send_to_server(msg)` over a persistent connection
+- **HTTP clients**: POST the `MsgFromClient` message as the request body, receive `MsgFromServer` as the response
 
 Same handler function, different transport. The server dispatch is identical regardless of how the message arrived.
 
@@ -159,18 +159,18 @@ Same handler function, different transport. The server dispatch is identical reg
 
 The codegen runs before `gleam build`, producing normal Gleam source files that the compiler type-checks alongside application code:
 
-- **`send` functions** on the client: per-module ETF-encode and send over WebSocket
+- **`send_to_server` functions** on the client: per-module ETF-encode and send over WebSocket
 - **Server dispatch**: deserializes incoming WS/HTTP binary, routes to the correct domain handler, encodes response (with panic catching and trace IDs)
-- **Client dispatch**: decodes incoming `ToClient` messages, routes to the correct domain handler
-- **Wire codecs**: ETF codec registration for all types reachable from `ToServer` and `ToClient` across all modules
+- **Client dispatch**: decodes incoming `MsgFromServer` messages, routes to the correct domain handler
+- **Wire codecs**: ETF codec registration for all types reachable from `MsgFromClient` and `MsgFromServer` across all modules
 
 ### Compile-time safety
 
 Because generated files exist on disk before compilation, the Gleam compiler type-checks the entire chain:
 
-- Add a new `ToServer` constructor but forget to handle it: **exhaustive pattern match error**
-- Handler returns a type that does not match `ToClient`: **type mismatch error**
-- Client calls `discounts.send` with the wrong type: **type mismatch error**
+- Add a new `MsgFromClient` constructor but forget to handle it: **exhaustive pattern match error**
+- Handler returns a type that does not match `MsgFromServer`: **type mismatch error**
+- Client calls `discounts.send_to_server` with the wrong type: **type mismatch error**
 - A shared type referenced in a message changes shape: **errors propagate to both sides**
 
 The codegen produces typed glue. The compiler validates everything. No runtime surprises.
@@ -179,10 +179,10 @@ The codegen produces typed glue. The compiler validates everything. No runtime s
 
 | v2 | v3 |
 |---|---|
-| `@rpc` annotation on each server function | `ToServer` constructors define the interface |
+| `@rpc` annotation on each server function | `MsgFromClient` constructors define the interface |
 | `@inject` annotation + inject module | Server handler receives state directly |
-| Generated client stub modules | Client calls `discounts.send(msg)` |
-| Dispatch with per-function label matching | Pattern match on `ToServer` per domain |
+| Generated client stub modules | Client calls `discounts.send_to_server(msg)` |
+| Dispatch with per-function label matching | Pattern match on `MsgFromClient` per domain |
 | `rpc_register` for JS codec registration | Still needed: ETF codec registration for JS target |
 
 ### Why not stateful processes
@@ -199,6 +199,6 @@ Server push for per-account context changes (role revoked, preferences changed m
 
 ### Open questions
 
-- **Send function naming**: `discounts.send` vs other verbs. TBD.
+- **Send function naming**: `discounts.send_to_server` (settled).
 - **SharedState passing**: server handlers need session context (db connection, authenticated user, language). Convention: first argument typed `SharedState`, or the dispatch wrapper provides it.
-- **HTTP transport**: same `ToServer` types served over HTTP POST for CLI/SDK clients. Same handler, different entry point.
+- **HTTP transport**: same `MsgFromClient` types served over HTTP POST for CLI/SDK clients. Same handler, different entry point.

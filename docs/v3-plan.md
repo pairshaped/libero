@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace annotation-based codegen (`@rpc`, `@inject`) with message-type-driven codegen using `ToServer`/`ToClient` convention types.
+**Goal:** Replace annotation-based codegen (`@rpc`, `@inject`) with message-type-driven codegen using `MsgFromClient`/`MsgFromServer` convention types.
 
 **Architecture:** Incremental refactor of the existing `libero.gleam` codegen. Keep the type walker, ETF codec, constructor registry, trace/error modules. Replace the input scanning (annotations become type scanning), output generation (per-function stubs become per-module send functions, string dispatch becomes type dispatch), and inject system (deleted entirely). Build a todos example project to validate the pipeline end-to-end.
 
@@ -62,14 +62,14 @@ pub type TodoError {
   TitleRequired
 }
 
-pub type ToServer {
+pub type MsgFromClient {
   Create(params: TodoParams)
   Toggle(id: Int)
   Delete(id: Int)
   LoadAll
 }
 
-pub type ToClient {
+pub type MsgFromServer {
   Created(Todo)
   Toggled(Todo)
   Deleted(id: Int)
@@ -128,14 +128,14 @@ import gleam/result
 import server/app_error.{type AppError, TodoError}
 import server/shared_state.{type SharedState, SharedState}
 import shared/todo.{
-  type ToClient, type ToServer, AllLoaded, Create, Created, Delete, Deleted,
-  Error, LoadAll, NotFound, TitleRequired, Todo, Toggle, Toggled,
+  type MsgFromClient, type MsgFromServer, AllLoaded, Create, Created, Delete,
+  Deleted, Error, LoadAll, NotFound, TitleRequired, Todo, Toggle, Toggled,
 }
 
-pub fn handle(
-  msg msg: ToServer,
+pub fn update_from_client(
+  msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(ToClient, AppError) {
+) -> Result(MsgFromServer, AppError) {
   case msg {
     Create(params:) -> {
       case params.title {
@@ -265,11 +265,11 @@ MissingHandler(message_module, expected_path) ->
   <> message_module
   <> "\n  expected: "
   <> expected_path
-  <> "\n  with: pub fn handle(msg: ToServer, state: SharedState) -> Result(ToClient, AppError)"
+  <> "\n  with: pub fn update_from_client(msg: MsgFromClient, state: SharedState) -> Result(MsgFromServer, AppError)"
 NoMessageModules(shared_path) ->
   "no message modules found in "
   <> shared_path
-  <> "\n  add ToServer and/or ToClient types to a module in the shared package"
+  <> "\n  add MsgFromClient and/or MsgFromServer types to a module in the shared package"
 ```
 
 - [ ] **Step 3: Add stub `scan_message_modules` function**
@@ -284,14 +284,14 @@ pub type MessageModule {
     module_path: String,
     /// Absolute file path
     file_path: String,
-    /// Whether this module exports a ToServer type
-    has_to_server: Bool,
-    /// Whether this module exports a ToClient type
-    has_to_client: Bool,
+    /// Whether this module exports a MsgFromClient type
+    has_msg_from_client: Bool,
+    /// Whether this module exports a MsgFromServer type
+    has_msg_from_server: Bool,
   )
 }
 
-/// Scan the shared package for modules exporting ToServer and/or ToClient types.
+/// Scan the shared package for modules exporting MsgFromClient and/or MsgFromServer types.
 pub fn scan_message_modules(
   shared_src shared_src: String,
 ) -> Result(List(MessageModule), List(GenError)) {
@@ -335,8 +335,8 @@ pub fn validate_missing_shared_state_test() {
     libero.MessageModule(
       module_path: "shared/todo",
       file_path: "/tmp/todo.gleam",
-      has_to_server: True,
-      has_to_client: True,
+      has_msg_from_client: True,
+      has_msg_from_server: True,
     ),
   ]
   let errors =
@@ -358,8 +358,8 @@ pub fn validate_missing_app_error_test() {
     libero.MessageModule(
       module_path: "shared/todo",
       file_path: "/tmp/todo.gleam",
-      has_to_server: True,
-      has_to_client: True,
+      has_msg_from_client: True,
+      has_msg_from_server: True,
     ),
   ]
   let errors =
@@ -381,8 +381,8 @@ pub fn validate_missing_handler_test() {
     libero.MessageModule(
       module_path: "shared/todo",
       file_path: "/tmp/todo.gleam",
-      has_to_server: True,
-      has_to_client: True,
+      has_msg_from_client: True,
+      has_msg_from_server: True,
     ),
   ]
   let errors =
@@ -417,7 +417,7 @@ git commit -m "Add convention validation tests and error types for v3"
 
 ### Task 3: Implement Message Module Scanner
 
-Replace the `@rpc`/`@inject` annotation scanning with `ToServer`/`ToClient` type scanning. This reads shared package source files via glance and identifies message modules.
+Replace the `@rpc`/`@inject` annotation scanning with `MsgFromClient`/`MsgFromServer` type scanning. This reads shared package source files via glance and identifies message modules.
 
 **Files:**
 - Modify: `src/libero.gleam` (implement `scan_message_modules`)
@@ -427,7 +427,7 @@ Replace the `@rpc`/`@inject` annotation scanning with `ToServer`/`ToClient` type
 Replace the stub in `src/libero.gleam`:
 
 ```gleam
-/// Scan the shared package for modules exporting ToServer and/or ToClient types.
+/// Scan the shared package for modules exporting MsgFromClient and/or MsgFromServer types.
 pub fn scan_message_modules(
   shared_src shared_src: String,
 ) -> Result(List(MessageModule), List(GenError)) {
@@ -459,18 +459,18 @@ fn check_message_module(
     glance.module(content) |> result.replace_error(Nil),
   )
 
-  let has_to_server =
+  let has_msg_from_client =
     list.any(parsed.custom_types, fn(ct) {
       let glance.Definition(_, t) = ct
-      t.name == "ToServer" && t.publicity == glance.Public
+      t.name == "MsgFromClient" && t.publicity == glance.Public
     })
-  let has_to_client =
+  let has_msg_from_server =
     list.any(parsed.custom_types, fn(ct) {
       let glance.Definition(_, t) = ct
-      t.name == "ToClient" && t.publicity == glance.Public
+      t.name == "MsgFromServer" && t.publicity == glance.Public
     })
 
-  case has_to_server || has_to_client {
+  case has_msg_from_client || has_msg_from_server {
     False -> Error(Nil)
     True -> {
       let prefix = shared_src <> "/"
@@ -480,8 +480,8 @@ fn check_message_module(
       Ok(MessageModule(
         module_path: relative,
         file_path:,
-        has_to_server:,
-        has_to_client:,
+        has_msg_from_client:,
+        has_msg_from_server:,
       ))
     }
   }
@@ -499,17 +499,17 @@ pub fn scan_todos_example_finds_todo_module_test() {
   let assert True = list.length(modules) == 1
   let assert True =
     list.any(modules, fn(m) {
-      m.module_path == "todo" && m.has_to_server && m.has_to_client
+      m.module_path == "todo" && m.has_msg_from_client && m.has_msg_from_server
     })
 }
 
 pub fn scan_ignores_modules_without_message_types_test() {
   // The shared package root (shared/src/shared/) may have other files.
-  // Create a temporary module without ToServer/ToClient and verify it's ignored.
+  // Create a temporary module without MsgFromClient/MsgFromServer and verify it's ignored.
   let assert Ok(modules) =
     libero.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert True =
-    list.all(modules, fn(m) { m.has_to_server || m.has_to_client })
+    list.all(modules, fn(m) { m.has_msg_from_client || m.has_msg_from_server })
 }
 ```
 
@@ -523,7 +523,7 @@ Expected: scanning tests pass, convention validation tests still fail.
 
 ```bash
 git add src/libero.gleam test/libero/convention_test.gleam
-git commit -m "Implement message module scanner for ToServer/ToClient types"
+git commit -m "Implement message module scanner for MsgFromClient/MsgFromServer types"
 ```
 
 ---
@@ -560,8 +560,8 @@ pub fn validate_conventions(
 
   let handler_errors =
     list.filter_map(message_modules, fn(m) {
-      // Only require handler if module has ToServer (server needs to handle it)
-      case m.has_to_server {
+      // Only require handler if module has MsgFromClient (server needs to handle it)
+      case m.has_msg_from_client {
         False -> Error(Nil)
         True -> {
           // shared/todo -> server/handlers/todo.gleam
@@ -627,17 +627,17 @@ git commit -m "Implement convention validation for SharedState, AppError, and ha
 
 ### Task 5: Modify Type Walker to Seed from Message Types
 
-Change the type walker's seed from `@rpc` function signatures to `ToServer`/`ToClient` type constructors.
+Change the type walker's seed from `@rpc` function signatures to `MsgFromClient`/`MsgFromServer` type constructors.
 
 **Files:**
 - Modify: `src/libero.gleam` (add `walk_message_types` function that wraps the existing BFS walker with new seed logic)
 
 - [ ] **Step 1: Add `seed_from_message_modules` function**
 
-This function extracts all type references from `ToServer` and `ToClient` constructors in message modules and returns seed pairs for the BFS walker.
+This function extracts all type references from `MsgFromClient` and `MsgFromServer` constructors in message modules and returns seed pairs for the BFS walker.
 
 ```gleam
-/// Extract seed types from ToServer/ToClient constructors for the BFS walker.
+/// Extract seed types from MsgFromClient/MsgFromServer constructors for the BFS walker.
 fn seed_from_message_modules(
   message_modules message_modules: List(MessageModule),
 ) -> Result(List(#(String, String)), List(GenError)) {
@@ -654,7 +654,7 @@ fn seed_from_message_modules(
               let new_seeds =
                 list.fold(parsed.custom_types, seed_set, fn(acc2, ct) {
                   let glance.Definition(_, t) = ct
-                  case t.name == "ToServer" || t.name == "ToClient" {
+                  case t.name == "MsgFromClient" || t.name == "MsgFromServer" {
                     False -> acc2
                     True ->
                       list.fold(t.variants, acc2, fn(acc3, variant) {
@@ -706,7 +706,7 @@ Note: `collect_type_refs` already exists in the codebase. The seed function reus
 - [ ] **Step 2: Add `walk_message_registry_types` function**
 
 ```gleam
-/// Walk the type graph rooted at ToServer/ToClient message types.
+/// Walk the type graph rooted at MsgFromClient/MsgFromServer message types.
 /// Returns all variants that need to be registered for ETF codecs.
 fn walk_message_registry_types(
   message_modules message_modules: List(MessageModule),
@@ -738,12 +738,12 @@ Add to `test/libero/convention_test.gleam`:
 pub fn scan_finds_types_referenced_in_constructors_test() {
   let assert Ok(modules) =
     libero.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
-  // TodoParams is referenced in ToServer.Create(params: TodoParams)
-  // Todo is referenced in ToClient.Created(Todo), ToClient.Toggled(Todo)
-  // TodoError is referenced in ToClient.Error(TodoError)
+  // TodoParams is referenced in MsgFromClient.Create(params: TodoParams)
+  // Todo is referenced in MsgFromServer.Created(Todo), MsgFromServer.Toggled(Todo)
+  // TodoError is referenced in MsgFromServer.Error(TodoError)
   // All three should be reachable from the message type constructors
   let assert True = list.length(modules) == 1
-  let assert True = { list.first(modules) |> result.unwrap(libero.MessageModule("", "", False, False)) }.has_to_server
+  let assert True = { list.first(modules) |> result.unwrap(libero.MessageModule("", "", False, False)) }.has_msg_from_client
 }
 ```
 
@@ -757,7 +757,7 @@ Expected: all tests pass.
 
 ```bash
 git add src/libero.gleam test/libero/convention_test.gleam
-git commit -m "Add type walker seeding from ToServer/ToClient message constructors"
+git commit -m "Add type walker seeding from MsgFromClient/MsgFromServer message constructors"
 ```
 
 ---
@@ -778,7 +778,7 @@ fn write_v3_dispatch(
   server_generated server_generated: String,
 ) -> Result(Nil, GenError) {
   let handler_imports =
-    list.filter(message_modules, fn(m) { m.has_to_server })
+    list.filter(message_modules, fn(m) { m.has_msg_from_client })
     |> list.map(fn(m) {
       let module_name = module_last_segment(m.module_path)
       "import server/handlers/"
@@ -790,7 +790,7 @@ fn write_v3_dispatch(
     |> string.join("\n")
 
   let case_arms =
-    list.filter(message_modules, fn(m) { m.has_to_server })
+    list.filter(message_modules, fn(m) { m.has_msg_from_client })
     |> list.map(fn(m) {
       let module_name = module_last_segment(m.module_path)
       "    Ok(#(\""
@@ -798,7 +798,7 @@ fn write_v3_dispatch(
       <> "\", msg)) ->\n"
       <> "      dispatch(fn() { "
       <> module_name
-      <> "_handler.handle(msg: wire.coerce(msg), state:) })"
+      <> "_handler.update_from_client(msg: wire.coerce(msg), state:) })"
     })
     |> string.join("\n")
 
@@ -887,14 +887,14 @@ Write the code generator for per-module client send functions.
 - [ ] **Step 1: Implement `write_v3_send_functions`**
 
 ```gleam
-/// Generate a client send function for each message module with ToServer.
+/// Generate a client send function for each message module with MsgFromClient.
 fn write_v3_send_functions(
   message_modules message_modules: List(MessageModule),
   client_generated client_generated: String,
   config config: Config,
 ) -> Result(Nil, List(GenError)) {
   let errors =
-    list.filter(message_modules, fn(m) { m.has_to_server })
+    list.filter(message_modules, fn(m) { m.has_msg_from_client })
     |> list.filter_map(fn(m) {
       case write_v3_send_function(message_module: m, client_generated:, config:) {
         Ok(Nil) -> Error(Nil)
@@ -919,12 +919,12 @@ fn write_v3_send_function(
 
 import "
     <> message_module.module_path
-    <> ".{type ToServer}
+    <> ".{type MsgFromClient}
 import libero/rpc
 import client/generated/libero/config as rpc_config
 import lustre/effect.{type Effect}
 
-pub fn send(msg msg: ToServer) -> Effect(msg) {
+pub fn send_to_server(msg msg: MsgFromClient) -> Effect(msg) {
   rpc.send(
     url: rpc_config.ws_url(),
     module: \""
@@ -958,7 +958,7 @@ git commit -m "Add client send function generator for v3"
 
 ### Task 8: Update Wire Module for v3 Envelope
 
-Change `decode_call` to return `#(String, Dynamic)` instead of `#(String, List(Dynamic))`, matching the v3 wire envelope where the second element is a single `ToServer` value, not a list of arguments.
+Change `decode_call` to return `#(String, Dynamic)` instead of `#(String, List(Dynamic))`, matching the v3 wire envelope where the second element is a single `MsgFromClient` value, not a list of arguments.
 
 **Files:**
 - Modify: `src/libero/wire.gleam`
@@ -1019,13 +1019,13 @@ decode_call(Data) ->
 //// Client-side RPC machinery for libero v3.
 ////
 //// `send` is the entrypoint used by generated per-module send functions.
-//// It takes the WebSocket URL, the module name, and the ToServer message
+//// It takes the WebSocket URL, the module name, and the MsgFromClient message
 //// value, encodes them as an ETF envelope, and sends over WebSocket.
 
 import gleam/dynamic.{type Dynamic}
 import lustre/effect.{type Effect}
 
-/// Send a ToServer message to the server over WebSocket.
+/// Send a MsgFromClient message to the server over WebSocket.
 /// Called by generated send functions.
 pub fn send(
   url url: String,
@@ -1362,7 +1362,7 @@ Note: the exact implementation depends on the existing `encodeValue` / ETF encod
 
 - [ ] **Step 2: Update response handling**
 
-v3 responses are `Result(ToClient, RpcError(AppError))` encoded as ETF. The existing decoder already handles `Result` (Ok/Error atoms with values). The response handler needs to decode and dispatch to the caller.
+v3 responses are `Result(MsgFromServer, RpcError(AppError))` encoded as ETF. The existing decoder already handles `Result` (Ok/Error atoms with values). The response handler needs to decode and dispatch to the caller.
 
 The response flow depends on how the client tracks pending requests. In v2, `call_by_name` registers a callback per call. In v3, `send` is fire-and-response, so we need a similar mechanism. The WebSocket `onmessage` handler decodes the response and dispatches it.
 
@@ -1486,7 +1486,7 @@ pub type Msg {
   UserClickedAdd
   UserClickedToggle(Int)
   UserClickedDelete(Int)
-  FromServer(todo.ToClient)
+  FromServer(todo.MsgFromServer)
 }
 
 pub fn main() {
@@ -1498,7 +1498,7 @@ pub fn main() {
 fn init(_flags) -> #(Model, Effect(Msg)) {
   #(
     Model(todos: [], draft: "", error: ""),
-    todo_rpc.send(msg: todo.LoadAll)
+    todo_rpc.send_to_server(msg: todo.LoadAll)
       |> effect.map(fn(_) { FromServer(todo.AllLoaded([])) }),
   )
 }
@@ -1508,10 +1508,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     UserUpdatedDraft(text) -> #(Model(..model, draft: text), effect.none())
     UserClickedAdd -> #(
       Model(..model, draft: ""),
-      todo_rpc.send(msg: todo.Create(params: todo.TodoParams(title: model.draft))),
+      todo_rpc.send_to_server(msg: todo.Create(params: todo.TodoParams(title: model.draft))),
     )
-    UserClickedToggle(id) -> #(model, todo_rpc.send(msg: todo.Toggle(id:)))
-    UserClickedDelete(id) -> #(model, todo_rpc.send(msg: todo.Delete(id:)))
+    UserClickedToggle(id) -> #(model, todo_rpc.send_to_server(msg: todo.Toggle(id:)))
+    UserClickedDelete(id) -> #(model, todo_rpc.send_to_server(msg: todo.Delete(id:)))
     FromServer(server_msg) ->
       case server_msg {
         todo.Created(new_todo) -> #(
@@ -1571,7 +1571,7 @@ fn view(model: Model) -> Element(Msg) {
 }
 ```
 
-Note: the client app above is a starting point. The exact send/receive wiring may need adjustment based on how the response callback mechanism works in v3. The core pattern (send ToServer, receive ToClient via FromServer wrapper) is what matters.
+Note: the client app above is a starting point. The exact send/receive wiring may need adjustment based on how the response callback mechanism works in v3. The core pattern (send MsgFromClient, receive MsgFromServer via FromServer wrapper) is what matters.
 
 - [ ] **Step 4: Compile both packages**
 
@@ -1607,7 +1607,7 @@ Change version from `"2.1.0"` to `"3.0.0-dev"`.
 - [ ] **Step 2: Update README.md**
 
 Update the README to describe the v3 convention:
-- `ToServer`/`ToClient` types in shared modules
+- `MsgFromClient`/`MsgFromServer` types in shared modules
 - Convention-based handler paths
 - Example usage from todos
 
@@ -1631,7 +1631,7 @@ Expected: all pass.
 
 ```bash
 git add -A
-git commit -m "v3.0.0-dev: message-type-driven codegen with ToServer/ToClient convention"
+git commit -m "v3.0.0-dev: message-type-driven codegen with MsgFromClient/MsgFromServer convention"
 ```
 
 Plan complete and saved to `docs/v3-plan.md`. Two execution options:
