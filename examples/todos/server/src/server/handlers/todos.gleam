@@ -17,7 +17,7 @@ pub fn update_from_client(
         "" -> Ok(#(TodoFailed(TitleRequired), state))
         title -> {
           let item = store.insert(title:)
-          push.send_to_client(
+          push.send_to_clients(
             topic: "todos",
             module: "shared/todos",
             msg: AllLoaded(store.all()),
@@ -29,7 +29,7 @@ pub fn update_from_client(
     Toggle(id:) -> {
       case store.toggle(id:) {
         Ok(toggled) -> {
-          push.send_to_client(
+          push.send_to_clients(
             topic: "todos",
             module: "shared/todos",
             msg: AllLoaded(store.all()),
@@ -42,7 +42,7 @@ pub fn update_from_client(
     Delete(id:) -> {
       case store.delete(id:) {
         Ok(Nil) -> {
-          push.send_to_client(
+          push.send_to_clients(
             topic: "todos",
             module: "shared/todos",
             msg: AllLoaded(store.all()),
