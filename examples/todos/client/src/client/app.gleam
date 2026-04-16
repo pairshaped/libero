@@ -11,7 +11,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import shared/todos.{
-  type ToClient, type Todo, AllLoaded, Created, Deleted, TodoFailed,
+  type MsgFromServer, type Todo, AllLoaded, Created, Deleted, TodoFailed,
   Create, Delete, LoadAll, Toggle, TodoParams, Toggled,
 }
 
@@ -28,7 +28,7 @@ pub type Msg {
   Submit
   ToggleClicked(Int)
   DeleteClicked(Int)
-  GotResponse(Result(ToClient, RpcError(todos.TodoError)))
+  GotResponse(Result(MsgFromServer, RpcError(todos.TodoError)))
 }
 
 // ---- Init ----
@@ -106,9 +106,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn send(msg: todos.ToServer) -> Effect(Msg) {
+fn send(msg: todos.MsgFromClient) -> Effect(Msg) {
   log("send: " <> string.inspect(msg))
-  rpc.send(msg:, on_response: fn(raw: Dynamic) {
+  rpc.send_to_server(msg:, on_response: fn(raw: Dynamic) {
     let response = wire.coerce(raw)
     log("recv: " <> string.inspect(response))
     GotResponse(response)

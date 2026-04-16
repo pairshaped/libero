@@ -2,14 +2,14 @@ import gleam/list
 import server/app_error.{type AppError}
 import server/shared_state.{type SharedState, SharedState}
 import shared/todos.{
-  type ToClient, type ToServer, AllLoaded, Create, Created, Delete, Deleted,
-  LoadAll, NotFound, TitleRequired, Todo, TodoFailed, Toggle, Toggled,
+  type MsgFromClient, type MsgFromServer, AllLoaded, Create, Created, Delete,
+  Deleted, LoadAll, NotFound, TitleRequired, Todo, TodoFailed, Toggle, Toggled,
 }
 
-pub fn handle(
-  msg msg: ToServer,
+pub fn update_from_client(
+  msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(ToClient, SharedState), AppError) {
+) -> Result(#(MsgFromServer, SharedState), AppError) {
   case msg {
     Create(params:) -> {
       case params.title {
