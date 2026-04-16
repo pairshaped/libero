@@ -1,6 +1,6 @@
 # Libero
 
-Libero generates typed WebSocket plumbing between a Gleam server and a Lustre client. You define message types in a shared module, and Libero produces a server dispatch function and client send stubs from them. No REST routes, no JSON codecs, no hand-written dispatch tables.
+Libero generates typed messaging between clients and a Gleam server. You define message types in a shared module, and Libero produces a server dispatch function and client stubs from them. Browser clients (like Lustre) connect over WebSocket, BEAM clients (Gleam, Erlang, Elixir) connect over HTTP. No REST routes, no JSON codecs, no hand-written dispatch tables.
 
 ## Convention
 
@@ -82,15 +82,13 @@ push.send_to_client(client_id: "user:42", module: "shared/todos", msg: Created(i
 todos_rpc.update_from_server(handler: fn(raw) { GotPush(wire.coerce(raw)) })
 ```
 
-Push is opt-in. If you never call `update_from_server`, push frames are silently dropped. If unused, tree shaking removes the generated code entirely.
+Push is opt-in. If you never call `update_from_server`, push frames are silently dropped. If unused, tree shaking removes the generated code.
 
 ## HTTP clients
 
 The generated `dispatch.handle(state:, data:)` function takes a `BitArray` and returns a `BitArray`. It doesn't know or care about the transport. This means any BEAM process can be a Libero client by sending ETF-encoded messages over HTTP POST. No WebSocket and no Libero dependency needed.
 
 This works because ETF is the BEAM's native serialization format. Any BEAM client (Gleam, Erlang, Elixir) can call `term_to_binary` on the same shared types the browser uses, POST the bytes, and decode the response with `binary_to_term`. The server runs the same dispatch logic either way.
-
-Use cases: CLI tools, background workers, inter-service calls, cron jobs, admin scripts.
 
 ```gleam
 // Server: add an HTTP route that calls the same dispatch
@@ -122,7 +120,7 @@ gleam run -m libero -- \
   --server=.
 ```
 
-Or for multi-tenant deployments where the hostname varies:
+Or when the hostname varies between environments:
 
 ```bash
 gleam run -m libero -- \
@@ -154,13 +152,11 @@ From a shared module at `shared/src/shared/todos.gleam`, Libero writes:
 
 ## How it works
 
-The wire format is Erlang External Term Format (ETF) over binary WebSocket frames. Gleam's custom types, lists, options, and primitives all serialize reflectively without explicit codecs.
-
-Server→client frames carry a 1-byte tag: `0x00` for responses (matched to pending callbacks in FIFO order), `0x01` for pushes (routed to the module's `update_from_server` handler).
+The wire format is Erlang External Term Format (ETF) over binary WebSocket frames. Gleam's custom types, lists, options, and primitives all serialize automatically without explicit codecs.
 
 The client sends a `{module_path, MsgFromClient_value}` tuple. The server dispatch decodes it, routes by module path, and calls the handler. Codec registration happens automatically on the first `send_to_server` call.
 
-The generator scans shared modules for `MsgFromClient` and `MsgFromServer` types, walks their type graphs transitively to find all types that need codec registration, and emits the dispatch and stub files.
+The generator scans shared modules for `MsgFromClient` and `MsgFromServer` types, walks their type graphs to find all types that need codec registration, and emits the dispatch and stub files.
 
 ## Naming
 
