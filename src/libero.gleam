@@ -112,6 +112,14 @@ fn run(
         ),
       )
 
+      // Generate server push wrappers.
+      use _ <- result.try(
+        codegen.write_push_wrappers(
+          message_modules: message_modules,
+          server_generated: config.server_generated,
+        ),
+      )
+
       // Generate WebSocket config module.
       use _ <- result.try(
         codegen.write_config(config: config)
