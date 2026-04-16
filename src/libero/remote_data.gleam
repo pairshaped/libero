@@ -106,6 +106,22 @@ pub fn to_remote(
   }
 }
 
+/// Adapter for action responses that the page wants as a flat `Result`
+/// rather than `RemoteData`. Useful when the response only feeds a flash
+/// message or triggers a redirect - the page never needs to render
+/// `NotAsked`/`Loading` states for the action result itself.
+pub fn to_result(
+  raw raw: Dynamic,
+  format_domain format_domain: fn(domain) -> String,
+) -> Result(payload, String) {
+  case to_remote(raw, format_domain) {
+    Success(payload) -> Ok(payload)
+    Failure(message) -> Error(message)
+    NotAsked | Loading ->
+      Error("Unexpected response state - to_result called on a non-response")
+  }
+}
+
 /// Default formatter for framework-level RPC errors.
 /// Domain errors travel inside `Ok(Error(domain))` and are formatted
 /// by the caller's `format_domain` function.
