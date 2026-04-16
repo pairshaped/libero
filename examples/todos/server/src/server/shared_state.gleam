@@ -1,9 +1,10 @@
-import shared/todos.{type Todo}
-
+/// SharedState is a unit type — actual state lives in ETS.
+/// This satisfies the dispatch.handle(state:, data:) signature
+/// that libero generates.
 pub type SharedState {
-  SharedState(next_id: Int, todos: List(Todo))
+  SharedState
 }
 
 pub fn new() -> SharedState {
-  SharedState(next_id: 1, todos: [])
+  SharedState
 }

@@ -32,7 +32,7 @@ pub fn handler(
         Error(err) ->
           io.println("[ws] decode error: " <> string.inspect(err))
       }
-      let #(response_bytes, maybe_panic, new_shared) =
+      let #(response_bytes, maybe_panic, _new_shared) =
         dispatch.handle(state: state.shared, data:)
       case maybe_panic {
         Some(info) ->
@@ -40,7 +40,7 @@ pub fn handler(
         None -> Nil
       }
       let _ = mist.send_binary_frame(conn, response_bytes)
-      mist.continue(ConnState(shared: new_shared))
+      mist.continue(state)
     }
     mist.Closed | mist.Shutdown -> {
       io.println("[ws] client disconnected")
