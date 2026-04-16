@@ -39,7 +39,7 @@ ToggleTodo(id) ->
   #(model, todos_rpc.send_to_server(msg: Toggle(id:), on_response: GotResponse))
 ```
 
-The server handles it in the [handler module](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/store.gleam):
+The server handles it in [`store.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/store.gleam), which exports `update_from_client`:
 
 ```gleam
 // server/src/server/store.gleam
