@@ -1,10 +1,10 @@
 # Libero
 
-Libero generates typed WebSocket plumbing between a Gleam server and a Lustre client. You define message types in a shared module, and libero produces a server dispatch function and client send stubs from them. No REST routes, no JSON codecs, no hand-written dispatch tables.
+Libero generates typed WebSocket plumbing between a Gleam server and a Lustre client. You define message types in a shared module, and Libero produces a server dispatch function and client send stubs from them. No REST routes, no JSON codecs, no hand-written dispatch tables.
 
 ## Convention
 
-Every shared module that participates in libero's codegen exports two types by convention:
+Every shared module that participates in Libero's codegen exports two types by convention:
 
 ```gleam
 // shared/src/shared/todos.gleam
@@ -86,9 +86,9 @@ Push is opt-in. If you never call `update_from_server`, push frames are silently
 
 ## HTTP clients
 
-The generated `dispatch.handle(state:, data:)` function takes a `BitArray` and returns a `BitArray`. It doesn't know or care about the transport. This means any BEAM process can be a libero client by sending ETF-encoded messages over HTTP POST, with no WebSocket and no libero dependency.
+The generated `dispatch.handle(state:, data:)` function takes a `BitArray` and returns a `BitArray`. It doesn't know or care about the transport. This means any BEAM process can be a Libero client by sending ETF-encoded messages over HTTP POST. No WebSocket and no Libero dependency needed.
 
-This works because ETF is the BEAM's native serialization format. A Gleam or Erlang client can call `term_to_binary` on the same shared types the browser uses, POST the bytes, and decode the response with `binary_to_term`. The server runs the same dispatch logic either way.
+This works because ETF is the BEAM's native serialization format. Any BEAM client (Gleam, Erlang, Elixir) can call `term_to_binary` on the same shared types the browser uses, POST the bytes, and decode the response with `binary_to_term`. The server runs the same dispatch logic either way.
 
 Use cases: CLI tools, background workers, inter-service calls, cron jobs, admin scripts.
 
@@ -145,7 +145,7 @@ gleam run -m libero -- \
 
 ## What gets generated
 
-From a shared module at `shared/src/shared/todos.gleam`, libero writes:
+From a shared module at `shared/src/shared/todos.gleam`, Libero writes:
 
 - `server/src/server/generated/libero/dispatch.gleam`: routes incoming wire calls to handler modules.
 - `client/src/client/generated/libero/todos.gleam`: typed `send_to_server` and `update_from_server` stubs for the client.
