@@ -84,12 +84,16 @@ todos_rpc.update_from_server(handler: fn(raw) { GotPush(wire.coerce(raw)) })
 
 Push is opt-in. If you never call `update_from_server`, push frames are silently dropped. If unused, tree shaking removes the generated code entirely.
 
-## CLI clients
+## HTTP clients
 
-BEAM clients can call the same server over HTTP POST. No WebSocket, no libero dependency needed. The server's dispatch module works with any transport:
+The generated `dispatch.handle(state:, data:)` function takes a `BitArray` and returns a `BitArray`. It doesn't know or care about the transport. This means any BEAM process can be a libero client by sending ETF-encoded messages over HTTP POST, with no WebSocket and no libero dependency.
+
+This works because ETF is the BEAM's native serialization format. A Gleam or Erlang client can call `term_to_binary` on the same shared types the browser uses, POST the bytes, and decode the response with `binary_to_term`. The server runs the same dispatch logic either way.
+
+Use cases: CLI tools, background workers, inter-service calls, cron jobs, admin scripts.
 
 ```gleam
-// Server — add an HTTP route
+// Server: add an HTTP route that calls the same dispatch
 fn handle_rpc(req, state) {
   use body <- wisp.require_body(req)
   let #(response, _, _) = dispatch.handle(state:, data: body)
@@ -98,13 +102,13 @@ fn handle_rpc(req, state) {
 ```
 
 ```gleam
-// CLI client, native ETF, no libero dependency
+// Any BEAM client: encode, POST, decode
 let payload = term_to_binary(#("shared/todos", LoadAll))
 let assert Ok(response) = httpc.request(Post, url, payload)
 let result = binary_to_term(response.body)
 ```
 
-See [`examples/todos/cli/`](./examples/todos/cli/) for a complete runnable CLI example with argument parsing.
+See [`examples/todos/cli/`](./examples/todos/cli/) for a runnable CLI example with argument parsing.
 
 ## Codegen CLI
 
