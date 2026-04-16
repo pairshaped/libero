@@ -132,3 +132,28 @@ Libero lived inside the proof of concept for a while as `lib/libero/`. Once the 
 - Added a unit test suite for `libero/wire` and `libero/trace`, the pure building blocks most likely to regress silently.
 - Built the FizzBuzz example (`examples/fizzbuzz/`) to serve as the library's runnable reference.
 - Retired the proof of concept. It was never meant to be a published thing, and the fizzbuzz example covers everything a minimal demo needs.
+
+### Phase 9: v3, message types and naming
+
+v3 replaced the `@rpc` annotation-driven model with a convention-based message type approach. Instead of annotating individual functions, you define `MsgFromClient` and `MsgFromServer` types in a shared module and libero generates the dispatch and stubs from those.
+
+The naming drew from elm-webapp and Lamdera. Every function name tells you who's sending and who's receiving:
+
+- `send_to_server(msg:)`, client sends to server
+- `update_from_client(msg:)`, server handles client message
+- `update_from_server(handler:)`, client handles server push
+- `push.send_to_client(client_id:, ...)` / `push.send_to_clients(topic:, ...)`, server pushes to client(s)
+
+Other v3 changes:
+
+- **Auto-registration.** Codec registration (the `register_all()` call that maps constructor atoms to JS classes) now happens automatically on the first `send_to_server` call. Users never need to call it manually. The generated `registerAll()` JS function is idempotent.
+
+- **Wire protocol tagging.** Server-to-client frames now carry a 1-byte prefix: `0x00` for responses (matched FIFO to pending callbacks) and `0x01` for pushes (routed to the module's `update_from_server` handler). This lets request/response and server push coexist on the same WebSocket.
+
+- **Server push.** The `libero/push` module uses BEAM pg (process groups) for topic-based subscriptions. WebSocket connection processes join topics via `push.join(topic:)` and receive push frames that they forward to the browser. Targeted pushes to individual clients use `push.register(client_id:)` and `push.send_to_client(client_id:, ...)`. Both use the same pg mechanism. A targeted push is just a group with one member.
+
+- **HTTP POST transport.** The server's `dispatch.handle(state:, data:)` takes `BitArray` in and returns `BitArray` out, so it works with any transport. Adding an HTTP POST route for CLI clients is a few lines of Wisp code. No libero changes needed.
+
+- **CLI example.** A BEAM CLI client at `examples/todos/cli/` that sends `MsgFromClient` messages over HTTP POST using native `term_to_binary`. No libero dependency on the client side. Demonstrates the full CRUD loop with command-line argument parsing.
+
+- **ETS-backed store.** The todos example moved from per-connection in-memory state to a shared ETS table, so both WebSocket (browser) and HTTP (CLI) clients see the same data. `SharedState` became a unit type. The handler is stateless, actual state lives in ETS.
