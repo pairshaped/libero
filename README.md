@@ -39,10 +39,10 @@ ToggleTodo(id) ->
   #(model, todos_rpc.send_to_server(msg: Toggle(id:), on_response: GotResponse))
 ```
 
-The server handles it in the [handler module](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/handlers/todos.gleam):
+The server handles it in the [handler module](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/store.gleam):
 
 ```gleam
-// server/src/server/handlers/todos.gleam
+// server/src/server/store.gleam
 
 import shared/todos.{type MsgFromClient, type MsgFromServer}
 import server/shared_state.{type SharedState}
@@ -53,7 +53,7 @@ pub fn update_from_client(
   state state: SharedState,
 ) -> Result(#(MsgFromServer, SharedState), AppError) {
   case msg {
-    todos.LoadAll -> Ok(#(AllLoaded(store.all()), state))
+    todos.LoadAll -> Ok(#(AllLoaded(all()), state))
     todos.Create(params:) -> ...
     todos.Toggle(id:) -> ...
     todos.Delete(id:) -> ...
@@ -69,12 +69,13 @@ The server can push messages to connected clients without a prior request. Uses 
 // Server — on WebSocket connect, join a topic
 push.join(topic: "todos")
 
-// Server — in a handler, push to all subscribers
-push.send_to_clients(topic: "todos", module: "shared/todos", msg: AllLoaded(store.all()))
+// Server — in a handler, push to all subscribers via generated wrapper
+import server/generated/libero/todos as todos_push
+todos_push.send_to_clients(topic: "todos", msg: AllLoaded(all()))
 
 // Server — targeted push to one client
 push.register(client_id: "user:42")
-push.send_to_client(client_id: "user:42", module: "shared/todos", msg: Created(item))
+todos_push.send_to_client(client_id: "user:42", msg: Created(item))
 ```
 
 ```gleam
@@ -146,9 +147,10 @@ gleam run -m libero -- \
 From a shared module at `shared/src/shared/todos.gleam`, Libero writes:
 
 - [`dispatch.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/dispatch.gleam): routes incoming wire calls to handler modules.
-- [`todos.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/todos.gleam): typed `send_to_server` and `update_from_server` stubs for the client.
+- [`todos.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/todos.gleam) (client): typed `send_to_server` and `update_from_server` stubs.
+- [`todos.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/todos.gleam) (server): typed `send_to_client` and `send_to_clients` push wrappers.
 - [`rpc_config.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_config.gleam): WebSocket URL configuration.
-- [`rpc_register.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_register.gleam) + [`rpc_register_ffi.mjs`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_register_ffi.mjs): auto-registers every custom type that may appear on the wire (called automatically on first send).
+- [`rpc_register.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_register.gleam) + [`rpc_register_ffi.mjs`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_register_ffi.mjs): auto-registers framework and application types for wire codec reconstruction (called automatically on first send).
 
 ## How it works
 
@@ -165,7 +167,7 @@ Libero's API uses a directional naming convention:
 | Direction | Client calls | Server calls |
 |---|---|---|
 | Client → Server | `send_to_server(msg:)` | `update_from_client(msg:)` |
-| Server → Client | `update_from_server(handler:)` | `push.send_to_client(client_id:, ...)` / `push.send_to_clients(topic:, ...)` |
+| Server → Client | `update_from_server(handler:)` | `todos_push.send_to_client(client_id:, ...)` / `todos_push.send_to_clients(topic:, ...)` |
 
 ## License
 
