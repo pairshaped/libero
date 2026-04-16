@@ -1,3 +1,4 @@
+import libero/push
 import server/app_error.{type AppError}
 import server/shared_state.{type SharedState}
 import server/store
@@ -16,19 +17,38 @@ pub fn update_from_client(
         "" -> Ok(#(TodoFailed(TitleRequired), state))
         title -> {
           let item = store.insert(title:)
+          push.broadcast(
+            topic: "todos",
+            module: "shared/todos",
+            msg: AllLoaded(store.all()),
+          )
           Ok(#(Created(item), state))
         }
       }
     }
     Toggle(id:) -> {
       case store.toggle(id:) {
-        Ok(toggled) -> Ok(#(Toggled(toggled), state))
+        Ok(toggled) -> {
+          push.broadcast(
+            topic: "todos",
+            module: "shared/todos",
+            msg: AllLoaded(store.all()),
+          )
+          Ok(#(Toggled(toggled), state))
+        }
         Error(Nil) -> Error(NotFound)
       }
     }
     Delete(id:) -> {
       case store.delete(id:) {
-        Ok(Nil) -> Ok(#(Deleted(id), state))
+        Ok(Nil) -> {
+          push.broadcast(
+            topic: "todos",
+            module: "shared/todos",
+            msg: AllLoaded(store.all()),
+          )
+          Ok(#(Deleted(id), state))
+        }
         Error(Nil) -> Error(NotFound)
       }
     }

@@ -20,9 +20,9 @@ pub fn handle(
     Ok(#("shared/todos", msg)) ->
       dispatch(state, fn() { todos_handler.update_from_client(msg: wire.coerce(msg), state:) })
     Ok(#(name, _)) ->
-      #(wire.encode(Error(UnknownFunction(name))), None, state)
+      #(wire.tag_response(wire.encode(Error(UnknownFunction(name)))), None, state)
     Error(_) ->
-      #(wire.encode(Error(MalformedRequest)), None, state)
+      #(wire.tag_response(wire.encode(Error(MalformedRequest))), None, state)
   }
 }
 
@@ -32,13 +32,13 @@ fn dispatch(
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case trace.try_call(call) {
     Ok(Ok(#(value, new_state))) ->
-      #(wire.encode(Ok(value)), None, new_state)
+      #(wire.tag_response(wire.encode(Ok(value))), None, new_state)
     Ok(Error(app_err)) ->
-      #(wire.encode(Error(error.AppError(app_err))), None, state)
+      #(wire.tag_response(wire.encode(Error(error.AppError(app_err)))), None, state)
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
-        wire.encode(Error(InternalError(trace_id, "Internal server error"))),
+        wire.tag_response(wire.encode(Error(InternalError(trace_id, "Internal server error")))),
         Some(error.PanicInfo(trace_id:, fn_name: "dispatch", reason:)),
         state,
       )

@@ -45,10 +45,10 @@ pub fn write_dispatch(
     })
 
   let ok_unknown_arm =
-    "    Ok(#(name, _)) ->\n      #(wire.encode(Error(UnknownFunction(name))), None, state)"
+    "    Ok(#(name, _)) ->\n      #(wire.tag_response(wire.encode(Error(UnknownFunction(name)))), None, state)"
 
   let error_arm =
-    "    Error(_) ->\n      #(wire.encode(Error(MalformedRequest)), None, state)"
+    "    Error(_) ->\n      #(wire.tag_response(wire.encode(Error(MalformedRequest))), None, state)"
 
   let all_arms = list.flatten([case_arms, [ok_unknown_arm, error_arm]])
 
@@ -88,13 +88,13 @@ fn dispatch(
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case trace.try_call(call) {
     Ok(Ok(#(value, new_state))) ->
-      #(wire.encode(Ok(value)), None, new_state)
+      #(wire.tag_response(wire.encode(Ok(value))), None, new_state)
     Ok(Error(app_err)) ->
-      #(wire.encode(Error(error.AppError(app_err))), None, state)
+      #(wire.tag_response(wire.encode(Error(error.AppError(app_err)))), None, state)
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
-        wire.encode(Error(InternalError(trace_id, \"Internal server error\"))),
+        wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
         Some(error.PanicInfo(trace_id:, fn_name: \"dispatch\", reason:)),
         state,
       )
@@ -147,6 +147,18 @@ pub fn send_to_server(
         <> "\",
     msg: msg,
     on_response: on_response,
+  )
+}
+
+pub fn on_push(
+  handler handler: fn(Dynamic) -> msg,
+) -> Effect(msg) {
+  rpc_register.register_all()
+  rpc.on_push(
+    module: \""
+        <> m.module_path
+        <> "\",
+    handler: handler,
   )
 }
 "

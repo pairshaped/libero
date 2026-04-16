@@ -120,6 +120,21 @@ pub fn encode_call(module module: String, msg msg: a) -> BitArray {
   encode(#(module, msg))
 }
 
+// ---------- Frame tagging ----------
+
+/// Tag a response frame so the JS client routes it to the FIFO callback queue.
+pub fn tag_response(data: BitArray) -> BitArray {
+  <<0, data:bits>>
+}
+
+/// Tag a push frame so the JS client routes it to the push handler.
+/// The value is an ETF-encoded `{module_name, msg}` tuple so the
+/// client knows which handler to invoke.
+pub fn tag_push(module module: String, msg msg: a) -> BitArray {
+  let data = encode(#(module, msg))
+  <<1, data:bits>>
+}
+
 // ---------- Coerce ----------
 
 /// Cast a Dynamic value to any type.

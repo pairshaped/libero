@@ -758,17 +758,20 @@ try {
 // rpc_config module, so it doesn't change across calls. Sends issued
 // before the socket's open event are queued and flushed once it opens.
 //
-// NOTE: Responses are matched to requests by FIFO order - no request
-// IDs or correlation tokens. This works because the server processes
-// requests sequentially over a single WebSocket and never sends
-// unsolicited pushes. If the architecture changes to support
-// concurrent request processing or server-initiated pushes, this
-// must be replaced with a correlation-based scheme (e.g. request IDs).
+// Server→client frames are tagged with a 1-byte prefix:
+//   0x00 = response (matched to pending callback in FIFO order)
+//   0x01 = push (routed to module-specific push handler)
+//
+// Responses use FIFO matching — no request IDs needed because the
+// server processes requests sequentially over a single WebSocket.
 
 let ws = null;
 let pendingSends = [];    // [{payload, callback, timer}]
 let responseCallbacks = []; // [{callback, timer}]
 const REQUEST_TIMEOUT_MS = 30_000;
+
+// Push handler registry: module path → callback
+const pushHandlers = new Map();
 
 // Build a connection-error value using registered constructors.
 // Falls back to a plain object if constructors aren't registered yet.
@@ -810,7 +813,23 @@ function ensureSocket(url) {
   });
 
   ws.addEventListener("message", (event) => {
-    const decoded = decode_value(new Uint8Array(event.data));
+    const bytes = new Uint8Array(event.data);
+    const tag = bytes[0];
+    const payload = bytes.slice(1);
+
+    if (tag === 0x01) {
+      // Push frame: payload is ETF-encoded {module, value}
+      const decoded = decode_value(payload);
+      // decoded is a 2-tuple [module, value] in Gleam representation
+      if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
+        const handler = pushHandlers.get(decoded[0]);
+        if (handler) handler(decoded[1]);
+      }
+      return;
+    }
+
+    // Response frame (tag 0x00): matched to pending callback
+    const decoded = decode_value(payload);
     const entry = responseCallbacks.shift();
     if (entry) {
       if (entry.timer) clearTimeout(entry.timer);
@@ -856,6 +875,13 @@ export function send(url, module, msg, callback) {
   } else {
     pendingSends.push({ payload, callback, timer });
   }
+}
+
+// Register a push handler for a specific module. When the server
+// sends a push frame tagged with this module path, the callback
+// is invoked with the decoded value.
+export function registerPushHandler(module, callback) {
+  pushHandlers.set(module, callback);
 }
 
 // Encode a call envelope: {module_name, msg} as ETF binary.

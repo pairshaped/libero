@@ -7,12 +7,14 @@ import gleam/option.{None}
 import gleam/string
 import mist
 import server/shared_state
+import libero/push
 import server/store
 import server/websocket as ws
 import server/generated/libero/dispatch
 
 pub fn main() {
   store.init()
+  push.init()
   let shared = shared_state.new()
 
   let assert Ok(_) =

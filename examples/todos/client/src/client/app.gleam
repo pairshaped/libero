@@ -29,12 +29,20 @@ pub type Msg {
   ToggleClicked(Int)
   DeleteClicked(Int)
   GotResponse(Result(MsgFromServer, RpcError(todos.TodoError)))
+  GotPush(MsgFromServer)
 }
 
 // ---- Init ----
 
 pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
-  #(Model(items: [], input: "", error: ""), send(LoadAll))
+  let subscribe =
+    rpc.on_push(handler: fn(raw: Dynamic) {
+      GotPush(wire.coerce(raw))
+    })
+  #(
+    Model(items: [], input: "", error: ""),
+    effect.batch([send(LoadAll), subscribe]),
+  )
 }
 
 // ---- Update ----
@@ -103,6 +111,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
     GotResponse(Error(_)) ->
       #(Model(..model, error: "Something went wrong"), effect.none())
+
+    GotPush(AllLoaded(items)) ->
+      #(Model(..model, items: items, error: ""), effect.none())
+
+    GotPush(_) -> #(model, effect.none())
   }
 }
 

@@ -19,3 +19,13 @@ pub fn send_to_server(
     on_response: on_response,
   )
 }
+
+pub fn on_push(
+  handler handler: fn(Dynamic) -> msg,
+) -> Effect(msg) {
+  rpc_register.register_all()
+  rpc.on_push(
+    module: "shared/todos",
+    handler: handler,
+  )
+}

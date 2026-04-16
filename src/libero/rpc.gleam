@@ -36,6 +36,25 @@ pub fn send(
   })
 }
 
+/// Register a handler for server-initiated push messages on a module.
+/// When the server pushes a MsgFromServer without a prior request,
+/// the callback wraps it into a Lustre Msg for dispatch.
+pub fn on_push(
+  module module: String,
+  handler handler: fn(Dynamic) -> msg,
+) -> Effect(msg) {
+  effect.from(fn(dispatch) {
+    ffi_register_push(module:, callback: fn(raw) { dispatch(handler(raw)) })
+  })
+}
+
+@external(javascript, "./rpc_ffi.mjs", "registerPushHandler")
+fn ffi_register_push(module module: String, callback callback: fn(Dynamic) -> Nil) -> Nil {
+  let _ = module
+  let _ = callback
+  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+}
+
 @external(javascript, "./rpc_ffi.mjs", "send")
 fn ffi_send(
   url url: String,
