@@ -1,4 +1,5 @@
 import glance
+import gleam/int
 import gleam/io
 import simplifile
 
@@ -11,6 +12,11 @@ pub type GenError {
   UnresolvedTypeModule(module_path: String, type_name: String)
   TypeNotFound(module_path: String, type_name: String)
   MissingHandler(message_module: String, expected: String)
+  MsgFromServerFieldCount(
+    module_path: String,
+    variant_name: String,
+    field_count: Int,
+  )
   NoMessageModules(shared_path: String)
 }
 
@@ -44,6 +50,15 @@ pub fn print_error(err: GenError) -> Nil {
       <> module_path
       <> "`"
       <> "\n  the type may be private, or the module path may be incorrect"
+    MsgFromServerFieldCount(module_path, variant_name, field_count) ->
+      "MsgFromServer variant `"
+      <> variant_name
+      <> "` in `"
+      <> module_path
+      <> "` has "
+      <> int.to_string(field_count)
+      <> " field(s), expected exactly 1"
+      <> "\n  each MsgFromServer variant must wrap a single value so dispatch can unwrap the envelope"
     MissingHandler(message_module, expected) ->
       "missing handler for message module `"
       <> message_module

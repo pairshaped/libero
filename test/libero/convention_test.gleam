@@ -124,3 +124,88 @@ pub fn validate_missing_handler_test() {
       }
     })
 }
+
+pub fn validate_msg_from_server_single_field_passes_test() {
+  let assert Ok(#(modules, _module_files)) =
+    scanner.scan_message_modules(
+      shared_src: "examples/todos/shared/src/shared",
+    )
+  let assert Ok(Nil) =
+    scanner.validate_msg_from_server_fields(message_modules: modules)
+}
+
+pub fn validate_msg_from_server_multi_field_fails_test() {
+  // Write a temporary module with a multi-field MsgFromServer variant
+  let dir = "build/.test_field_check"
+  let _ = simplifile.create_directory_all(dir)
+  let path = dir <> "/bad.gleam"
+  let assert Ok(Nil) =
+    simplifile.write(
+      path,
+      "pub type MsgFromServer {
+  Good(String)
+  Bad(Int, String)
+}
+",
+    )
+  let modules = [
+    scanner.MessageModule(
+      module_path: "test/bad",
+      file_path: path,
+      has_msg_from_client: False,
+      has_msg_from_server: True,
+      handler_modules: [],
+    ),
+  ]
+  let assert Error(errors) =
+    scanner.validate_msg_from_server_fields(message_modules: modules)
+  let assert True =
+    list.any(errors, fn(e) {
+      case e {
+        gen_error.MsgFromServerFieldCount(_, "Bad", 2) -> True
+        _ -> False
+      }
+    })
+  // Good variant should not be flagged
+  let assert False =
+    list.any(errors, fn(e) {
+      case e {
+        gen_error.MsgFromServerFieldCount(_, "Good", _) -> True
+        _ -> False
+      }
+    })
+  let assert Ok(Nil) = simplifile.delete_all([dir])
+}
+
+pub fn validate_msg_from_server_zero_field_fails_test() {
+  let dir = "build/.test_field_check_zero"
+  let _ = simplifile.create_directory_all(dir)
+  let path = dir <> "/bare.gleam"
+  let assert Ok(Nil) =
+    simplifile.write(
+      path,
+      "pub type MsgFromServer {
+  Acknowledged
+}
+",
+    )
+  let modules = [
+    scanner.MessageModule(
+      module_path: "test/bare",
+      file_path: path,
+      has_msg_from_client: False,
+      has_msg_from_server: True,
+      handler_modules: [],
+    ),
+  ]
+  let assert Error(errors) =
+    scanner.validate_msg_from_server_fields(message_modules: modules)
+  let assert True =
+    list.any(errors, fn(e) {
+      case e {
+        gen_error.MsgFromServerFieldCount(_, "Acknowledged", 0) -> True
+        _ -> False
+      }
+    })
+  let assert Ok(Nil) = simplifile.delete_all([dir])
+}

@@ -80,6 +80,12 @@ fn run(
       server_src: server_src,
     ),
   )
+  // Validate MsgFromServer variants have exactly one field (required
+  // for dispatch envelope unwrap).
+  use _ <- result.try(
+    scanner.validate_msg_from_server_fields(message_modules:),
+  )
+
   use discovered <- result.try(
     walker.walk_message_registry_types(
       message_modules: message_modules,

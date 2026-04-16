@@ -15,8 +15,8 @@ import gleam/option
 import gleam/result
 import gleam/string
 import libero/gen_error.{
-  type GenError, CannotReadDir, CannotWriteFile, MissingHandler,
-  NoMessageModules,
+  type GenError, CannotReadDir, CannotReadFile, CannotWriteFile,
+  MissingHandler, MsgFromServerFieldCount, NoMessageModules, ParseFailed,
 }
 import simplifile
 
@@ -452,6 +452,57 @@ pub type AppError {
       []
     }
     Error(cause) -> [CannotWriteFile(path:, cause:)]
+  }
+}
+
+/// Validate that every MsgFromServer variant has exactly one field.
+/// Dispatch unwraps the envelope with `element(2, Tuple)` in Erlang,
+/// which silently drops extra fields. This check catches the problem
+/// at codegen time.
+pub fn validate_msg_from_server_fields(
+  message_modules message_modules: List(MessageModule),
+) -> Result(Nil, List(GenError)) {
+  let errors =
+    list.flat_map(message_modules, fn(m) {
+      case m.has_msg_from_server {
+        False -> []
+        True -> check_variant_fields(m)
+      }
+    })
+  case errors {
+    [] -> Ok(Nil)
+    _ -> Error(errors)
+  }
+}
+
+fn check_variant_fields(m: MessageModule) -> List(GenError) {
+  case simplifile.read(m.file_path) {
+    Error(cause) -> [CannotReadFile(path: m.file_path, cause:)]
+    Ok(source) ->
+      case glance.module(source) {
+        Error(cause) -> [ParseFailed(path: m.file_path, cause:)]
+        Ok(ast) ->
+          case
+            list.find(ast.custom_types, fn(d) {
+              d.definition.name == "MsgFromServer"
+            })
+          {
+            Error(Nil) -> []
+            Ok(ct_def) ->
+              list.filter_map(ct_def.definition.variants, fn(variant) {
+                let field_count = list.length(variant.fields)
+                case field_count {
+                  1 -> Error(Nil)
+                  _ ->
+                    Ok(MsgFromServerFieldCount(
+                      module_path: m.module_path,
+                      variant_name: variant.name,
+                      field_count: field_count,
+                    ))
+                }
+              })
+          }
+      }
   }
 }
 
