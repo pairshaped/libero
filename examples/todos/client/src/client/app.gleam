@@ -1,4 +1,3 @@
-import client/generated/libero/rpc_register
 import client/generated/libero/todos as rpc
 import gleam/dynamic.{type Dynamic}
 import gleam/list
@@ -35,7 +34,6 @@ pub type Msg {
 // ---- Init ----
 
 pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
-  rpc_register.register_all()
   #(Model(items: [], input: "", error: ""), send(LoadAll))
 }
 

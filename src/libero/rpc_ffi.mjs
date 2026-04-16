@@ -690,8 +690,8 @@ export function decode_safe(buffer) {
 // Consumer application types (records, unions, options on fields) are
 // NOT registered here. Those are discovered by libero's generator and
 // emitted into a per-namespace rpc_register.mjs in the consumer's
-// generated output directory. The consumer calls register_all() from
-// that file once at boot before the first RPC.
+// generated output directory. Registration is called automatically
+// by the generated send functions before the first RPC.
 
 try {
   const prelude = await import("../gleam.mjs");

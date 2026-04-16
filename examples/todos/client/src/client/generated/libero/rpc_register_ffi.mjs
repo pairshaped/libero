@@ -3,11 +3,18 @@
 // Registers every custom type that transitively crosses the wire for
 // this namespace's message modules. Walked from ToServer/ToClient types
 // at generation time - the consumer does not list types manually.
+//
+// Called automatically by generated send functions. Idempotent -
+// safe to call multiple times (only runs registration once).
 
 import { registerConstructor, registerFloatFields } from "../../../../libero/libero/rpc_ffi.mjs";
 import * as _m0 from "../../../../shared/shared/todos.mjs";
 
+let registered = false;
+
 export function registerAll() {
+  if (registered) return;
+  registered = true;
   if (_m0.TodoParams) registerConstructor("todo_params", _m0.TodoParams);
   if (_m0.TitleRequired) registerConstructor("title_required", _m0.TitleRequired);
   if (_m0.NotFound) registerConstructor("not_found", _m0.NotFound);

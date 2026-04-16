@@ -2,8 +2,10 @@
 ////
 //// Registers every consumer custom type that might cross the wire
 //// so libero's client-side rebuild function can reconstruct tagged
-//// ETF terms into Gleam class instances. Call register_all() exactly
-//// once at client boot, before the first message is sent.
+//// ETF terms into Gleam class instances.
+////
+//// Called automatically by generated send functions. Safe to call
+//// manually if needed (idempotent).
 
 pub fn register_all() -> Nil {
   do_register_all()

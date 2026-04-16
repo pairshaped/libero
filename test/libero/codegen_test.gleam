@@ -54,6 +54,11 @@ pub fn send_function_contains_module_path_test() {
   let assert True = string.contains(content, "module: \"shared/todos\"")
   // Must import rpc
   let assert True = string.contains(content, "import libero/rpc")
+  // Must import rpc_register for auto-registration
+  let assert True =
+    string.contains(content, "import client/generated/libero/rpc_register")
+  // Must call register_all before send
+  let assert True = string.contains(content, "rpc_register.register_all()")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])

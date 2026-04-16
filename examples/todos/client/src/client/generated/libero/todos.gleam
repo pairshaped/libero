@@ -4,12 +4,14 @@ import gleam/dynamic.{type Dynamic}
 import shared/todos.{type ToServer}
 import libero/rpc
 import client/generated/libero/rpc_config
+import client/generated/libero/rpc_register
 import lustre/effect.{type Effect}
 
 pub fn send(
   msg msg: ToServer,
   on_response on_response: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
+  rpc_register.register_all()
   rpc.send(
     url: rpc_config.ws_url(),
     module: "shared/todos",
