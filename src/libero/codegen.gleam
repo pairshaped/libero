@@ -357,17 +357,17 @@ pub fn write_websocket(
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
 import gleam/http/request.{type Request}
-import gleam/io
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{type Option, Some}
 import gleam/string
 import libero/push
+import libero/ws_logger.{type Logger}
 import mist.{type Connection}
 import " <> module_path <> "/dispatch
 import server/shared_state.{type SharedState}
 
 pub type ConnState {
-  ConnState(state: SharedState, topics: List(String))
+  ConnState(state: SharedState, topics: List(String), logger: Logger)
 }
 
 type PushMsg {
@@ -376,21 +376,26 @@ type PushMsg {
 }
 
 /// Wire up a WebSocket upgrade with dispatch, push, and topic management.
+/// The `logger` argument receives connect/disconnect, panic, and send
+/// failure messages. Use `ws_logger.default_logger()` for stdout output
+/// or pass your own structured logger.
 pub fn upgrade(
   request req: Request(Connection),
   state state: SharedState,
   topics topics: List(String),
+  logger logger: Logger,
 ) {
   mist.websocket(
     request: req,
     handler: handler,
-    on_init: on_init(state, topics),
-    on_close: fn(_) { Nil },
+    on_init: on_init(state, topics, logger),
+    on_close: fn(_) { logger.debug(\"WebSocket: disconnected\") },
   )
 }
 
-fn on_init(state: SharedState, topics: List(String)) {
+fn on_init(state: SharedState, topics: List(String), logger: Logger) {
   fn(_conn: mist.WebsocketConnection) -> #(ConnState, Option(process.Selector(PushMsg))) {
+    logger.debug(\"WebSocket: connected\")
     list.each(topics, fn(t) { push.join(topic: t) })
     let selector =
       process.new_selector()
@@ -400,7 +405,7 @@ fn on_init(state: SharedState, topics: List(String)) {
           Error(Nil) -> Ignored
         }
       })
-    #(ConnState(state:, topics:), Some(selector))
+    #(ConnState(state:, topics:, logger:), Some(selector))
   }
 }
 
@@ -415,14 +420,33 @@ fn handler(
         dispatch.handle(state: state.state, data:)
       case maybe_panic {
         Some(info) ->
-          io.println(\"[ws] PANIC: \" <> string.inspect(info))
-        None -> Nil
+          state.logger.error(
+            \"RPC panic: \"
+            <> info.fn_name
+            <> \" (trace \"
+            <> info.trace_id
+            <> \"): \"
+            <> info.reason,
+          )
+        _ -> Nil
       }
-      let _ = mist.send_binary_frame(conn, response_bytes)
+      case mist.send_binary_frame(conn, response_bytes) {
+        Ok(_) -> Nil
+        Error(reason) ->
+          state.logger.warning(
+            \"Failed to send WebSocket frame: \" <> string.inspect(reason),
+          )
+      }
       mist.continue(ConnState(..state, state: new_state))
     }
     mist.Custom(PushFrame(frame)) -> {
-      let _ = mist.send_binary_frame(conn, frame)
+      case mist.send_binary_frame(conn, frame) {
+        Ok(_) -> Nil
+        Error(reason) ->
+          state.logger.warning(
+            \"Failed to send WebSocket push frame: \" <> string.inspect(reason),
+          )
+      }
       mist.continue(state)
     }
     mist.Custom(Ignored) -> mist.continue(state)

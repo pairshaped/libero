@@ -8,6 +8,7 @@ import gleam/string
 import mist
 import server/shared_state
 import libero/push
+import libero/ws_logger
 import server/store
 import server/generated/libero/dispatch
 import server/generated/libero/websocket as ws
@@ -21,7 +22,12 @@ pub fn main() {
     fn(req: request.Request(mist.Connection)) {
       case req.method, request.path_segments(req) {
         _, ["ws"] ->
-          ws.upgrade(request: req, state: shared, topics: ["todos"])
+          ws.upgrade(
+            request: req,
+            state: shared,
+            topics: ["todos"],
+            logger: ws_logger.default_logger(),
+          )
         http.Post, ["rpc"] -> handle_rpc(req, shared)
         _, ["js", ..path] ->
           serve_file(
