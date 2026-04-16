@@ -129,12 +129,15 @@ gleam run -m libero -- \
 
 ### Flags
 
-- `--ws-url=<url>` or `--ws-path=<path>` (one required): hardcodes a full URL or resolves it at runtime from `window.location`.
-- `--shared=<path>`: path to the shared package root.
-- `--server=<path>`: path to the server package root.
-- `--client=<path>`: path to the client package root (defaults to `../client`).
-- `--namespace=<name>`: optional prefix for multi-SPA setups.
-- `--write-inputs`: write a `.inputs` manifest for staleness checks.
+| Flag | Description |
+|---|---|
+| `--ws-url=<url>` | Hardcode a full WebSocket URL. One of `--ws-url` or `--ws-path` is required. |
+| `--ws-path=<path>` | Resolve the WebSocket URL at runtime from `window.location`. |
+| `--shared=<path>` | Path to the shared package root. |
+| `--server=<path>` | Path to the server package root. |
+| `--client=<path>` | Path to the client package root (defaults to `../client`). |
+| `--namespace=<name>` | Optional prefix for multi-SPA setups. |
+| `--write-inputs` | Write a `.inputs` manifest for staleness checks. |
 
 ## What gets generated
 
