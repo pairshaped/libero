@@ -7,9 +7,9 @@
 //// needed because ETF is the BEAM's native serialization format.
 ////
 //// **Wire shape:**
-//// - The call envelope is `{module_name_binary, toserver_value}` - a
+//// - The call envelope is `{module_name_binary, msg_from_client_value}` - a
 ////   2-tuple where the first element is a UTF-8 binary (Gleam String)
-////   naming the shared module, and the second is the typed ToServer
+////   naming the shared module, and the second is the typed MsgFromClient
 ////   value serialized as a native ETF term.
 //// - The response is the Gleam value directly (e.g. `Ok(value)` or
 ////   `Error(MalformedRequest)`), serialized as ETF.
@@ -20,7 +20,7 @@
 //// libero's own ETF encoder/decoder in `rpc_ffi.mjs`, which requires
 //// that any custom-type constructors in the value have been registered
 //// via `register_all()` at boot (libero's generator emits that
-//// registration for every type reachable from the ToServer/ToClient type graph).
+//// registration for every type reachable from the MsgFromClient/MsgFromServer type graph).
 
 import gleam/dynamic.{type Dynamic}
 
@@ -46,7 +46,7 @@ pub fn encode(value: a) -> BitArray
 /// specifically, use `decode_call` instead.
 ///
 /// Any custom types in the decoded value must be reachable from the
-/// ToServer/ToClient type graph so their constructors are registered with the
+/// MsgFromClient/MsgFromServer type graph so their constructors are registered with the
 /// JavaScript codec (via `register_all()` at boot). On Erlang this
 /// is automatic because atoms are pre-registered by the generated
 /// `rpc_atoms` module.
@@ -114,7 +114,7 @@ fn ffi_decode_call(
 // ---------- Call envelope encoder ----------
 
 /// Encode a call envelope: `{module_name, msg}` as ETF binary.
-/// Used by generated client send functions to pack a ToServer value
+/// Used by generated client send_to_server functions to pack a MsgFromClient value
 /// for transport to the server.
 pub fn encode_call(module module: String, msg msg: a) -> BitArray {
   encode(#(module, msg))
@@ -124,7 +124,7 @@ pub fn encode_call(module module: String, msg msg: a) -> BitArray {
 
 /// Cast a Dynamic value to any type.
 /// Used by generated server dispatch code to coerce the decoded
-/// ToServer value to its typed form. Safe when client and server are
+/// MsgFromClient value to its typed form. Safe when client and server are
 /// built from the same source (the generator guarantees the types match).
 @external(erlang, "libero_ffi", "identity")
 @external(javascript, "./rpc_ffi.mjs", "identity")

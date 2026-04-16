@@ -1,7 +1,7 @@
 //// Client-side send machinery.
 ////
 //// `send` is the entry point used by libero-generated client stubs.
-//// It takes the WebSocket URL, the module name, the typed ToServer
+//// It takes the WebSocket URL, the module name, the typed MsgFromClient
 //// message, and a callback to wrap the server's response into a
 //// Lustre Msg.
 ////
@@ -17,7 +17,7 @@
 import gleam/dynamic.{type Dynamic}
 import lustre/effect.{type Effect}
 
-/// Send a typed ToServer message to the server via WebSocket and
+/// Send a typed MsgFromClient message to the server via WebSocket and
 /// deliver the server's response back to the Lustre update loop.
 ///
 /// The `on_response` callback wraps the decoded response (a Dynamic

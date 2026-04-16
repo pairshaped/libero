@@ -74,19 +74,19 @@ fn is_primitive_type(name: String) -> Bool {
   list.contains(registry_primitives, name)
 }
 
-/// Walk the type graph rooted at ToServer/ToClient message types.
-/// Seeds the BFS walker from all variants of ToServer and ToClient custom
+/// Walk the type graph rooted at MsgFromClient/MsgFromServer message types.
+/// Seeds the BFS walker from all variants of MsgFromClient and MsgFromServer custom
 /// types in each message module, then walks their field types transitively.
 ///
-/// Both the ToServer/ToClient types themselves (and their constructors) and
+/// Both the MsgFromClient/MsgFromServer types themselves (and their constructors) and
 /// all transitively reachable types are included in the discovered list,
 /// since they all need codec registration.
 pub fn walk_message_registry_types(
   message_modules message_modules: List(MessageModule),
   module_files module_files: Dict(String, String),
 ) -> Result(List(DiscoveredVariant), List(GenError)) {
-  // Seed the work queue from ToServer and ToClient types in each message module.
-  // We also need to seed the walk with the ToServer/ToClient type names
+  // Seed the work queue from MsgFromClient and MsgFromServer types in each message module.
+  // We also need to seed the walk with the MsgFromClient/MsgFromServer type names
   // themselves so their variants get discovered.
   let seed =
     list.fold(message_modules, set.new(), fn(acc, message_module) {
@@ -94,14 +94,14 @@ pub fn walk_message_registry_types(
         when: is_skipped_module(message_module.module_path),
         return: acc,
       )
-      let with_to_server = case message_module.has_to_server {
-        True -> set.insert(acc, #(message_module.module_path, "ToServer"))
+      let with_msg_from_client = case message_module.has_msg_from_client {
+        True -> set.insert(acc, #(message_module.module_path, "MsgFromClient"))
         False -> acc
       }
-      case message_module.has_to_client {
+      case message_module.has_msg_from_server {
         True ->
-          set.insert(with_to_server, #(message_module.module_path, "ToClient"))
-        False -> with_to_server
+          set.insert(with_msg_from_client, #(message_module.module_path, "MsgFromServer"))
+        False -> with_msg_from_client
       }
     })
     |> set.to_list

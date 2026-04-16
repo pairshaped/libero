@@ -62,12 +62,12 @@ pub fn print_error(err: GenError) -> Nil {
       <> "`: expected at `"
       <> expected_path
       <> "`"
-      <> "\n  create a handler module with a `handle` function"
+      <> "\n  create a handler module with a `update_from_client` function"
     NoMessageModules(shared_path) ->
       "no message modules found under `"
       <> shared_path
       <> "`"
-      <> "\n  create a shared module exporting a `ToServer` or `ToClient` type"
+      <> "\n  create a shared module exporting a `MsgFromClient` or `MsgFromServer` type"
   }
   io.println_error("error: " <> message)
 }

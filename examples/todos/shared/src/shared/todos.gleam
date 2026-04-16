@@ -11,14 +11,14 @@ pub type TodoError {
   TitleRequired
 }
 
-pub type ToServer {
+pub type MsgFromClient {
   Create(params: TodoParams)
   Toggle(id: Int)
   Delete(id: Int)
   LoadAll
 }
 
-pub type ToClient {
+pub type MsgFromServer {
   Created(Todo)
   Toggled(Todo)
   Deleted(id: Int)

@@ -691,7 +691,7 @@ export function decode_safe(buffer) {
 // NOT registered here. Those are discovered by libero's generator and
 // emitted into a per-namespace rpc_register.mjs in the consumer's
 // generated output directory. Registration is called automatically
-// by the generated send functions before the first RPC.
+// by the generated send_to_server functions before the first RPC.
 
 try {
   const prelude = await import("../gleam.mjs");

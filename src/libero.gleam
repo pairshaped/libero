@@ -1,7 +1,7 @@
 //// Message-type code generator.
 ////
 //// Scans the shared package source directory (configured via `--shared`)
-//// for modules that export `ToServer` or `ToClient` custom types and
+//// for modules that export `MsgFromClient` or `MsgFromServer` custom types and
 //// produces server dispatch, client send stubs, wire codec registration,
 //// and atom pre-registration files. See the README for conventions and
 //// usage.
@@ -24,7 +24,7 @@ pub fn main() -> Nil {
   let config = config.parse_config()
 
   // --shared is required. Libero scans shared message modules for
-  // ToServer/ToClient types.
+  // MsgFromClient/MsgFromServer types.
   case config.shared_src {
     option.Some(shared_src) -> {
       io.println("libero: scanning shared message modules at " <> shared_src)

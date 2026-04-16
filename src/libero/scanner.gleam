@@ -1,7 +1,7 @@
 //// Scanning and convention validation for message modules.
 ////
-//// Discovers modules in the shared package that export `ToServer` or
-//// `ToClient` custom types, and validates that the server package
+//// Discovers modules in the shared package that export `MsgFromClient` or
+//// `MsgFromServer` custom types, and validates that the server package
 //// follows the required conventions (handler modules, shared state, etc.).
 
 import glance
@@ -25,17 +25,17 @@ pub type MessageModule {
     module_path: String,
     /// Absolute file path
     file_path: String,
-    /// Whether this module exports a ToServer type
-    has_to_server: Bool,
-    /// Whether this module exports a ToClient type
-    has_to_client: Bool,
+    /// Whether this module exports a MsgFromClient type
+    has_msg_from_client: Bool,
+    /// Whether this module exports a MsgFromServer type
+    has_msg_from_server: Bool,
   )
 }
 
 // ---------- Message module scanner ----------
 
 /// Scan the shared package source directory for modules that export
-/// `ToServer` or `ToClient` types. These define the wire contract for
+/// `MsgFromClient` or `MsgFromServer` types. These define the wire contract for
 /// the message-type convention.
 ///
 /// Returns `Ok(modules)` with the list of matching modules, or
@@ -74,26 +74,26 @@ fn parse_message_module(
     glance.module(content)
     |> result.replace_error(Nil),
   )
-  let has_to_server =
+  let has_msg_from_client =
     list.any(parsed.custom_types, fn(ct) {
       let glance.Definition(_, t) = ct
-      t.name == "ToServer" && t.publicity == glance.Public
+      t.name == "MsgFromClient" && t.publicity == glance.Public
     })
-  let has_to_client =
+  let has_msg_from_server =
     list.any(parsed.custom_types, fn(ct) {
       let glance.Definition(_, t) = ct
-      t.name == "ToClient" && t.publicity == glance.Public
+      t.name == "MsgFromServer" && t.publicity == glance.Public
     })
   use <- bool.guard(
-    when: !has_to_server && !has_to_client,
+    when: !has_msg_from_client && !has_msg_from_server,
     return: Error(Nil),
   )
   let module_path = derive_module_path(file_path: file_path)
   Ok(MessageModule(
     module_path: module_path,
     file_path: file_path,
-    has_to_server: has_to_server,
-    has_to_client: has_to_client,
+    has_msg_from_client: has_msg_from_client,
+    has_msg_from_server: has_msg_from_server,
   ))
 }
 
@@ -185,7 +185,7 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 /// code generation:
 /// 1. `server/shared_state.gleam` exists
 /// 2. `server/app_error.gleam` exists
-/// 3. For each message module with `has_to_server`, a handler exists at
+/// 3. For each message module with `has_msg_from_client`, a handler exists at
 ///    `server/handlers/<module_segment>.gleam`
 ///
 /// Returns a list of errors (empty list means all conventions are satisfied).
@@ -212,7 +212,7 @@ pub fn validate_conventions(
 
   let handler_errors =
     list.flat_map(message_modules, fn(m) {
-      case m.has_to_server {
+      case m.has_msg_from_client {
         False -> []
         True -> {
           let segment = last_module_segment(module_path: m.module_path)
