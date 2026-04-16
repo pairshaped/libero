@@ -142,6 +142,12 @@ pub fn register_ffi_contains_framework_types_test() {
   // Must register framework error variants
   let assert True =
     string.contains(content, "registerConstructor(\"app_error\"")
+  let assert True =
+    string.contains(content, "registerConstructor(\"malformed_request\"")
+  let assert True =
+    string.contains(content, "registerConstructor(\"unknown_function\"")
+  let assert True =
+    string.contains(content, "registerConstructor(\"internal_error\"")
 
   // Cleanup
   let assert Ok(Nil) =
