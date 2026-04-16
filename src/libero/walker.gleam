@@ -37,6 +37,10 @@ type TypeResolver {
     /// "record" → "shared/record" (from `import shared/record`, where the
     /// last segment is the alias by default)
     aliased: Dict(String, String),
+    /// Maps aliased type names back to their original names.
+    /// "DiscountAdminData" → "AdminData" (from `import shared/discount.{type AdminData as DiscountAdminData}`)
+    /// Only populated when an alias differs from the original name.
+    original_names: Dict(String, String),
   )
 }
 
@@ -361,7 +365,14 @@ fn collect_type_refs(
         Error(Nil) -> param_refs
         Ok(mp) -> {
           use <- bool.guard(when: is_skipped_module(mp), return: param_refs)
-          list.append([#(mp, name)], param_refs)
+          // Resolve aliased type names back to original names.
+          // e.g. `type AdminData as DiscountAdminData` - we need to look up
+          // "AdminData" in the target module, not "DiscountAdminData".
+          let original_name = case dict.get(resolver.original_names, name) {
+            Ok(orig) -> orig
+            Error(Nil) -> name
+          }
+          list.append([#(mp, original_name)], param_refs)
         }
       }
     }
@@ -380,20 +391,30 @@ fn build_type_resolver(
 ) -> TypeResolver {
   let empty_unq: Dict(String, String) = dict.new()
   let empty_al: Dict(String, String) = dict.new()
-  let init = TypeResolver(unqualified: empty_unq, aliased: empty_al)
+  let empty_orig: Dict(String, String) = dict.new()
+  let init =
+    TypeResolver(unqualified: empty_unq, aliased: empty_al, original_names: empty_orig)
   list.fold(imports, init, fn(acc, def) {
     let imp = def.definition
     let module_path = imp.module
     // Unqualified types: `import foo.{type Bar}` → "Bar" -> module_path
+    // Also track aliases: `import foo.{type Bar as Baz}` → "Baz" -> module_path
+    // and original_names: "Baz" → "Bar"
     let acc =
       list.fold(imp.unqualified_types, acc, fn(acc, uq) {
         let name = case uq.alias {
           Some(a) -> a
           None -> uq.name
         }
+        let new_originals = case uq.alias {
+          Some(_a) ->
+            dict.insert(acc.original_names, name, uq.name)
+          None -> acc.original_names
+        }
         TypeResolver(
           unqualified: dict.insert(acc.unqualified, name, module_path),
           aliased: acc.aliased,
+          original_names: new_originals,
         )
       })
     // Module alias: `import shared/record` → "record" -> "shared/record"
@@ -402,7 +423,7 @@ fn build_type_resolver(
       _ -> default_module_alias(module_path)
     }
     TypeResolver(
-      unqualified: acc.unqualified,
+      ..acc,
       aliased: dict.insert(acc.aliased, alias_name, module_path),
     )
   })

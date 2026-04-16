@@ -1,4 +1,3 @@
-import gleam/option
 import gleam/string
 import libero/codegen
 import libero/scanner
@@ -12,7 +11,7 @@ pub fn dispatch_contains_state_threading_test() {
       file_path: "examples/todos/shared/src/shared/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_module: option.Some("server/store"),
+      handler_modules: ["server/store"],
     ),
   ]
   let output_dir = "build/.test_codegen_dispatch"

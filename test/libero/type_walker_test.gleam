@@ -5,7 +5,6 @@
 
 import gleam/dict
 import gleam/list
-import gleam/option
 import gleam/set
 import libero/scanner
 import libero/walker
@@ -100,7 +99,7 @@ pub fn walk_empty_module_files_returns_error_test() {
       file_path: "/tmp/nonexistent.gleam",
       has_msg_from_client: True,
       has_msg_from_server: False,
-      handler_module: option.None,
+      handler_modules: [],
     ),
   ]
   let assert Error(_errors) =

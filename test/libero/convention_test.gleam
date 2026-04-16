@@ -1,5 +1,4 @@
 import gleam/list
-import gleam/option
 import libero/gen_error
 import libero/scanner
 
@@ -41,7 +40,7 @@ pub fn validate_todos_example_passes_test() {
     )
   // Handler should be discovered
   let assert [m] = updated_modules
-  let assert True = m.handler_module == option.Some("server/store")
+  let assert True = m.handler_modules == ["server/store"]
 }
 
 pub fn validate_missing_shared_state_test() {
@@ -51,7 +50,7 @@ pub fn validate_missing_shared_state_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_module: option.None,
+      handler_modules: [],
     ),
   ]
   let assert Error(errors) =
@@ -75,7 +74,7 @@ pub fn validate_missing_app_error_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_module: option.None,
+      handler_modules: [],
     ),
   ]
   let assert Error(errors) =
@@ -99,7 +98,7 @@ pub fn validate_missing_handler_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_module: option.None,
+      handler_modules: [],
     ),
   ]
   let assert Error(errors) =

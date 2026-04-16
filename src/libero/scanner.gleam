@@ -32,9 +32,9 @@ pub type MessageModule {
     has_msg_from_client: Bool,
     /// Whether this module exports a MsgFromServer type
     has_msg_from_server: Bool,
-    /// The server module that handles MsgFromClient for this message module,
-    /// e.g. "server/store". None if no handler found or not applicable.
-    handler_module: option.Option(String),
+    /// The server modules that handle MsgFromClient for this message module,
+    /// e.g. ["server/store"]. Empty if no handler found or not applicable.
+    handler_modules: List(String),
   )
 }
 
@@ -111,7 +111,7 @@ fn parse_message_module(
     file_path: file_path,
     has_msg_from_client: has_msg_from_client,
     has_msg_from_server: has_msg_from_server,
-    handler_module: option.None,
+    handler_modules: [],
   ))
 }
 
@@ -354,10 +354,12 @@ pub fn validate_conventions(
     Error(errs) -> #([], errs)
   }
 
-  // Build a dict from shared_module -> handler_module for quick lookup
+  // Build a dict from shared_module -> List(handler_module) for quick lookup.
+  // Multiple server modules can handle the same shared message module.
   let handler_map =
     list.fold(handlers, dict.new(), fn(acc, h) {
-      dict.insert(acc, h.shared_module, h.handler_module)
+      let existing = dict.get(acc, h.shared_module) |> result.unwrap([])
+      dict.insert(acc, h.shared_module, list.append(existing, [h.handler_module]))
     })
 
   // Match handlers to message modules and collect missing handler errors
@@ -366,14 +368,14 @@ pub fn validate_conventions(
       let #(modules_acc, errors_acc) = acc
       case m.has_msg_from_client {
         False -> {
-          let updated = MessageModule(..m, handler_module: option.None)
+          let updated = MessageModule(..m, handler_modules: [])
           #([updated, ..modules_acc], errors_acc)
         }
         True -> {
           case dict.get(handler_map, m.module_path) {
-            Ok(handler) -> {
+            Ok(handler_list) -> {
               let updated =
-                MessageModule(..m, handler_module: option.Some(handler))
+                MessageModule(..m, handler_modules: handler_list)
               #([updated, ..modules_acc], errors_acc)
             }
             Error(Nil) -> {
@@ -384,7 +386,7 @@ pub fn validate_conventions(
                     <> m.module_path
                     <> ".MsgFromClient",
                 )
-              let updated = MessageModule(..m, handler_module: option.None)
+              let updated = MessageModule(..m, handler_modules: [])
               #([updated, ..modules_acc], [err, ..errors_acc])
             }
           }
