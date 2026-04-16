@@ -1,6 +1,6 @@
 # Libero
 
-Libero generates typed messaging between clients and a [Gleam](https://gleam.run) server. You define message types in a shared module, and Libero produces a server dispatch function and client stubs from them. Browser clients (like [Lustre](https://hexdocs.pm/lustre/)) connect over WebSocket, [BEAM](https://www.erlang.org/blog/a-brief-beam-primer/) clients ([Gleam](https://gleam.run), [Erlang](https://www.erlang.org), [Elixir](https://elixir-lang.org)) connect over HTTP. No REST routes, no JSON codecs, no hand-written dispatch tables.
+Libero generates typed messaging between clients and a [Gleam](https://gleam.run) server. You define message types in a shared module, and Libero produces a server dispatch function and client stubs from them. Browser clients (like [Lustre](https://hexdocs.pm/lustre/)) connect over WebSocket, [BEAM](https://www.erlang.org/blog/a-brief-beam-primer/) clients (Gleam, [Erlang](https://www.erlang.org), [Elixir](https://elixir-lang.org)) connect over HTTP. No REST routes, no JSON codecs, no hand-written dispatch tables.
 
 ## Convention
 
@@ -152,7 +152,7 @@ From a shared module at `shared/src/shared/todos.gleam`, Libero writes:
 
 ## How it works
 
-The wire format is [Erlang External Term Format (ETF)](https://www.erlang.org/doc/apps/erts/erl_ext_dist.html) over binary WebSocket frames. Gleam's custom types, lists, options, and primitives all serialize automatically without explicit codecs.
+The wire format is ETF over binary WebSocket frames. Gleam's custom types, lists, options, and primitives all serialize automatically without explicit codecs.
 
 The client sends a `{module_path, MsgFromClient_value}` tuple. The server dispatch decodes it, routes by module path, and calls the handler. Codec registration happens automatically on the first `send_to_server` call.
 
