@@ -61,17 +61,24 @@ pub fn update_from_client(
 }
 ```
 
+## WebSocket setup
+
+The generated [`websocket.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/websocket.gleam) handles dispatch, push frame forwarding, and topic cleanup. One call in your server:
+
+```gleam
+import server/generated/libero/websocket as ws
+
+_, ["ws"] ->
+  ws.upgrade(request: req, state: shared, topics: ["todos"])
+```
+
+The `topics` parameter controls which pg groups the client joins on connect. The generated handler automatically leaves all topics on disconnect.
+
 ## Server push
 
 The server can push messages to connected clients without a prior request. Uses BEAM [pg](https://www.erlang.org/doc/apps/kernel/pg.html) groups for topic-based subscriptions, no external dependencies.
 
 ```gleam
-// Server — on WebSocket connect, join a topic
-push.join(topic: "todos")
-
-// Server — on disconnect, leave the topic
-push.leave(topic: "todos")
-
 // Server — in a handler, push to all subscribers via generated wrapper
 import server/generated/libero/todos as todos_push
 todos_push.send_to_clients(topic: "todos", msg: AllLoaded(all()))
@@ -86,7 +93,7 @@ todos_push.send_to_client(client_id: "user:42", msg: Created(item))
 todos_rpc.update_from_server(handler: fn(raw) { GotPush(wire.coerce(raw)) })
 ```
 
-Push is opt-in. If you never call `update_from_server`, push frames are silently dropped. If unused, tree shaking removes the generated code. Calling `push.leave` on disconnect is good practice, though pg will also clean up when the WebSocket process exits.
+Push is opt-in. If you never call `update_from_server`, push frames are silently dropped. If unused, tree shaking removes the generated code.
 
 ## HTTP clients
 
@@ -150,6 +157,7 @@ gleam run -m libero -- \
 From a shared module at `shared/src/shared/todos.gleam`, Libero writes:
 
 - [`dispatch.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/dispatch.gleam): routes incoming wire calls to handler modules.
+- [`websocket.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/websocket.gleam): mist WebSocket handler with dispatch, push forwarding, and topic cleanup.
 - [`todos.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/todos.gleam) (client): typed `send_to_server` and `update_from_server` stubs.
 - [`todos.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/server/src/server/generated/libero/todos.gleam) (server): typed `send_to_client` and `send_to_clients` push wrappers.
 - [`rpc_config.gleam`](https://github.com/pairshaped/libero/blob/master/examples/todos/client/src/client/generated/libero/rpc_config.gleam): WebSocket URL configuration.

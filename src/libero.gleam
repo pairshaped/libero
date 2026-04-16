@@ -118,6 +118,14 @@ fn run(
     ),
   )
 
+  // Generate server WebSocket handler.
+  use _ <- result.try(
+    codegen.write_websocket(
+      server_generated: config.server_generated,
+    )
+    |> result.map_error(fn(e) { [e] }),
+  )
+
   // Generate WebSocket config module.
   use _ <- result.try(
     codegen.write_config(config: config)

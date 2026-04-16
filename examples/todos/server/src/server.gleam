@@ -9,8 +9,8 @@ import mist
 import server/shared_state
 import libero/push
 import server/store
-import server/websocket as ws
 import server/generated/libero/dispatch
+import server/generated/libero/websocket as ws
 
 pub fn main() {
   store.init()
@@ -21,12 +21,7 @@ pub fn main() {
     fn(req: request.Request(mist.Connection)) {
       case req.method, request.path_segments(req) {
         _, ["ws"] ->
-          mist.websocket(
-            request: req,
-            handler: ws.handler,
-            on_init: ws.on_init(shared),
-            on_close: fn(_state) { Nil },
-          )
+          ws.upgrade(request: req, state: shared, topics: ["todos"])
         http.Post, ["rpc"] -> handle_rpc(req, shared)
         _, ["js", ..path] ->
           serve_file(
