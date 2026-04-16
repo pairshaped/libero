@@ -6,7 +6,7 @@ import libero/trace
 import libero/wire
 import server/app_error.{type AppError}
 import server/shared_state.{type SharedState}
-import server/store as todos_handler
+import server/store as server_store_handler
 
 @external(erlang, "server@generated@libero@rpc_atoms", "ensure")
 fn ensure_atoms() -> Nil
@@ -18,7 +18,7 @@ pub fn handle(
   let Nil = ensure_atoms()
   case wire.decode_call(data) {
     Ok(#("shared/todos", msg)) ->
-      dispatch(state, fn() { todos_handler.update_from_client(msg: wire.coerce(msg), state:) })
+      dispatch(state, fn() { server_store_handler.update_from_client(msg: wire.coerce(msg), state:) })
     Ok(#(name, _)) ->
       #(wire.tag_response(wire.encode(Error(UnknownFunction(name)))), None, state)
     Error(_) ->

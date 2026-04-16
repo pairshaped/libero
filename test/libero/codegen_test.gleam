@@ -1,13 +1,20 @@
+import gleam/option
 import gleam/string
 import libero/codegen
 import libero/scanner
 import simplifile
 
 pub fn dispatch_contains_state_threading_test() {
-  let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+  // Build a module with handler_module set, matching the todos example
+  let modules = [
+    scanner.MessageModule(
+      module_path: "shared/todos",
+      file_path: "examples/todos/shared/src/shared/todos.gleam",
+      has_msg_from_client: True,
+      has_msg_from_server: True,
+      handler_module: option.Some("server/store"),
+    ),
+  ]
   let output_dir = "build/.test_codegen_dispatch"
   let assert Ok(Nil) =
     codegen.write_dispatch(
@@ -23,8 +30,12 @@ pub fn dispatch_contains_state_threading_test() {
     string.contains(content, "#(BitArray, Option(PanicInfo), SharedState)")
   // Must call ensure_atoms
   let assert True = string.contains(content, "ensure_atoms()")
-  // Must import handler
-  let assert True = string.contains(content, "import server/handlers/todos")
+  // Must import discovered handler module with alias
+  let assert True =
+    string.contains(content, "import server/store as server_store_handler")
+  // Must use alias in dispatch call
+  let assert True =
+    string.contains(content, "server_store_handler.update_from_client")
   // Must thread state to dispatch
   let assert True = string.contains(content, "dispatch(state, fn()")
   // Must have atoms external

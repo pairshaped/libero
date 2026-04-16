@@ -2,6 +2,7 @@ import gleam/dict.{type Dict}
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/set
 import gleam/string
@@ -25,23 +26,35 @@ pub fn write_dispatch(
   let msg_from_client_modules =
     list.filter(message_modules, fn(m) { m.has_msg_from_client })
 
-  // Build handler import aliases: last segment of module_path.
-  // e.g. "shared/todos" -> alias "todos_handler", import "server/handlers/todos"
+  // Build handler import aliases from discovered handler_module paths.
+  // e.g. handler_module "server/store" -> import server/store as server_store_handler
   let handler_imports =
-    list.map(msg_from_client_modules, fn(m) {
-      let segment = scanner.last_module_segment(module_path: m.module_path)
-      "import server/handlers/" <> segment <> " as " <> segment <> "_handler"
+    list.filter_map(msg_from_client_modules, fn(m) {
+      case m.handler_module {
+        option.Some(handler_mod) -> {
+          let alias = handler_alias(handler_mod)
+          Ok("import " <> handler_mod <> " as " <> alias)
+        }
+        option.None -> Error(Nil)
+      }
     })
 
   // Build the case arms for the dispatch function.
   let case_arms =
-    list.map(msg_from_client_modules, fn(m) {
-      let segment = scanner.last_module_segment(module_path: m.module_path)
-      "    Ok(#(\""
-      <> m.module_path
-      <> "\", msg)) ->\n      dispatch(state, fn() { "
-      <> segment
-      <> "_handler.update_from_client(msg: wire.coerce(msg), state:) })"
+    list.filter_map(msg_from_client_modules, fn(m) {
+      case m.handler_module {
+        option.Some(handler_mod) -> {
+          let alias = handler_alias(handler_mod)
+          Ok(
+            "    Ok(#(\""
+            <> m.module_path
+            <> "\", msg)) ->\n      dispatch(state, fn() { "
+            <> alias
+            <> ".update_from_client(msg: wire.coerce(msg), state:) })",
+          )
+        }
+        option.None -> Error(Nil)
+      }
     })
 
   let ok_unknown_arm =
@@ -106,6 +119,12 @@ fn dispatch(
   let output = server_generated <> "/dispatch.gleam"
   ensure_parent_dir(path: output)
   write_file(path: output, content: content)
+}
+
+/// Convert a module path to a safe Gleam import alias.
+/// e.g. "server/store" -> "server_store_handler"
+fn handler_alias(module_path: String) -> String {
+  string.replace(module_path, "/", "_") <> "_handler"
 }
 
 // ---------- Client send function generator ----------

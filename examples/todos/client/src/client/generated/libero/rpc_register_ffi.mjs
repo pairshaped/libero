@@ -15,17 +15,17 @@ let registered = false;
 export function registerAll() {
   if (registered) return;
   registered = true;
-  if (_m0.TodoParams) registerConstructor("todo_params", _m0.TodoParams);
   if (_m0.TitleRequired) registerConstructor("title_required", _m0.TitleRequired);
   if (_m0.NotFound) registerConstructor("not_found", _m0.NotFound);
   if (_m0.Todo) registerConstructor("todo", _m0.Todo);
-  if (_m0.LoadAll) registerConstructor("load_all", _m0.LoadAll);
-  if (_m0.Delete) registerConstructor("delete", _m0.Delete);
-  if (_m0.Toggle) registerConstructor("toggle", _m0.Toggle);
-  if (_m0.Create) registerConstructor("create", _m0.Create);
+  if (_m0.TodoParams) registerConstructor("todo_params", _m0.TodoParams);
   if (_m0.TodoFailed) registerConstructor("todo_failed", _m0.TodoFailed);
   if (_m0.AllLoaded) registerConstructor("all_loaded", _m0.AllLoaded);
   if (_m0.Deleted) registerConstructor("deleted", _m0.Deleted);
   if (_m0.Toggled) registerConstructor("toggled", _m0.Toggled);
   if (_m0.Created) registerConstructor("created", _m0.Created);
+  if (_m0.LoadAll) registerConstructor("load_all", _m0.LoadAll);
+  if (_m0.Delete) registerConstructor("delete", _m0.Delete);
+  if (_m0.Toggle) registerConstructor("toggle", _m0.Toggle);
+  if (_m0.Create) registerConstructor("create", _m0.Create);
 }
