@@ -1,11 +1,12 @@
 //// Libero v4 framework CLI.
 ////
 //// Usage: gleam run -m libero -- <command> [args]
-//// Commands: new, add, gen
+//// Commands: new, add, gen, build
 
 import gleam/io
 import libero/cli
 import libero/cli/add as cli_add
+import libero/cli/build as cli_build
 import libero/cli/gen as cli_gen
 import libero/cli/new as cli_new
 
@@ -37,6 +38,16 @@ pub fn main() -> Nil {
         }
       }
     }
+    cli.Build -> {
+      case cli_build.run(project_path: ".") {
+        Ok(Nil) -> Nil
+        Error(msg) -> {
+          io.println_error("error: " <> msg)
+          let _halt = halt(1)
+          Nil
+        }
+      }
+    }
     cli.Unknown -> {
       io.println("Libero — typed RPC framework for Gleam")
       io.println("")
@@ -46,6 +57,7 @@ pub fn main() -> Nil {
       io.println("  new <name>                    Create a new project")
       io.println("  add <name> --target <target>  Add a client")
       io.println("  gen                           Regenerate stubs")
+      io.println("  build                         Gen + build server + all clients")
       Nil
     }
   }

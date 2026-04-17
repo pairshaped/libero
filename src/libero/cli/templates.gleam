@@ -16,6 +16,7 @@ target = \"erlang\"
 [dependencies]
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
 gleam_erlang = \"~> 1.0\"
+gleam_http = \"~> 4.0\"
 mist = \"~> 6.0\"
 lustre = \"~> 5.6\"
 libero = { path = \""

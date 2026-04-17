@@ -1,7 +1,7 @@
 //// CLI command router for the Libero framework.
 ////
 //// Usage: gleam run -m libero -- <command> [args]
-//// Commands: new, add, gen
+//// Commands: new, add, gen, build
 
 import argv
 import gleam/io
@@ -10,6 +10,7 @@ pub type Command {
   New(name: String)
   Add(name: String, target: String)
   Gen
+  Build
   Unknown
 }
 
@@ -27,6 +28,7 @@ pub fn parse_command() -> Command {
       Add(name:, target: "")
     }
     ["gen", ..] -> Gen
+    ["build", ..] -> Build
     _ -> Unknown
   }
 }

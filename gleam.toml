@@ -76,4 +76,5 @@ unused_exports = "off"
 "src/libero/cli/new.gleam" = ["stringly_typed_error", "label_possible"]
 "src/libero/cli/add.gleam" = ["stringly_typed_error", "label_possible", "thrown_away_error"]
 "src/libero/cli/gen.gleam" = ["stringly_typed_error"]
+"src/libero/cli/build.gleam" = ["stringly_typed_error", "label_possible", "thrown_away_error"]
 "src/libero/toml_config.gleam" = ["stringly_typed_error", "label_possible", "error_context_lost", "thrown_away_error"]
