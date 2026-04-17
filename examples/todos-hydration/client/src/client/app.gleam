@@ -2,12 +2,11 @@ import client/generated/libero/todos as rpc
 import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import libero/remote_data.{NotAsked, Success}
-import libero/remote_data
 import libero/wire
 import lustre
 import lustre/effect
 import shared/todos.{
-  type Todo, Create, Delete, LoadAll, NotFound, TitleRequired, TodoParams,
+  type Todo, Create, Delete, NotFound, TitleRequired, TodoParams,
   TodosLoaded, Toggle,
 }
 import shared/views.{
@@ -30,7 +29,7 @@ pub fn init(flags: Dynamic) -> #(Model, effect.Effect(Msg)) {
 }
 
 fn decode_flags(flags: Dynamic) -> List(Todo) {
-  let assert Ok(s) = dynamic.string(flags)
+  let s: String = wire.coerce(flags)
   let assert Ok(etf) = bit_array.base64_decode(s)
   wire.decode(etf)
 }
@@ -42,12 +41,6 @@ fn format_todo_error(err: todos.TodoError) -> String {
     NotFound -> "Todo not found"
     TitleRequired -> "Title is required"
   }
-}
-
-fn load_all() -> effect.Effect(Msg) {
-  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
-    TodosLoadedMsg(remote_data.to_remote(raw: raw, format_domain: format_todo_error))
-  })
 }
 
 fn create(title: String) -> effect.Effect(Msg) {
