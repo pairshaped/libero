@@ -204,6 +204,7 @@ import " <> m.module_path <> ".{type MsgFromClient}
 import libero/rpc
 import " <> generated_module_path(client_generated <> "/rpc_config.gleam") <> "
 import " <> generated_module_path(client_generated <> "/rpc_register.gleam") <> "
+import " <> generated_module_path(client_generated <> "/rpc_decoders.gleam") <> "
 import lustre/effect.{type Effect}
 
 pub fn send_to_server(
@@ -211,6 +212,7 @@ pub fn send_to_server(
   on_response on_response: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
   rpc_register.register_all()
+  let _ = rpc_decoders.decode_msg_from_server
   rpc.send(
     url: rpc_config.ws_url(),
     module: \"" <> m.module_path <> "\",
