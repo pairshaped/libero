@@ -113,6 +113,28 @@ fn run_with_clients(
     |> result.map_error(fn(msg) { msg }),
   )
 
+  // 9. Generate server main entry point
+  let js_client_names =
+    list.filter_map(clients, fn(c) {
+      case c.target {
+        "javascript" -> Ok(c.name)
+        _ -> Error(Nil)
+      }
+    })
+  use _ <- result.try(
+    codegen.write_main(
+      app_name: toml_cfg.name,
+      port: toml_cfg.port,
+      server_generated: "src/core/generated",
+      shared_state_module: "core/shared_state",
+      js_client_names:,
+    )
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_main failed"
+    }),
+  )
+
   io.println("libero: done")
   Ok(Nil)
 }
