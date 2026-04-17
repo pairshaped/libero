@@ -87,6 +87,11 @@ pub fn starter_test() -> String {
   "import core/messages.{Ping, Pong}
 import core/handler
 import core/shared_state
+import gleeunit
+
+pub fn main() {
+  gleeunit.main()
+}
 
 pub fn ping_test() {
   let state = shared_state.new()
