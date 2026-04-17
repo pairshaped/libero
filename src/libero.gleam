@@ -140,6 +140,12 @@ fn run(
     |> result.map_error(fn(e) { [e] }),
   )
 
+  // Generate client-side SSR flags reader.
+  use _ <- result.try(
+    codegen.write_ssr_flags(client_generated: config.client_generated)
+    |> result.map_error(fn(e) { [e] }),
+  )
+
   Ok(list.length(message_modules))
 }
 

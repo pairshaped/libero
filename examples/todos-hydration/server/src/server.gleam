@@ -1,4 +1,3 @@
-import gleam/bit_array
 import gleam/bytes_tree
 import gleam/erlang/process
 import gleam/http
@@ -8,7 +7,7 @@ import gleam/option.{None}
 import gleam/string
 import libero/push
 import libero/remote_data.{NotAsked, Success}
-import libero/wire
+import libero/ssr
 import libero/ws_logger
 import lustre/element
 import mist
@@ -53,34 +52,21 @@ pub fn main() {
 fn handle_ssr(
   shared: shared_state.SharedState,
 ) -> response.Response(mist.ResponseData) {
-  // Call dispatch directly with LoadAll
-  let call = wire.encode_call(module: "shared/todos", msg: LoadAll)
-  let #(response_bytes, _, _) = dispatch.handle(state: shared, data: call)
-
-  // Wire response: 1-byte tag prefix, then ETF payload.
-  // After stripping the tag, decode the payload. Dispatch returns
-  // Result(Result(List(Todo), TodoError), RpcError) since it strips
-  // the MsgFromServer variant and exposes the inner Result field.
-  // Wire response: 1-byte tag, then Result(inner, RpcError) in ETF.
-  // inner is the MsgFromServer variant's unwrapped field: Ok(List(Todo))
-  let assert <<_tag, etf_payload:bytes>> = response_bytes
-  let assert Ok(Ok(items)) = wire.decode(etf_payload)
-
-  // Build model and render view
+  let assert Ok(items) =
+    ssr.call(
+      handle: dispatch.handle,
+      state: shared,
+      module: "shared/todos",
+      msg: LoadAll,
+    )
   let model = Model(items: Success(items), input: "", last_action: NotAsked)
-  let rendered = element.to_string(views.view(model))
-
-  // Encode items as base64 ETF for client flags
-  let flags_etf = wire.encode(items)
-  let flags_b64 = bit_array.base64_encode(flags_etf, True)
-
-  // Build HTML document
   let html =
-    "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Todos - hydration example</title>\n</head>\n<body>\n  <div id=\"app\">"
-    <> rendered
-    <> "</div>\n  <script>window.__LIBERO_FLAGS__ = \""
-    <> flags_b64
-    <> "\";</script>\n  <script type=\"module\">\n    import { main } from \"/js/client/client/app.mjs\";\n    main();\n  </script>\n</body>\n</html>"
+    ssr.document(
+      title: "Todos - hydration example",
+      body: element.to_string(views.view(model)),
+      flags: ssr.encode_flags(items),
+      client_module: "/js/client/client/app.mjs",
+    )
 
   response.new(200)
   |> response.set_header("content-type", "text/html")

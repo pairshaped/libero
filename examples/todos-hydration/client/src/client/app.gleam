@@ -1,7 +1,8 @@
+import client/generated/libero/ssr as generated_ssr
 import client/generated/libero/todos as rpc
-import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import libero/remote_data.{NotAsked, Success}
+import libero/ssr
 import libero/wire
 import lustre
 import lustre/effect
@@ -17,7 +18,7 @@ import shared/views.{
 // ---- Init ----
 
 pub fn init(flags: Dynamic) -> #(Model, effect.Effect(Msg)) {
-  let items = decode_flags(flags)
+  let assert Ok(items): Result(List(Todo), _) = ssr.decode_flags(flags)
   let subscribe =
     rpc.update_from_server(handler: fn(raw: Dynamic) {
       GotPush(wire.coerce(raw))
@@ -26,12 +27,6 @@ pub fn init(flags: Dynamic) -> #(Model, effect.Effect(Msg)) {
     Model(items: Success(items), input: "", last_action: NotAsked),
     effect.batch([subscribe]),
   )
-}
-
-fn decode_flags(flags: Dynamic) -> List(Todo) {
-  let s: String = wire.coerce(flags)
-  let assert Ok(etf) = bit_array.base64_decode(s)
-  wire.decode(etf)
 }
 
 // ---- Effects ----
@@ -124,12 +119,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
 // ---- Main ----
 
-@external(javascript, "../client/flags_ffi.mjs", "read_flags")
-fn read_flags() -> Dynamic
-
 pub fn main() {
   let app = lustre.application(init, update, views.view)
-  let flags = read_flags()
+  let flags = generated_ssr.read_flags()
   let assert Ok(_) = lustre.start(app, "#app", flags)
   Nil
 }
