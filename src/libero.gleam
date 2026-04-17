@@ -9,6 +9,7 @@ import gleam/list
 import gleam/option
 import gleam/result
 import libero/cli
+import libero/cli/add as cli_add
 import libero/cli/new as cli_new
 import libero/codegen
 import libero/config
@@ -27,7 +28,11 @@ pub fn main() -> Nil {
       Nil
     }
     cli.Add(name:, target:) -> {
-      io.println("libero add " <> name <> " --target " <> target <> " (not yet implemented)")
+      case cli_add.add_client(project_path: ".", name:, target:) {
+        Ok(Nil) ->
+          io.println("Added client " <> name <> " (target: " <> target <> ")")
+        Error(reason) -> io.println_error("error: " <> reason)
+      }
       Nil
     }
     cli.Gen -> {
