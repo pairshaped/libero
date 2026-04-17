@@ -803,8 +803,31 @@ function ensureSocket(url) {
       return;
     }
 
-    // Response frame (tag 0x00): matched to pending callback
-    const decoded = decode_value(payload);
+    // Response frame (tag 0x00): matched to pending callback in FIFO order.
+    // The response wire shape is Result(MsgFromServer.Variant(payload), RpcError).
+    // If a typed decoder is registered, decode raw (bypassing the global
+    // constructor registry) and apply it to the inner MsgFromServer term so
+    // nested payload types use the correct module-specific constructors.
+    // Without a typed decoder, fall back to the registry path.
+    let decoded;
+    const typedDecoder = getMsgFromServerDecoder();
+    if (typedDecoder) {
+      // Decode the full payload raw: no registry reconstruction.
+      // raw is a plain JS array: ["ok", rawMsgFromServerTerm] or
+      // ["error", rawRpcErrorTerm].
+      const raw = decode_value_raw(payload);
+      if (Array.isArray(raw) && raw[0] === "ok" && raw[1] !== undefined) {
+        // Ok branch: apply the typed decoder to the inner MsgFromServer value.
+        const okCtor = registry.get("ok");
+        const typedVariant = typedDecoder(raw[1]);
+        decoded = okCtor ? new okCtor(typedVariant) : { type: "Ok", 0: typedVariant };
+      } else {
+        // Error branch or unexpected shape: fall back to registry decode.
+        decoded = decode_value(payload);
+      }
+    } else {
+      decoded = decode_value(payload);
+    }
     const entry = responseCallbacks.shift();
     if (entry) {
       if (entry.timer) clearTimeout(entry.timer);

@@ -7,7 +7,7 @@
 %% Erlang term shapes.
 
 -module(libero_ffi).
--export([try_call/1, encode/1, decode/1, decode_safe/1, identity/1, trap_signals/0, unwrap_msg_from_server/1]).
+-export([try_call/1, encode/1, decode/1, decode_safe/1, identity/1, trap_signals/0, peel_msg_wrapper/1]).
 
 identity(X) -> X.
 
@@ -45,28 +45,18 @@ signal_loop() ->
         _Other            -> signal_loop()
     end.
 
-%% Strip the MsgFromServer envelope from a dispatch response.
+%% Extract the single payload field from a MsgFromServer variant.
 %%
-%% Every MsgFromServer variant carries exactly one field - the response
-%% payload. In Erlang a Gleam custom type variant `Foo(payload)` compiles
-%% to the tuple `{foo, Payload}`, so element(2, ...) extracts the payload.
-%% The variant tag is redundant for request/response (FIFO matching on
-%% the client pairs each response to its request), so dispatch strips it
-%% before encoding to give the client a cleaner wire shape:
-%%   `Result(payload, RpcError)` instead of
-%%   `Result(MsgFromServer.SomeVariant(payload), RpcError)`.
-%%
-%% Push messages take a different code path that keeps the envelope so
-%% the client can route by variant.
-%%
-%% 0-arity MsgFromServer variants compile to bare atoms in Erlang and
-%% have no payload - we send `nil` (Gleam's Nil) so the client receives
-%% a typed empty acknowledgment.
-unwrap_msg_from_server(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+%% In Erlang, Gleam custom type variants compile to tuples of the form
+%% `{atom, Field1, ...}`. Every MsgFromServer variant carries exactly one
+%% field (the response payload), so `element(2, Tuple)` extracts it.
+%% 0-arity variants compile to bare atoms and carry no payload; for those
+%% we return nil (Gleam Nil) as a typed empty acknowledgment.
+peel_msg_wrapper(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     element(2, Tuple);
-unwrap_msg_from_server(Atom) when is_atom(Atom) ->
+peel_msg_wrapper(Atom) when is_atom(Atom) ->
     nil;
-unwrap_msg_from_server(Other) ->
+peel_msg_wrapper(Other) ->
     Other.
 
 try_call(F) ->

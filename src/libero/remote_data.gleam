@@ -91,9 +91,10 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
 
 /// Convert a libero RPC response (Dynamic) into a `RemoteData` value.
 ///
-/// The server-side dispatch unwraps the `MsgFromServer` envelope so the
-/// wire response is `Result(Result(payload, domain_err), RpcError(app_err))`.
-/// This helper collapses that into the two post-response states.
+/// The server-side dispatch ships the full MsgFromServer envelope so the
+/// wire response is `Result(MsgFromServer.Variant(Result(payload, domain_err)), RpcError(app_err))`.
+/// This helper peels the MsgFromServer wrapper and collapses the result
+/// into the two post-response states.
 ///
 /// The `format_domain` callback formats domain errors (which the page
 /// owns and pattern-matches on its specific error type). Framework
@@ -103,14 +104,31 @@ pub fn to_remote(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
 ) -> RemoteData(payload, RpcFailure) {
-  let response: Result(Result(payload, domain), RpcError(app)) =
-    wire.coerce(raw)
-  case response {
-    Ok(Ok(payload)) -> Success(payload)
-    Ok(Error(domain_err)) ->
-      Failure(DomainFailure(message: format_domain(domain_err)))
+  let outer: Result(Dynamic, RpcError(app)) = wire.coerce(raw)
+  case outer {
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))
+    Ok(wrapped) -> {
+      let inner: Dynamic = peel_msg_wrapper(wrapped)
+      let result: Result(payload, domain) = wire.coerce(inner)
+      case result {
+        Ok(payload) -> Success(payload)
+        Error(domain_err) ->
+          Failure(DomainFailure(message: format_domain(domain_err)))
+      }
+    }
   }
+}
+
+/// Extract the single payload field from a MsgFromServer variant wrapper.
+/// On Erlang, Gleam variants compile to `{atom, Field}` tuples;
+/// `element(2, Tuple)` extracts the payload.
+/// On JavaScript, variants compile to class instances where the first
+/// field is stored at index `[0]` (i.e. `wrapper[0]`).
+@external(erlang, "libero_ffi", "peel_msg_wrapper")
+@external(javascript, "./remote_data_ffi.mjs", "peelMsgWrapper")
+fn peel_msg_wrapper(wrapper: Dynamic) -> Dynamic {
+  let _ = wrapper
+  panic as "unreachable"
 }
 
 /// Adapter for action responses that the page wants as a flat `Result`
