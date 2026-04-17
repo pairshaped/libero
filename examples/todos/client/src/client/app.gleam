@@ -2,7 +2,8 @@ import client/generated/libero/todos as rpc
 import gleam/dynamic.{type Dynamic}
 import gleam/list
 import libero/remote_data.{
-  type RemoteData, Failure, Loading, NotAsked, Success, to_remote,
+  type RemoteData, type RpcFailure, Failure, Loading, NotAsked, Success,
+  to_remote,
 }
 import libero/wire
 import lustre
@@ -28,9 +29,9 @@ import shared/todos.{
 
 pub type Model {
   Model(
-    items: RemoteData(List(Todo), String),
+    items: RemoteData(List(Todo), RpcFailure),
     input: String,
-    last_action: RemoteData(Nil, String),
+    last_action: RemoteData(Nil, RpcFailure),
   )
 }
 
@@ -41,10 +42,10 @@ pub type Msg {
   Submit
   ToggleClicked(Int)
   DeleteClicked(Int)
-  TodosLoadedMsg(RemoteData(List(Todo), String))
-  TodoCreatedMsg(RemoteData(Todo, String))
-  TodoToggledMsg(RemoteData(Todo, String))
-  TodoDeletedMsg(RemoteData(Int, String))
+  TodosLoadedMsg(RemoteData(List(Todo), RpcFailure))
+  TodoCreatedMsg(RemoteData(Todo, RpcFailure))
+  TodoToggledMsg(RemoteData(Todo, RpcFailure))
+  TodoDeletedMsg(RemoteData(Int, RpcFailure))
   GotPush(MsgFromServer)
 }
 
@@ -72,9 +73,7 @@ fn load_all() -> Effect(Msg) {
 fn create(title: String) -> Effect(Msg) {
   rpc.send_to_server(
     msg: Create(params: TodoParams(title:)),
-    on_response: fn(raw) {
-      TodoCreatedMsg(to_remote(raw, format_todo_error))
-    },
+    on_response: fn(raw) { TodoCreatedMsg(to_remote(raw, format_todo_error)) },
   )
 }
 
@@ -113,15 +112,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       }
     }
 
-    ToggleClicked(id) -> #(
-      Model(..model, last_action: Loading),
-      toggle(id),
-    )
+    ToggleClicked(id) -> #(Model(..model, last_action: Loading), toggle(id))
 
-    DeleteClicked(id) -> #(
-      Model(..model, last_action: Loading),
-      delete(id),
-    )
+    DeleteClicked(id) -> #(Model(..model, last_action: Loading), delete(id))
 
     // Initial load result.
     TodosLoadedMsg(rd) -> #(Model(..model, items: rd), effect.none())
@@ -195,20 +188,20 @@ fn view_input(model: Model) -> Element(Msg) {
   )
 }
 
-fn view_action_status(rd: RemoteData(Nil, String)) -> Element(Msg) {
+fn view_action_status(rd: RemoteData(Nil, RpcFailure)) -> Element(Msg) {
   case rd {
-    Failure(message) ->
-      html.p([attribute.style("color", "red")], [element.text(message)])
+    Failure(err) ->
+      html.p([attribute.style("color", "red")], [element.text(err.message)])
     _ -> element.none()
   }
 }
 
-fn view_items(items: RemoteData(List(Todo), String)) -> Element(Msg) {
+fn view_items(items: RemoteData(List(Todo), RpcFailure)) -> Element(Msg) {
   case items {
     NotAsked | Loading ->
       html.p([attribute.style("opacity", "0.5")], [element.text("Loading...")])
-    Failure(message) ->
-      html.p([attribute.style("color", "red")], [element.text(message)])
+    Failure(err) ->
+      html.p([attribute.style("color", "red")], [element.text(err.message)])
     Success(todos) -> view_list(todos)
   }
 }

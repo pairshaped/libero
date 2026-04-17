@@ -204,7 +204,10 @@ pub fn build_config(
 }
 
 /// Extract a `--name=value` flag from the argument list.
-pub fn find_flag(args args: List(String), name name: String) -> Result(String, Nil) {
+pub fn find_flag(
+  args args: List(String),
+  name name: String,
+) -> Result(String, Nil) {
   let prefix = name <> "="
   args
   |> list.find(fn(arg) { string.starts_with(arg, prefix) })

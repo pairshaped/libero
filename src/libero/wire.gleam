@@ -92,16 +92,12 @@ pub type DecodeError {
 ///
 /// This is specifically for RPC call envelopes. For decoding
 /// arbitrary values, use `decode`.
-pub fn decode_call(
-  data: BitArray,
-) -> Result(#(String, Dynamic), DecodeError) {
+pub fn decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
   ffi_decode_call(data)
 }
 
 @external(erlang, "libero_wire_ffi", "decode_call")
-fn ffi_decode_call(
-  data: BitArray,
-) -> Result(#(String, Dynamic), DecodeError) {
+fn ffi_decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
   // JS fallback. `decode_call` is specifically for parsing incoming
   // RPC call envelopes, which only the server does. JavaScript
   // consumers never call this - they call the generated client

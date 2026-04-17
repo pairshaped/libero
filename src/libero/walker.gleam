@@ -8,7 +8,9 @@ import gleam/set.{type Set}
 import gleam/string
 import simplifile
 
-import libero/gen_error.{type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule}
+import libero/gen_error.{
+  type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
+}
 import libero/scanner.{type MessageModule}
 
 /// A single discovered variant to emit as a registerConstructor call.
@@ -104,20 +106,25 @@ pub fn walk_message_registry_types(
       }
       case message_module.has_msg_from_server {
         True ->
-          set.insert(with_msg_from_client, #(message_module.module_path, "MsgFromServer"))
+          set.insert(with_msg_from_client, #(
+            message_module.module_path,
+            "MsgFromServer",
+          ))
         False -> with_msg_from_client
       }
     })
     |> set.to_list
 
-  do_walk(WalkerState(
-    queue: seed,
-    visited: set.new(),
-    discovered: [],
-    module_files: module_files,
-    parsed_cache: dict.new(),
-    errors: [],
-  ))
+  do_walk(
+    WalkerState(
+      queue: seed,
+      visited: set.new(),
+      discovered: [],
+      module_files: module_files,
+      parsed_cache: dict.new(),
+      errors: [],
+    ),
+  )
 }
 
 fn do_walk(
@@ -134,9 +141,7 @@ fn do_walk(
       // Skip already-visited items
       use <- bool.lazy_guard(
         when: set.contains(state.visited, key),
-        return: fn() {
-          do_walk(WalkerState(..state, queue: rest_queue))
-        },
+        return: fn() { do_walk(WalkerState(..state, queue: rest_queue)) },
       )
       let state =
         WalkerState(
@@ -157,10 +162,12 @@ fn process_type(
   // Resolve file path - if missing, record error and continue
   case dict.get(state.module_files, module_path) {
     Error(Nil) ->
-      do_walk(WalkerState(
-        ..state,
-        errors: [UnresolvedTypeModule(module_path:, type_name:), ..state.errors],
-      ))
+      do_walk(
+        WalkerState(..state, errors: [
+          UnresolvedTypeModule(module_path:, type_name:),
+          ..state.errors
+        ]),
+      )
     Ok(file_path) ->
       process_type_file(module_path:, type_name:, file_path:, state:)
   }
@@ -174,8 +181,7 @@ fn process_type_file(
 ) -> Result(List(DiscoveredVariant), List(GenError)) {
   // Parse or load from cache
   case load_ast(module_path:, file_path:, parsed_cache: state.parsed_cache) {
-    Error(e) ->
-      do_walk(WalkerState(..state, errors: [e, ..state.errors]))
+    Error(e) -> do_walk(WalkerState(..state, errors: [e, ..state.errors]))
     Ok(#(ast, new_cache)) ->
       process_type_ast(
         module_path:,
@@ -195,16 +201,16 @@ fn process_type_ast(
   // Check type alias - skip silently
   let is_alias =
     list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
-  use <- bool.lazy_guard(when: is_alias, return: fn() {
-    do_walk(state)
-  })
+  use <- bool.lazy_guard(when: is_alias, return: fn() { do_walk(state) })
   // Find the custom type definition
   case list.find(ast.custom_types, fn(d) { d.definition.name == type_name }) {
     Error(Nil) ->
-      do_walk(WalkerState(
-        ..state,
-        errors: [TypeNotFound(module_path:, type_name:), ..state.errors],
-      ))
+      do_walk(
+        WalkerState(..state, errors: [
+          TypeNotFound(module_path:, type_name:),
+          ..state.errors
+        ]),
+      )
     Ok(ct_def) -> {
       let custom_type = ct_def.definition
       let resolver = build_type_resolver(ast.imports)
@@ -232,11 +238,13 @@ fn process_type_ast(
       let new_discovered =
         list.append(state.discovered, list.reverse(new_discovered_rev))
       let new_queue_items = list.reverse(new_queue_items_rev)
-      do_walk(WalkerState(
-        ..state,
-        queue: list.append(state.queue, new_queue_items),
-        discovered: new_discovered,
-      ))
+      do_walk(
+        WalkerState(
+          ..state,
+          queue: list.append(state.queue, new_queue_items),
+          discovered: new_discovered,
+        ),
+      )
     }
   }
 }
@@ -334,6 +342,18 @@ fn resolve_type_module(
   }
 }
 
+/// Unwrap a Result, returning the default on Error or continuing with the Ok value.
+fn result_guard(
+  over r: Result(a, Nil),
+  default default: c,
+  next next: fn(a) -> c,
+) -> c {
+  case r {
+    Ok(value) -> next(value)
+    Error(Nil) -> default
+  }
+}
+
 /// Walk a glance.Type and return (module_path, type_name) refs for any
 /// named custom types found. Uses resolver to map alias/unqualified names
 /// to their full module paths. `current_module` is the module path of the
@@ -361,20 +381,14 @@ fn collect_type_refs(
           resolver: resolver,
           current_module: current_module,
         )
-      case module_path {
-        Error(Nil) -> param_refs
-        Ok(mp) -> {
-          use <- bool.guard(when: is_skipped_module(mp), return: param_refs)
-          // Resolve aliased type names back to original names.
-          // e.g. `type AdminData as DiscountAdminData` - we need to look up
-          // "AdminData" in the target module, not "DiscountAdminData".
-          let original_name = case dict.get(resolver.original_names, name) {
-            Ok(orig) -> orig
-            Error(Nil) -> name
-          }
-          list.append([#(mp, original_name)], param_refs)
-        }
-      }
+      use mp <- result_guard(module_path, param_refs)
+      use <- bool.guard(when: is_skipped_module(mp), return: param_refs)
+      // Resolve aliased type names back to original names.
+      // e.g. `type AdminData as DiscountAdminData` - we need to look up
+      // "AdminData" in the target module, not "DiscountAdminData".
+      let original_name =
+        result.unwrap(dict.get(resolver.original_names, name), name)
+      list.append([#(mp, original_name)], param_refs)
     }
     glance.TupleType(elements:, ..) ->
       list.flat_map(elements, fn(e) {
@@ -393,7 +407,11 @@ fn build_type_resolver(
   let empty_al: Dict(String, String) = dict.new()
   let empty_orig: Dict(String, String) = dict.new()
   let init =
-    TypeResolver(unqualified: empty_unq, aliased: empty_al, original_names: empty_orig)
+    TypeResolver(
+      unqualified: empty_unq,
+      aliased: empty_al,
+      original_names: empty_orig,
+    )
   list.fold(imports, init, fn(acc, def) {
     let imp = def.definition
     let module_path = imp.module
@@ -407,8 +425,7 @@ fn build_type_resolver(
           None -> uq.name
         }
         let new_originals = case uq.alias {
-          Some(_a) ->
-            dict.insert(acc.original_names, name, uq.name)
+          Some(_a) -> dict.insert(acc.original_names, name, uq.name)
           None -> acc.original_names
         }
         TypeResolver(

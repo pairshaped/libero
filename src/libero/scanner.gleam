@@ -15,8 +15,8 @@ import gleam/option
 import gleam/result
 import gleam/string
 import libero/gen_error.{
-  type GenError, CannotReadDir, CannotReadFile, CannotWriteFile,
-  MissingHandler, MsgFromServerFieldCount, NoMessageModules, ParseFailed,
+  type GenError, CannotReadDir, CannotReadFile, CannotWriteFile, MissingHandler,
+  MsgFromServerFieldCount, NoMessageModules, ParseFailed,
 }
 import simplifile
 
@@ -63,7 +63,9 @@ pub fn scan_message_modules(
 ) -> Result(#(List(MessageModule), Dict(String, String)), List(GenError)) {
   let files =
     walk_directory(path: shared_src)
-    |> result.map_error(fn(cause) { [cause, NoMessageModules(shared_path: shared_src)] })
+    |> result.map_error(fn(cause) {
+      [cause, NoMessageModules(shared_path: shared_src)]
+    })
   use files <- result.try(files)
   // Build module_files dict from all discovered .gleam files
   let module_files =
@@ -107,13 +109,15 @@ fn parse_message_module(
     return: Error(Nil),
   )
   let module_path = derive_module_path(file_path: file_path)
-  Ok(MessageModule(
-    module_path: module_path,
-    file_path: file_path,
-    has_msg_from_client: has_msg_from_client,
-    has_msg_from_server: has_msg_from_server,
-    handler_modules: [],
-  ))
+  Ok(
+    MessageModule(
+      module_path: module_path,
+      file_path: file_path,
+      has_msg_from_client: has_msg_from_client,
+      has_msg_from_server: has_msg_from_server,
+      handler_modules: [],
+    ),
+  )
 }
 
 // ---------- Handler discovery ----------
@@ -128,16 +132,14 @@ fn scan_handlers(
     walk_directory(path: server_src)
     |> result.map_error(fn(cause) { [cause] })
   use files <- result.try(files)
-  Ok(list.filter_map(files, fn(file_path) {
-    parse_handler(file_path: file_path)
-  }))
+  Ok(
+    list.filter_map(files, fn(file_path) { parse_handler(file_path: file_path) }),
+  )
 }
 
 /// Parse a single server source file looking for `pub fn update_from_client`.
 /// If found, resolve the first parameter's type to a shared module path.
-fn parse_handler(
-  file_path file_path: String,
-) -> Result(DiscoveredHandler, Nil) {
+fn parse_handler(file_path file_path: String) -> Result(DiscoveredHandler, Nil) {
   use content <- result.try(
     simplifile.read(file_path)
     |> result.replace_error(Nil),
@@ -157,12 +159,10 @@ fn parse_handler(
   use first_param <- result.try(list.first(func.parameters))
   use type_ann <- result.try(option.to_result(first_param.type_, Nil))
   // Resolve the type to a shared module path
-  use shared_module <- result.try(
-    resolve_msg_type(
-      type_ann: type_ann,
-      imports: parsed.imports,
-    ),
-  )
+  use shared_module <- result.try(resolve_msg_type(
+    type_ann: type_ann,
+    imports: parsed.imports,
+  ))
   let handler_module = derive_module_path(file_path: file_path)
   Ok(DiscoveredHandler(
     handler_module: handler_module,
@@ -355,44 +355,51 @@ pub fn validate_conventions(
     Error(errs) -> #([], errs)
   }
 
+  // Match a message module to its handler(s), returning an error if missing.
+  let match_handler = fn(
+    m: MessageModule,
+    handler_map: Dict(String, List(String)),
+  ) -> #(MessageModule, option.Option(GenError)) {
+    case m.has_msg_from_client, dict.get(handler_map, m.module_path) {
+      False, _ -> #(MessageModule(..m, handler_modules: []), option.None)
+      True, Ok(handler_list) -> #(
+        MessageModule(..m, handler_modules: handler_list),
+        option.None,
+      )
+      True, Error(Nil) -> #(
+        MessageModule(..m, handler_modules: []),
+        option.Some(MissingHandler(
+          message_module: m.module_path,
+          expected: "a server module exporting pub fn update_from_client with msg: "
+            <> m.module_path
+            <> ".MsgFromClient",
+        )),
+      )
+    }
+  }
+
   // Build a dict from shared_module -> List(handler_module) for quick lookup.
   // Multiple server modules can handle the same shared message module.
   let handler_map =
     list.fold(handlers, dict.new(), fn(acc, h) {
       let existing = dict.get(acc, h.shared_module) |> result.unwrap([])
-      dict.insert(acc, h.shared_module, list.append(existing, [h.handler_module]))
+      dict.insert(
+        acc,
+        h.shared_module,
+        list.append(existing, [h.handler_module]),
+      )
     })
 
   // Match handlers to message modules and collect missing handler errors
   let #(updated_modules, handler_errors) =
     list.fold(message_modules, #([], []), fn(acc, m) {
       let #(modules_acc, errors_acc) = acc
-      case m.has_msg_from_client {
-        False -> {
-          let updated = MessageModule(..m, handler_modules: [])
-          #([updated, ..modules_acc], errors_acc)
-        }
-        True -> {
-          case dict.get(handler_map, m.module_path) {
-            Ok(handler_list) -> {
-              let updated =
-                MessageModule(..m, handler_modules: handler_list)
-              #([updated, ..modules_acc], errors_acc)
-            }
-            Error(Nil) -> {
-              let err =
-                MissingHandler(
-                  message_module: m.module_path,
-                  expected: "a server module exporting pub fn update_from_client with msg: "
-                    <> m.module_path
-                    <> ".MsgFromClient",
-                )
-              let updated = MessageModule(..m, handler_modules: [])
-              #([updated, ..modules_acc], [err, ..errors_acc])
-            }
-          }
-        }
+      let #(updated, new_err) = match_handler(m, handler_map)
+      let new_errors = case new_err {
+        option.Some(err) -> [err, ..errors_acc]
+        option.None -> errors_acc
       }
+      #([updated, ..modules_acc], new_errors)
     })
 
   let all_errors =
@@ -476,33 +483,46 @@ pub fn validate_msg_from_server_fields(
 }
 
 fn check_variant_fields(m: MessageModule) -> List(GenError) {
+  use source <- read_or_error(m)
+  use ast <- parse_or_error(m, source)
+  let msg_from_server =
+    list.find(ast.custom_types, fn(d) { d.definition.name == "MsgFromServer" })
+  case msg_from_server {
+    Error(Nil) -> []
+    Ok(ct_def) ->
+      list.filter_map(ct_def.definition.variants, fn(variant) {
+        let field_count = list.length(variant.fields)
+        case field_count {
+          0 | 1 -> Error(Nil)
+          _ ->
+            Ok(MsgFromServerFieldCount(
+              module_path: m.module_path,
+              variant_name: variant.name,
+              field_count: field_count,
+            ))
+        }
+      })
+  }
+}
+
+fn read_or_error(
+  module m: MessageModule,
+  next next: fn(String) -> List(GenError),
+) -> List(GenError) {
   case simplifile.read(m.file_path) {
     Error(cause) -> [CannotReadFile(path: m.file_path, cause:)]
-    Ok(source) ->
-      case glance.module(source) {
-        Error(cause) -> [ParseFailed(path: m.file_path, cause:)]
-        Ok(ast) ->
-          case
-            list.find(ast.custom_types, fn(d) {
-              d.definition.name == "MsgFromServer"
-            })
-          {
-            Error(Nil) -> []
-            Ok(ct_def) ->
-              list.filter_map(ct_def.definition.variants, fn(variant) {
-                let field_count = list.length(variant.fields)
-                case field_count {
-                  0 | 1 -> Error(Nil)
-                  _ ->
-                    Ok(MsgFromServerFieldCount(
-                      module_path: m.module_path,
-                      variant_name: variant.name,
-                      field_count: field_count,
-                    ))
-                }
-              })
-          }
-      }
+    Ok(source) -> next(source)
+  }
+}
+
+fn parse_or_error(
+  module m: MessageModule,
+  source source: String,
+  next next: fn(glance.Module) -> List(GenError),
+) -> List(GenError) {
+  case glance.module(source) {
+    Error(cause) -> [ParseFailed(path: m.file_path, cause:)]
+    Ok(ast) -> next(ast)
   }
 }
 

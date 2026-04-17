@@ -11,9 +11,7 @@ import libero/walker
 
 pub fn walk_discovers_toserver_variants_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -28,9 +26,7 @@ pub fn walk_discovers_toserver_variants_test() {
 
 pub fn walk_discovers_toclient_variants_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -45,9 +41,7 @@ pub fn walk_discovers_toclient_variants_test() {
 
 pub fn walk_discovers_transitive_types_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -62,9 +56,7 @@ pub fn walk_discovers_transitive_types_test() {
 
 pub fn walk_atom_names_are_snake_case_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -78,9 +70,7 @@ pub fn walk_atom_names_are_snake_case_test() {
 
 pub fn walk_no_duplicates_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,

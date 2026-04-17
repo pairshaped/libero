@@ -7,11 +7,8 @@
 ///   gleam run -- create "Buy milk"
 ///   gleam run -- toggle 1
 ///   gleam run -- delete 1
-
 import gleam/io
-import shared/todos.{
-  type Todo, Create, Delete, LoadAll, TodoParams, Toggle,
-}
+import shared/todos.{type Todo, Create, Delete, LoadAll, TodoParams, Toggle}
 
 const url = "http://localhost:8080/rpc"
 
@@ -53,9 +50,7 @@ fn do_list() {
           True -> "[x]"
           False -> "[ ]"
         }
-        io.println(
-          check <> " #" <> int_to_string(item.id) <> " " <> item.title,
-        )
+        io.println(check <> " #" <> int_to_string(item.id) <> " " <> item.title)
       })
     Error(reason) -> io.println_error("Error: " <> reason)
   }

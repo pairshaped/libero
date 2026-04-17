@@ -5,13 +5,13 @@ import gleam/http/request
 import gleam/http/response
 import gleam/option.{None}
 import gleam/string
-import mist
-import server/shared_state
 import libero/push
 import libero/ws_logger
-import server/store
+import mist
 import server/generated/libero/dispatch
 import server/generated/libero/websocket as ws
+import server/shared_state
+import server/store
 
 pub fn main() {
   store.init()
@@ -54,7 +54,9 @@ fn handle_rpc(
         dispatch.handle(state: shared, data: req.body)
       response.new(200)
       |> response.set_header("content-type", "application/octet-stream")
-      |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(response_bytes)))
+      |> response.set_body(
+        mist.Bytes(bytes_tree.from_bit_array(response_bytes)),
+      )
     }
     Error(_) ->
       response.new(400)

@@ -49,7 +49,10 @@ pub fn update_from_server(
 }
 
 @external(javascript, "./rpc_ffi.mjs", "registerPushHandler")
-fn ffi_register_push(module module: String, callback callback: fn(Dynamic) -> Nil) -> Nil {
+fn ffi_register_push(
+  module module: String,
+  callback callback: fn(Dynamic) -> Nil,
+) -> Nil {
   let _ = module
   let _ = callback
   panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"

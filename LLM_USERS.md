@@ -69,19 +69,19 @@ pub fn update_from_client(
 // client/src/client/app.gleam
 
 import client/generated/libero/todos as rpc
-import libero/remote_data.{type RemoteData, Loading, NotAsked, Success, Failure}
+import libero/remote_data.{type RemoteData, type RpcFailure, Loading, NotAsked, Success, Failure}
 import libero/remote_data
 import libero/wire
 import shared/todos.{type MsgFromServer, type Todo}
 
 pub type Model {
   Model(
-    items: RemoteData(List(Todo), String),
+    items: RemoteData(List(Todo), RpcFailure),
   )
 }
 
 pub type Msg {
-  TodosLoadedMsg(RemoteData(List(Todo), String))
+  TodosLoadedMsg(RemoteData(List(Todo), RpcFailure))
   GotPush(MsgFromServer)
 }
 
@@ -110,7 +110,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 pub fn view(model: Model) -> Element(Msg) {
   case model.items {
     NotAsked | Loading -> html.p([], [element.text("Loading...")])
-    Failure(err) -> html.p([], [element.text("Error: " <> err)])
+    Failure(err) -> html.p([], [element.text("Error: " <> err.message)])
     Success(items) -> view_list(items)
   }
 }

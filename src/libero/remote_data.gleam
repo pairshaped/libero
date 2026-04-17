@@ -14,7 +14,6 @@
 
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option, None, Some}
-import gleam/string
 import libero/error.{type RpcError}
 import libero/wire
 
@@ -23,6 +22,13 @@ pub type RemoteData(value, error) {
   Loading
   Failure(error)
   Success(value)
+}
+
+/// Error type for formatted RPC failures. Distinguishes domain errors
+/// (formatted by the caller) from framework errors (formatted by libero).
+pub type RpcFailure {
+  DomainFailure(message: String)
+  FrameworkFailure(message: String)
 }
 
 /// Apply a function to the success value.
@@ -96,12 +102,13 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
 pub fn to_remote(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
-) -> RemoteData(payload, String) {
+) -> RemoteData(payload, RpcFailure) {
   let response: Result(Result(payload, domain), RpcError(app)) =
     wire.coerce(raw)
   case response {
     Ok(Ok(payload)) -> Success(payload)
-    Ok(Error(domain_err)) -> Failure(format_domain(domain_err))
+    Ok(Error(domain_err)) ->
+      Failure(DomainFailure(message: format_domain(domain_err)))
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))
   }
 }
@@ -113,23 +120,26 @@ pub fn to_remote(
 pub fn to_result(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
-) -> Result(payload, String) {
-  case to_remote(raw, format_domain) {
+) -> Result(payload, RpcFailure) {
+  case to_remote(raw: raw, format_domain: format_domain) {
     Success(payload) -> Ok(payload)
-    Failure(message) -> Error(message)
+    Failure(err) -> Error(err)
     NotAsked | Loading ->
-      Error("Unexpected response state - to_result called on a non-response")
+      Error(FrameworkFailure(
+        message: "Unexpected response state: to_result called on a non-response",
+      ))
   }
 }
 
 /// Default formatter for framework-level RPC errors.
 /// Domain errors travel inside `Ok(Error(domain))` and are formatted
 /// by the caller's `format_domain` function.
-fn format_rpc_error(err: RpcError(a)) -> String {
+fn format_rpc_error(err: RpcError(a)) -> RpcFailure {
   case err {
-    error.AppError(value) -> "Server error: " <> string.inspect(value)
-    error.InternalError(_, message) -> message
-    error.UnknownFunction(name) -> "Unknown RPC: " <> name
-    error.MalformedRequest -> "Malformed request"
+    error.AppError(_) -> FrameworkFailure(message: "Server application error")
+    error.InternalError(_, message) -> FrameworkFailure(message:)
+    error.UnknownFunction(name) ->
+      FrameworkFailure(message: "Unknown RPC: " <> name)
+    error.MalformedRequest -> FrameworkFailure(message: "Malformed request")
   }
 }

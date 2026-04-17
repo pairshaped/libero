@@ -1,6 +1,5 @@
 /// ETS-backed todo store. Uses a named public table so any process
 /// (WebSocket handler, HTTP handler) can read and write.
-
 import gleam/list
 import gleam/order
 import server/app_error.{type AppError}

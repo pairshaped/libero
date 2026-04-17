@@ -10,9 +10,6 @@ pub fn send_to_client(
   push.send_to_client(client_id:, module: "shared/todos", msg:)
 }
 
-pub fn send_to_clients(
-  topic topic: String,
-  msg msg: MsgFromServer,
-) -> Nil {
+pub fn send_to_clients(topic topic: String, msg msg: MsgFromServer) -> Nil {
   push.send_to_clients(topic:, module: "shared/todos", msg:)
 }

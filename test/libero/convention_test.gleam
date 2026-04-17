@@ -19,9 +19,7 @@ pub fn scan_empty_dir_returns_no_modules_error_test() {
 
 pub fn scan_todos_example_finds_todos_module_test() {
   let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert True = list.length(modules) == 1
   let assert [m] = modules
   let assert True = m.has_msg_from_client
@@ -32,9 +30,7 @@ pub fn scan_todos_example_finds_todos_module_test() {
 
 pub fn validate_todos_example_passes_test() {
   let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(updated_modules) =
     scanner.validate_conventions(
       message_modules: modules,
@@ -60,13 +56,9 @@ pub fn scaffold_shared_state_when_missing_test() {
   ]
   // Validation will scaffold missing files, but still error on missing handler
   let assert Error(_errors) =
-    scanner.validate_conventions(
-      message_modules: modules,
-      server_src: dir,
-    )
+    scanner.validate_conventions(message_modules: modules, server_src: dir)
   // shared_state.gleam should have been scaffolded
-  let assert Ok(content) =
-    simplifile.read(server_dir <> "/shared_state.gleam")
+  let assert Ok(content) = simplifile.read(server_dir <> "/shared_state.gleam")
   let assert True = string.contains(content, "pub type SharedState")
   let assert True = string.contains(content, "pub fn new()")
 
@@ -88,13 +80,9 @@ pub fn scaffold_app_error_when_missing_test() {
     ),
   ]
   let assert Error(_errors) =
-    scanner.validate_conventions(
-      message_modules: modules,
-      server_src: dir,
-    )
+    scanner.validate_conventions(message_modules: modules, server_src: dir)
   // app_error.gleam should have been scaffolded
-  let assert Ok(content) =
-    simplifile.read(server_dir <> "/app_error.gleam")
+  let assert Ok(content) = simplifile.read(server_dir <> "/app_error.gleam")
   let assert True = string.contains(content, "pub type AppError")
 
   // Cleanup
@@ -127,9 +115,7 @@ pub fn validate_missing_handler_test() {
 
 pub fn validate_msg_from_server_single_field_passes_test() {
   let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(
-      shared_src: "examples/todos/shared/src/shared",
-    )
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(Nil) =
     scanner.validate_msg_from_server_fields(message_modules: modules)
 }

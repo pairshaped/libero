@@ -1,9 +1,7 @@
 //// Tests for libero/error wire roundtrip and InternalError message field.
 
 import gleam/dynamic.{type Dynamic}
-import libero/error.{
-  type Never, type RpcError, InternalError,
-}
+import libero/error.{type Never, type RpcError, InternalError}
 import libero/wire
 
 /// InternalError carries a client-safe message that consumers can

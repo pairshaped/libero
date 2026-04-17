@@ -12,7 +12,8 @@ pub fn scan_skips_generated_directory_test() {
   let shared_src = base <> "/src/shared"
 
   // Create a message module and a generated/ subdirectory with a decoy
-  let assert Ok(Nil) = simplifile.create_directory_all(shared_src <> "/generated")
+  let assert Ok(Nil) =
+    simplifile.create_directory_all(shared_src <> "/generated")
   let assert Ok(Nil) =
     simplifile.write(
       shared_src <> "/msgs.gleam",
@@ -24,8 +25,7 @@ pub fn scan_skips_generated_directory_test() {
       "pub type MsgFromClient { Decoy }",
     )
 
-  let assert Ok(#(modules, _files)) =
-    scanner.scan_message_modules(shared_src:)
+  let assert Ok(#(modules, _files)) = scanner.scan_message_modules(shared_src:)
   // Should only find msgs, not decoy
   let assert 1 = list.length(modules)
   let assert [m] = modules
@@ -48,11 +48,9 @@ pub fn scan_skips_symlinks_test() {
     )
 
   // Create a symlink pointing back to parent (potential cycle)
-  let assert Ok(Nil) =
-    simplifile.create_symlink("../..", shared_src <> "/loop")
+  let assert Ok(Nil) = simplifile.create_symlink("../..", shared_src <> "/loop")
 
-  let assert Ok(#(modules, _files)) =
-    scanner.scan_message_modules(shared_src:)
+  let assert Ok(#(modules, _files)) = scanner.scan_message_modules(shared_src:)
   let assert 1 = list.length(modules)
 
   // Cleanup
@@ -76,8 +74,7 @@ pub fn scan_populates_module_files_for_all_gleam_files_test() {
       "pub type Payload { Data(Int) }",
     )
 
-  let assert Ok(#(_modules, files)) =
-    scanner.scan_message_modules(shared_src:)
+  let assert Ok(#(_modules, files)) = scanner.scan_message_modules(shared_src:)
   // module_files should contain both files
   let assert 2 = dict.size(files)
 
