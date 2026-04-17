@@ -6,12 +6,12 @@ import libero/wire
 import lustre
 import lustre/effect
 import shared/todos.{
-  type Todo, Create, Delete, NotFound, TitleRequired, TodoParams,
-  TodosLoaded, Toggle,
+  type Todo, Create, Delete, NotFound, TitleRequired, TodoParams, TodosLoaded,
+  Toggle,
 }
 import shared/views.{
   type Model, type Msg, DeleteClicked, GotPush, InputChanged, Model, Submit,
-  ToggleClicked, TodoCreatedMsg, TodoDeletedMsg, TodoToggledMsg, TodosLoadedMsg,
+  TodoCreatedMsg, TodoDeletedMsg, TodoToggledMsg, TodosLoadedMsg, ToggleClicked,
 }
 
 // ---- Init ----
@@ -47,20 +47,29 @@ fn create(title: String) -> effect.Effect(Msg) {
   rpc.send_to_server(
     msg: Create(params: TodoParams(title:)),
     on_response: fn(raw) {
-      TodoCreatedMsg(remote_data.to_remote(raw: raw, format_domain: format_todo_error))
+      TodoCreatedMsg(remote_data.to_remote(
+        raw: raw,
+        format_domain: format_todo_error,
+      ))
     },
   )
 }
 
 fn toggle(id: Int) -> effect.Effect(Msg) {
   rpc.send_to_server(msg: Toggle(id:), on_response: fn(raw) {
-    TodoToggledMsg(remote_data.to_remote(raw: raw, format_domain: format_todo_error))
+    TodoToggledMsg(remote_data.to_remote(
+      raw: raw,
+      format_domain: format_todo_error,
+    ))
   })
 }
 
 fn delete(id: Int) -> effect.Effect(Msg) {
   rpc.send_to_server(msg: Delete(id:), on_response: fn(raw) {
-    TodoDeletedMsg(remote_data.to_remote(raw: raw, format_domain: format_todo_error))
+    TodoDeletedMsg(remote_data.to_remote(
+      raw: raw,
+      format_domain: format_todo_error,
+    ))
   })
 }
 

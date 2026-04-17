@@ -46,7 +46,10 @@ pub fn upgrade(
 }
 
 fn on_init(state: SharedState, topics: List(String), logger: Logger) {
-  fn(_conn: mist.WebsocketConnection) -> #(ConnState, Option(process.Selector(PushMsg))) {
+  fn(_conn: mist.WebsocketConnection) -> #(
+    ConnState,
+    Option(process.Selector(PushMsg)),
+  ) {
     logger.debug("WebSocket: connected")
     list.each(topics, fn(t) { push.join(topic: t) })
     let selector =
