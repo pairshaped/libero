@@ -70,7 +70,6 @@ pub fn update_from_client(
 
 import client/generated/libero/todos as rpc
 import libero/remote_data.{type RemoteData, type RpcFailure, Loading, NotAsked, Success, Failure}
-import libero/remote_data
 import libero/wire
 import shared/todos.{type MsgFromServer, type Todo}
 
@@ -95,7 +94,7 @@ pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
 
 fn load_all() -> Effect(Msg) {
   rpc.send_to_server(msg: todos.LoadAll, on_response: fn(raw) {
-    TodosLoadedMsg(remote_data.to_remote(raw, format_error))
+    TodosLoadedMsg(remote_data.to_remote(raw: raw, format_domain: format_error))
   })
 }
 
