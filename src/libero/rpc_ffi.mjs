@@ -7,6 +7,8 @@
 // registry. Gleam lists are rebuilt as linked lists so `gleam/list`
 // operations work on them.
 
+import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
+
 // ---------- Identity helper (for Gleam FFI) ----------
 
 export function identity(x) {
@@ -94,7 +96,11 @@ function gleamListToArray(list) {
 const utf8Decoder = new TextDecoder();
 
 class ETFDecoder {
-  constructor(input) {
+  // raw=true skips the constructor registry: atoms stay as strings and
+  // tagged tuples stay as plain JS arrays. Used when the typed decoder
+  // will re-interpret the result, so we don't want partial reconstruction
+  // from the global registry first.
+  constructor(input, raw = false) {
     // Accept any of: ArrayBuffer (WebSocket onmessage with binaryType
     // "arraybuffer"), Uint8Array, or a Gleam JS BitArray (which exposes
     // its bytes as `rawBuffer`, a Uint8Array). Normalising here lets the
@@ -115,6 +121,7 @@ class ETFDecoder {
     this.bytes = bytes;
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.offset = 0;
+    this.raw = raw;
   }
 
   decode() {
@@ -229,10 +236,13 @@ class ETFDecoder {
     if (name === "true") return true;
     if (name === "false") return false;
     if (name === "nil" || name === "undefined") return undefined;
-    // 0-arity constructor
-    const Ctor = registry.get(name);
-    if (Ctor) return new Ctor();
-    // Unknown atom - return as string (shouldn't normally happen)
+    // In raw mode, skip registry - return atom as string.
+    if (!this.raw) {
+      // 0-arity constructor
+      const Ctor = registry.get(name);
+      if (Ctor) return new Ctor();
+    }
+    // Unknown atom (or raw mode) - return as string
     return name;
   }
 
@@ -259,17 +269,19 @@ class ETFDecoder {
         return elements;
       }
 
-      // Look up constructor in registry
-      const Ctor = registry.get(atomName);
-      if (Ctor) {
-        const fields = [];
-        for (let i = 1; i < arity; i++) {
-          fields.push(this.decodeTerm());
+      // Look up constructor in registry (skipped in raw mode)
+      if (!this.raw) {
+        const Ctor = registry.get(atomName);
+        if (Ctor) {
+          const fields = [];
+          for (let i = 1; i < arity; i++) {
+            fields.push(this.decodeTerm());
+          }
+          return new Ctor(...fields);
         }
-        return new Ctor(...fields);
       }
 
-      // Unknown atom-tagged tuple - decode remaining and return array
+      // Unknown atom-tagged tuple (or raw mode) - decode remaining and return array
       // Use the atom name as first element (string representation)
       const elements = [atomName];
       for (let i = 1; i < arity; i++) {
@@ -654,6 +666,16 @@ export function decode_value(buffer) {
   return decoder.decode();
 }
 
+// Raw variant of decode_value: skips the constructor registry entirely.
+// Atoms stay as strings and tagged tuples stay as plain JS arrays.
+// Used internally when the typed decoder (decode_msg_from_server) will
+// re-interpret the result - we want the raw structure, not partial
+// reconstruction via the global registry.
+export function decode_value_raw(buffer) {
+  const decoder = new ETFDecoder(buffer, true);
+  return decoder.decode();
+}
+
 // Safe variant of decode_value that returns a Result instead of throwing.
 // Used by the public `libero.wire.decode_safe` function.
 //
@@ -750,12 +772,33 @@ function ensureSocket(url) {
     const payload = bytes.slice(1);
 
     if (tag === 0x01) {
-      // Push frame: payload is ETF-encoded {module, value}
-      const decoded = decode_value(payload);
-      // decoded is a 2-tuple [module, value] in Gleam representation
-      if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
-        const handler = pushHandlers.get(decoded[0]);
-        if (handler) handler(decoded[1]);
+      // Push frame: payload is ETF-encoded {module, MsgFromServer_value}.
+      // If a typed decoder has been registered (by the generated
+      // rpc_decoders_ffi.mjs at module load), decode the raw bytes without
+      // registry reconstruction and pass the result through the typed decoder.
+      // This gives correct type context for nested variant fields instead of
+      // relying on the global constructor registry.
+      // Without a typed decoder (before rpc_decoders_ffi is loaded), fall
+      // back to the registry path so existing behaviour is preserved.
+      const typedDecoder = getMsgFromServerDecoder();
+      let decodedModule, decodedValue;
+      if (typedDecoder) {
+        const raw = decode_value_raw(payload);
+        // raw is a 2-element JS array: [moduleName, rawMsgFromServerTerm]
+        if (raw && raw[0] !== undefined && raw[1] !== undefined) {
+          decodedModule = raw[0];
+          decodedValue = typedDecoder(raw[1]);
+        }
+      } else {
+        const decoded = decode_value(payload);
+        if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
+          decodedModule = decoded[0];
+          decodedValue = decoded[1];
+        }
+      }
+      if (decodedModule !== undefined && decodedValue !== undefined) {
+        const handler = pushHandlers.get(decodedModule);
+        if (handler) handler(decodedValue);
       }
       return;
     }
