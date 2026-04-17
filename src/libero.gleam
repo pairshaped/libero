@@ -1,34 +1,54 @@
-//// Message-type code generator.
+//// Libero v4 framework CLI.
 ////
-//// Scans the shared package source directory (configured via `--shared`)
-//// for modules that export `MsgFromClient` or `MsgFromServer` custom types and
-//// produces server dispatch, client send stubs, wire codec registration,
-//// and atom pre-registration files. See the README for conventions and
-//// usage.
+//// Routes `gleam run -m libero -- <command> [args]` to the appropriate
+//// handler. Falls back to legacy v3 codegen when no known command is given.
 
 import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
+import libero/cli
 import libero/codegen
 import libero/config
 import libero/gen_error
 import libero/scanner
 import libero/walker
 
-// ---------- Entry point ----------
-
 pub fn main() -> Nil {
   let Nil = trap_signals()
-  let config = config.parse_config()
+  case cli.parse_command() {
+    cli.New(name:) -> {
+      io.println("libero new " <> name <> " (not yet implemented)")
+      Nil
+    }
+    cli.Add(name:, target:) -> {
+      io.println("libero add " <> name <> " --target " <> target <> " (not yet implemented)")
+      Nil
+    }
+    cli.Gen -> {
+      io.println("libero gen (not yet implemented)")
+      Nil
+    }
+    cli.Dev -> {
+      io.println("libero dev (not yet implemented)")
+      Nil
+    }
+    cli.Build -> {
+      io.println("libero build (not yet implemented)")
+      Nil
+    }
+    cli.Legacy -> legacy_main()
+  }
+}
 
-  // --shared is required. Libero scans shared message modules for
-  // MsgFromClient/MsgFromServer types.
+/// Original v3 codegen entry point, preserved for backwards compatibility.
+fn legacy_main() -> Nil {
+  let config = config.parse_config()
   case config.shared_src {
     option.Some(shared_src) -> {
       io.println("libero: scanning shared message modules at " <> shared_src)
-      case run(config: config, shared_src: shared_src) {
+      case legacy_run(config: config, shared_src: shared_src) {
         Ok(count) -> {
           io.println(
             "libero: done. processed "
@@ -60,9 +80,7 @@ pub fn main() -> Nil {
   }
 }
 
-/// Scan shared message modules, validate conventions, walk types, and
-/// generate dispatch + client send stubs + register + atoms.
-fn run(
+fn legacy_run(
   config config: config.Config,
   shared_src shared_src: String,
 ) -> Result(Int, List(gen_error.GenError)) {
@@ -80,8 +98,6 @@ fn run(
     message_modules: message_modules,
     server_src: server_src,
   ))
-  // Validate MsgFromServer variants have exactly one field (required
-  // for dispatch envelope unwrap).
   use _ <- result.try(scanner.validate_msg_from_server_fields(message_modules:))
 
   use discovered <- result.try(walker.walk_message_registry_types(
@@ -94,7 +110,6 @@ fn run(
     <> " type variant(s) for registration",
   )
 
-  // Generate server dispatch module.
   use _ <- result.try(
     codegen.write_dispatch(
       message_modules: message_modules,
@@ -103,49 +118,34 @@ fn run(
     )
     |> result.map_error(fn(e) { [e] }),
   )
-
-  // Generate client send stubs.
   use _ <- result.try(codegen.write_send_functions(
     message_modules: message_modules,
     client_generated: config.client_generated,
   ))
-
-  // Generate server push wrappers.
   use _ <- result.try(codegen.write_push_wrappers(
     message_modules: message_modules,
     server_generated: config.server_generated,
   ))
-
-  // Generate server WebSocket handler.
   use _ <- result.try(
     codegen.write_websocket(server_generated: config.server_generated)
     |> result.map_error(fn(e) { [e] }),
   )
-
-  // Generate WebSocket config module.
   use _ <- result.try(
     codegen.write_config(config: config)
     |> result.map_error(fn(e) { [e] }),
   )
-
-  // Generate client-side type registration (gleam + mjs).
   use _ <- result.try(codegen.write_register(
     config: config,
     discovered: discovered,
   ))
-
-  // Generate Erlang atom pre-registration module.
   use _ <- result.try(
     codegen.write_atoms(config: config, discovered: discovered)
     |> result.map_error(fn(e) { [e] }),
   )
-
-  // Generate client-side SSR flags reader.
   use _ <- result.try(
     codegen.write_ssr_flags(client_generated: config.client_generated)
     |> result.map_error(fn(e) { [e] }),
   )
-
   Ok(list.length(message_modules))
 }
 
