@@ -122,6 +122,49 @@ Key patterns:
 - `wire.coerce(raw)` casts a `Dynamic` to a typed value (safe when client/server are built from the same shared types).
 - Push messages arrive via `rpc.update_from_server()` subscription, separate from request/response flow.
 
+## BEAM Clients (CLI, Services, Scripts)
+
+Any BEAM process (Gleam, Erlang, Elixir) can be a Libero client over HTTP with no Libero dependency. The wire format is native ETF, so you just use `term_to_binary`/`binary_to_term`:
+
+```gleam
+// cli/src/cli.gleam
+
+// Call envelope is a tuple: {module_name, MsgFromClient_value}
+let payload = term_to_binary(#("shared/todos", LoadAll))
+
+// POST to the server's /rpc endpoint
+let response = httpc.request(Post, "http://localhost:8080/rpc", payload)
+
+// Response is Result(payload, RpcError) in ETF
+let result: Result(List(Todo), String) = binary_to_term(response.body)
+```
+
+No WebSocket, no generated stubs, no Libero import. The server's `dispatch.handle()` handles both HTTP and WebSocket calls identically. This works for CLI tools, backend services, batch jobs, or any BEAM process that needs to call Libero handlers.
+
+Push (server-initiated messages) is WebSocket-only. HTTP clients only get request/response.
+
+## JavaScript Clients (Non-Lustre)
+
+Libero includes a JavaScript ETF encoder/decoder (`rpc_ffi.mjs`) that the generated Lustre client uses internally. Non-Lustre JS clients (Node, Deno, browser fetch) can use the same codec to call the `/rpc` HTTP endpoint:
+
+```javascript
+// Encode a call envelope: {module_name, MsgFromClient_value}
+const payload = ETFEncoder.encode(["shared/todos", constructLoadAll()]);
+
+// POST to the server
+const response = await fetch("http://localhost:8080/rpc", {
+  method: "POST",
+  body: payload,
+});
+
+// Decode the ETF response: Result(payload, RpcError)
+const result = ETFDecoder.decode(new Uint8Array(await response.arrayBuffer()));
+```
+
+The codec requires constructor registration (so it can reconstruct typed Gleam values from ETF atoms). The generated `rpc_register.gleam`/`.mjs` files handle this for Lustre clients. Non-Lustre JS clients would need equivalent registration for the types they use.
+
+For languages without an ETF library (Python, Ruby, Go, etc.), there is currently no JSON wire format. Non-BEAM, non-JS clients would need a third-party ETF library or a JSON gateway in front of Libero.
+
 ## RemoteData
 
 ```gleam
