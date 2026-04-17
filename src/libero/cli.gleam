@@ -1,7 +1,7 @@
 //// CLI command router for the Libero framework.
 ////
-//// Libero-specific commands: new, add, gen
-//// Everything else proxies to gleam verbatim.
+//// Usage: gleam run -m libero -- <command> [args]
+//// Commands: new, add, gen
 
 import argv
 import gleam/io
@@ -10,8 +10,7 @@ pub type Command {
   New(name: String)
   Add(name: String, target: String)
   Gen
-  /// Forward to gleam with all args passed through.
-  Forward(args: List(String))
+  Unknown
 }
 
 /// Parse CLI arguments into a Command.
@@ -23,11 +22,11 @@ pub fn parse_command() -> Command {
     ["add", name, ..] -> {
       io.println_error("error: --target is required")
       io.println_error(
-        "  Usage: libero add <name> --target <javascript|erlang>",
+        "  Usage: gleam run -m libero -- add <name> --target <javascript|erlang>",
       )
       Add(name:, target: "")
     }
     ["gen", ..] -> Gen
-    _ -> Forward(args:)
+    _ -> Unknown
   }
 }

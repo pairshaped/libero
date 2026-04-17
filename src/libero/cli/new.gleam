@@ -1,13 +1,23 @@
 //// `libero new` — scaffold a new Libero project at the given path.
 
+import gleam/list
+import gleam/result
+import gleam/string
 import libero/cli/templates
 import simplifile
 
-/// Scaffold a new project named `name` under `path`.
+/// Scaffold a new project under `path`.
+///
+/// The project name is derived from the last segment of the path
+/// (e.g. "tmp/test_app" → "test_app").
 ///
 /// Creates the directory tree and writes starter source files so the
 /// project compiles and runs out of the box.
-pub fn scaffold(name name: String, path path: String) -> Result(Nil, String) {
+pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
+  let name =
+    string.split(path, "/")
+    |> list.last
+    |> result.unwrap(path)
   let core_dir = path <> "/src/core"
 
   use _ <- map_err(simplifile.create_directory_all(core_dir))

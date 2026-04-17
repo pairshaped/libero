@@ -3,7 +3,7 @@ import libero/cli/add as cli_add
 import simplifile
 
 pub fn add_javascript_client_test() {
-  let dir = "test/tmp/add_javascript_client_test"
+  let dir = "/tmp/libero_test_add_javascript_client_test"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/libero.toml", "name = \"myapp\"\nport = 8080\n")
@@ -23,7 +23,7 @@ pub fn add_javascript_client_test() {
 }
 
 pub fn add_erlang_client_test() {
-  let dir = "test/tmp/add_erlang_client_test"
+  let dir = "/tmp/libero_test_add_erlang_client_test"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/libero.toml", "name = \"myapp\"\nport = 8080\n")
@@ -43,7 +43,7 @@ pub fn add_erlang_client_test() {
 }
 
 pub fn add_skips_existing_app_test() {
-  let dir = "test/tmp/add_skips_existing_app_test"
+  let dir = "/tmp/libero_test_add_skips_existing_app_test"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/libero.toml", "name = \"myapp\"\nport = 8080\n")

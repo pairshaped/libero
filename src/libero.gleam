@@ -1,7 +1,7 @@
 //// Libero v4 framework CLI.
 ////
-//// Libero-specific commands: new, add, gen
-//// Everything else proxies to gleam verbatim.
+//// Usage: gleam run -m libero -- <command> [args]
+//// Commands: new, add, gen
 
 import gleam/io
 import libero/cli
@@ -37,22 +37,19 @@ pub fn main() -> Nil {
         }
       }
     }
-    cli.Forward(args:) -> {
-      io.println("Not a libero command, forwarding to gleam...")
-      let exit_code = run_gleam(args)
-      let _halt = halt(exit_code)
+    cli.Unknown -> {
+      io.println("Libero — typed RPC framework for Gleam")
+      io.println("")
+      io.println("Usage: gleam run -m libero -- <command>")
+      io.println("")
+      io.println("Commands:")
+      io.println("  new <name>                    Create a new project")
+      io.println("  add <name> --target <target>  Add a client")
+      io.println("  gen                           Regenerate stubs")
       Nil
     }
   }
 }
-
-/// Proxy a command to gleam, passing args verbatim. Returns exit code.
-fn run_gleam(args: List(String)) -> Int {
-  ffi_run_command("gleam", args)
-}
-
-@external(erlang, "libero_cli_ffi", "run_command")
-fn ffi_run_command(command: String, args: List(String)) -> Int
 
 @external(erlang, "erlang", "halt")
 fn halt(code: Int) -> Nil
