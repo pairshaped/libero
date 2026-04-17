@@ -114,26 +114,26 @@ Adds a client to the project:
 - Generates a starter app if the directory is empty (one-time scaffold)
 - Generates typed stubs into `src/clients/<name>/generated/`
 
-### `libero dev`
-
-Development server:
-- Runs codegen (generates stubs for all clients)
-- Starts the server
-- Watches `src/` for changes, rebuilds on change
-
-### `libero build`
-
-Production build:
-- Runs codegen
-- Compiles server (erlang) and all client packages
-- Outputs deployable artifacts
-
 ### `libero gen`
 
-Manual codegen trigger (usually not needed — `dev` and `build` handle it):
+Regenerate stubs after message type changes:
 - Scans `src/core/` for message types
 - Generates stubs into each client's `generated/` directory
-- Generates server dispatch + bootstrap into `build/`
+- Generates server dispatch into `src/core/generated/`
+
+### `libero build`, `libero run`, `libero test`, etc.
+
+All other commands proxy to `gleam` verbatim. Arguments are passed through unchanged:
+
+```
+libero build                    → gleam build
+libero run                      → gleam run
+libero test                     → gleam test
+libero build --target javascript → gleam build --target javascript
+libero deps download            → gleam deps download
+```
+
+The developer uses `libero` as their single CLI. Only `new`, `add`, and `gen` do Libero-specific work. Everything else is `gleam` underneath.
 
 ## Code Generation
 
