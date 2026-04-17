@@ -37,6 +37,11 @@ pub type Config {
     /// generated FFI .mjs file. Depth depends on where the register
     /// files land inside the consumer client package.
     register_relpath_prefix: String,
+    /// Path to the generated rpc_decoders_ffi.mjs file.
+    decoders_ffi_output: String,
+    /// Import path the generated decoders FFI uses to pull from the
+    /// static decoders_prelude.mjs shipped with libero.
+    decoders_prelude_import_path: String,
     shared_src: option.Option(String),
     server_src: option.Option(String),
     server_generated: String,
@@ -138,6 +143,7 @@ pub fn build_config(
     register_gleam_output,
     register_ffi_output,
     register_relpath_prefix,
+    decoders_ffi_output,
   ) = case namespace {
     None -> #(
       "src/server@generated@libero@rpc_atoms.erl",
@@ -146,6 +152,7 @@ pub fn build_config(
       client_root <> "/src/client/generated/libero/rpc_register.gleam",
       client_root <> "/src/client/generated/libero/rpc_register_ffi.mjs",
       "../../../../",
+      client_root <> "/src/client/generated/libero/rpc_decoders_ffi.mjs",
     )
     Some(ns) -> #(
       "src/server@generated@libero@" <> ns <> "@rpc_atoms.erl",
@@ -163,6 +170,10 @@ pub fn build_config(
         <> ns
         <> "/rpc_register_ffi.mjs",
       "../../../../../",
+      client_root
+        <> "/src/client/generated/libero/"
+        <> ns
+        <> "/rpc_decoders_ffi.mjs",
     )
   }
   // Paths derived from --shared and --server flags.
@@ -186,6 +197,8 @@ pub fn build_config(
     None -> client_root <> "/src/client/generated/libero"
     Some(ns) -> client_root <> "/src/client/generated/libero/" <> ns
   }
+  let decoders_prelude_import_path =
+    register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
   Config(
     ws_mode: ws_mode,
     namespace: namespace,
@@ -196,6 +209,8 @@ pub fn build_config(
     register_gleam_output: register_gleam_output,
     register_ffi_output: register_ffi_output,
     register_relpath_prefix: register_relpath_prefix,
+    decoders_ffi_output: decoders_ffi_output,
+    decoders_prelude_import_path: decoders_prelude_import_path,
     shared_src: shared_src,
     server_src: server_src,
     server_generated: server_generated,
