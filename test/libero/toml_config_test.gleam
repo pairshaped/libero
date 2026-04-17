@@ -1,7 +1,9 @@
 //// Tests for the TOML config parser.
 
 import gleam/list
-import libero/toml_config.{type ClientConfig}
+import gleam/option.{Some}
+import libero/config.{WsPathOnly}
+import libero/toml_config.{type ClientConfig, ClientConfig, TomlConfig}
 
 pub fn parse_minimal_toml_test() {
   let toml = "name = \"myapp\"\nport = 3000\n"
@@ -34,4 +36,25 @@ pub fn parse_missing_name_test() {
   let toml = "port = 9090\n"
   let assert Error(msg) = toml_config.parse(toml)
   let assert "missing required field: name" = msg
+}
+
+pub fn to_codegen_config_javascript_client_test() {
+  let toml_cfg = TomlConfig(
+    name: "my_app",
+    port: 3000,
+    rest: False,
+    clients: [ClientConfig(name: "web", target: "javascript")],
+  )
+  let assert Ok(cfg) =
+    toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
+  let assert "src/clients/web/generated" = cfg.client_generated
+  let assert "src/core/generated" = cfg.server_generated
+  let assert Some("src/core") = cfg.shared_src
+  let assert WsPathOnly(path: "/ws") = cfg.ws_mode
+}
+
+pub fn to_codegen_config_missing_client_test() {
+  let toml_cfg = TomlConfig(name: "my_app", port: 3000, rest: False, clients: [])
+  let assert Error("client not found: web") =
+    toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
 }

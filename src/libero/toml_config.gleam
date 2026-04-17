@@ -4,7 +4,10 @@
 
 import gleam/dict
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/result
+import gleam/string
+import libero/config.{type Config, Config, WsPathOnly}
 import tom
 
 // ---------- Types ----------
@@ -41,6 +44,44 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   use clients <- result.try(parse_clients(parsed))
 
   Ok(TomlConfig(name: name, port: port, rest: rest, clients: clients))
+}
+
+/// Convert a `TomlConfig` and client name into the `Config` type used by
+/// the codegen pipeline.
+pub fn to_codegen_config(
+  toml_cfg: TomlConfig,
+  client client_name: String,
+  ws_path ws_path: String,
+) -> Result(Config, String) {
+  use client <- result.try(
+    list.find(toml_cfg.clients, fn(c) { c.name == client_name })
+    |> result.map_error(fn(_) { "client not found: " <> client_name }),
+  )
+  let app = toml_cfg.name
+  let client_generated = "src/clients/" <> client.name <> "/generated"
+  let server_generated = "src/core/generated"
+  let atoms_module = string.replace(app, each: "-", with: "_") <> "@generated@rpc_atoms"
+  let atoms_output = "src/" <> atoms_module <> ".erl"
+  let config_output = client_generated <> "/rpc_config.gleam"
+  let register_gleam_output = client_generated <> "/rpc_register.gleam"
+  let register_ffi_output = client_generated <> "/rpc_register_ffi.mjs"
+  let register_relpath_prefix = "../../../../"
+  let client_root = "src/clients/" <> client.name
+  Ok(Config(
+    ws_mode: WsPathOnly(path: ws_path),
+    namespace: None,
+    client_root: client_root,
+    atoms_output: atoms_output,
+    atoms_module: atoms_module,
+    config_output: config_output,
+    register_gleam_output: register_gleam_output,
+    register_ffi_output: register_ffi_output,
+    register_relpath_prefix: register_relpath_prefix,
+    shared_src: Some("src/core"),
+    server_src: Some("src"),
+    server_generated: server_generated,
+    client_generated: client_generated,
+  ))
 }
 
 // ---------- Private helpers ----------
