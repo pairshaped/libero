@@ -58,7 +58,7 @@ pub fn to_codegen_config(
     |> result.map_error(fn(_) { "client not found: " <> client_name }),
   )
   let app = toml_cfg.name
-  let client_generated = "src/clients/" <> client.name <> "/generated"
+  let client_generated = "clients/" <> client.name <> "/src/generated"
   let server_generated = "src/core/generated"
   let atoms_module = string.replace(app, each: "-", with: "_") <> "@generated@rpc_atoms"
   let atoms_output = "src/" <> atoms_module <> ".erl"
@@ -66,7 +66,7 @@ pub fn to_codegen_config(
   let register_gleam_output = client_generated <> "/rpc_register.gleam"
   let register_ffi_output = client_generated <> "/rpc_register_ffi.mjs"
   let register_relpath_prefix = "../../../../"
-  let client_root = "src/clients/" <> client.name
+  let client_root = "clients/" <> client.name
   Ok(Config(
     ws_mode: WsPathOnly(path: ws_path),
     namespace: None,

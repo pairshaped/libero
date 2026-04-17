@@ -20,6 +20,8 @@ pub fn write_dispatch(
   message_modules message_modules: List(MessageModule),
   server_generated server_generated: String,
   atoms_module atoms_module: String,
+  shared_state_module shared_state_module: String,
+  app_error_module app_error_module: String,
 ) -> Result(Nil, GenError) {
   // Only modules with MsgFromClient need dispatch arms.
   let msg_from_client_modules =
@@ -122,11 +124,11 @@ import gleam/option.{type Option, None, Some}
 import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFunction}
 import libero/trace
 import libero/wire
-import server/app_error.{type AppError" <> case needs_unhandled_import {
+import " <> app_error_module <> ".{type AppError" <> case needs_unhandled_import {
       True -> ", UnhandledMessage"
       False -> ""
     } <> "}
-import server/shared_state.{type SharedState}
+import " <> shared_state_module <> ".{type SharedState}
 " <> string.join(all_imports, "\n") <> "
 
 @external(erlang, \"" <> atoms_module <> "\", \"ensure\")
@@ -305,6 +307,7 @@ pub fn send_to_clients(
 /// Also writes the Erlang FFI for decoding push messages.
 pub fn write_websocket(
   server_generated server_generated: String,
+  shared_state_module shared_state_module: String,
 ) -> Result(Nil, GenError) {
   let gleam_output = server_generated <> "/websocket.gleam"
   let module_path = case string.split_once(server_generated, "src/") {
@@ -329,7 +332,7 @@ import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
 import " <> module_path <> "/dispatch
-import server/shared_state.{type SharedState}
+import " <> shared_state_module <> ".{type SharedState}
 
 pub type ConnState {
   ConnState(state: SharedState, topics: List(String), logger: Logger)

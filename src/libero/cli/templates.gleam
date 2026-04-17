@@ -124,6 +124,33 @@ fn view() -> element.Element(msg) {
 "
 }
 
+/// Returns a gleam.toml for a client package.
+pub fn client_gleam_toml(
+  name name: String,
+  target target: String,
+  root_package root_package: String,
+) -> String {
+  "name = \""
+  <> name
+  <> "\"
+version = \"0.1.0\"
+target = \""
+  <> target
+  <> "\"
+
+[dependencies]
+gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
+"
+  <> root_package
+  <> " = { path = \"../../\" }
+libero = { path = \"../../../libero\" }
+"
+  <> case target {
+    "javascript" -> "lustre = \"~> 5.6\"\n"
+    _ -> ""
+  }
+}
+
 /// Returns a starter CLI main module.
 pub fn starter_cli() -> String {
   "import gleam/io

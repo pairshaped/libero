@@ -56,7 +56,7 @@ pub fn to_codegen_config_javascript_client_test() {
   )
   let assert Ok(cfg) =
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
-  let assert "src/clients/web/generated" = cfg.client_generated
+  let assert "clients/web/src/generated" = cfg.client_generated
   let assert "src/core/generated" = cfg.server_generated
   let assert Some("src/core") = cfg.shared_src
   let assert WsPathOnly(path: "/ws") = cfg.ws_mode

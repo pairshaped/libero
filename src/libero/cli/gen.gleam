@@ -160,6 +160,8 @@ fn run_client_codegen(
       message_modules:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
+      shared_state_module: "core/shared_state",
+      app_error_module: "core/app_error",
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -177,7 +179,10 @@ fn run_client_codegen(
     }),
   )
   use _ <- result.try(
-    codegen.write_websocket(server_generated: config.server_generated)
+    codegen.write_websocket(
+      server_generated: config.server_generated,
+      shared_state_module: "core/shared_state",
+    )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_websocket failed"
