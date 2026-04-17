@@ -8,7 +8,7 @@ import gleam/string
 import libero/config.{type Config, WsFullUrl, WsPathOnly}
 import libero/gen_error.{type GenError, CannotWriteFile}
 import libero/scanner.{type MessageModule}
-import libero/walker.{type DiscoveredVariant}
+import libero/walker.{type DiscoveredType, type DiscoveredVariant}
 import simplifile
 
 // ---------- Server dispatch generator ----------
@@ -447,16 +447,18 @@ decode_push_msg(_) ->
 // ---------- Type registration codegen ----------
 
 /// Write the client-side type registration files (gleam wrapper + mjs FFI).
-/// Uses the pre-discovered variant list instead of walking from function signatures.
+/// Uses the pre-discovered type list instead of walking from function signatures.
 pub fn write_register(
   config config: Config,
-  discovered discovered: List(DiscoveredVariant),
+  discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, List(GenError)) {
+  let variants = list.flat_map(discovered, fn(t) { t.variants })
   use _ <- result.try(
     write_register_gleam(config:) |> result.map_error(fn(e) { [e] }),
   )
   use _ <- result.try(
-    write_register_ffi(config:, discovered:) |> result.map_error(fn(e) { [e] }),
+    write_register_ffi(config:, discovered: variants)
+    |> result.map_error(fn(e) { [e] }),
   )
   Ok(Nil)
 }
@@ -698,7 +700,7 @@ export function resolveWsUrl(path) {
 /// can decode client ETF payloads without rejecting unknown atoms.
 pub fn write_atoms(
   config config: Config,
-  discovered discovered: List(DiscoveredVariant),
+  discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, GenError) {
   // Framework atoms that libero's wire protocol uses. These are always
   // needed regardless of which message modules exist.
@@ -707,7 +709,9 @@ pub fn write_atoms(
     "malformed_request", "unknown_function", "internal_error", "decode_error",
   ]
   // Collect all unique atom names: framework + discovered variants.
-  let discovered_atoms = list.map(discovered, fn(v) { v.atom_name })
+  let discovered_atoms =
+    list.flat_map(discovered, fn(t) { t.variants })
+    |> list.map(fn(v) { v.atom_name })
   let all_atoms =
     list.append(framework_atoms, discovered_atoms)
     |> list.unique

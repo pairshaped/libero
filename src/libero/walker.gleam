@@ -29,6 +29,16 @@ pub type FieldType {
   TypeVar(name: String)
 }
 
+/// A custom type discovered by the walker, grouping all its variants.
+pub type DiscoveredType {
+  DiscoveredType(
+    module_path: String,
+    type_name: String,
+    type_params: List(String),
+    variants: List(DiscoveredVariant),
+  )
+}
+
 /// A single discovered variant to emit as a registerConstructor call.
 pub type DiscoveredVariant {
   DiscoveredVariant(
@@ -69,7 +79,7 @@ type WalkerState {
   WalkerState(
     queue: List(#(String, String)),
     visited: Set(#(String, String)),
-    discovered: List(DiscoveredVariant),
+    discovered: List(DiscoveredType),
     module_files: Dict(String, String),
     parsed_cache: Dict(String, glance.Module),
     errors: List(GenError),
@@ -108,7 +118,7 @@ fn is_primitive_type(name: String) -> Bool {
 pub fn walk_message_registry_types(
   message_modules message_modules: List(MessageModule),
   module_files module_files: Dict(String, String),
-) -> Result(List(DiscoveredVariant), List(GenError)) {
+) -> Result(List(DiscoveredType), List(GenError)) {
   // Seed the work queue from MsgFromClient and MsgFromServer types in each message module.
   // We also need to seed the walk with the MsgFromClient/MsgFromServer type names
   // themselves so their variants get discovered.
@@ -147,7 +157,7 @@ pub fn walk_message_registry_types(
 
 fn do_walk(
   state: WalkerState,
-) -> Result(List(DiscoveredVariant), List(GenError)) {
+) -> Result(List(DiscoveredType), List(GenError)) {
   case state.queue {
     [] ->
       case state.errors {
@@ -176,7 +186,7 @@ fn process_type(
   module_path module_path: String,
   type_name type_name: String,
   state state: WalkerState,
-) -> Result(List(DiscoveredVariant), List(GenError)) {
+) -> Result(List(DiscoveredType), List(GenError)) {
   // Resolve file path - if missing, record error and continue
   case dict.get(state.module_files, module_path) {
     Error(Nil) ->
@@ -196,7 +206,7 @@ fn process_type_file(
   type_name type_name: String,
   file_path file_path: String,
   state state: WalkerState,
-) -> Result(List(DiscoveredVariant), List(GenError)) {
+) -> Result(List(DiscoveredType), List(GenError)) {
   // Parse or load from cache
   case load_ast(module_path:, file_path:, parsed_cache: state.parsed_cache) {
     Error(e) -> do_walk(WalkerState(..state, errors: [e, ..state.errors]))
@@ -215,7 +225,7 @@ fn process_type_ast(
   type_name type_name: String,
   ast ast: glance.Module,
   state state: WalkerState,
-) -> Result(List(DiscoveredVariant), List(GenError)) {
+) -> Result(List(DiscoveredType), List(GenError)) {
   // Check type alias - skip silently
   let is_alias =
     list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
@@ -233,7 +243,7 @@ fn process_type_ast(
       let custom_type = ct_def.definition
       let resolver = build_type_resolver(ast.imports)
       // Collect variants and field type refs
-      let #(new_discovered_rev, new_queue_items_rev) =
+      let #(variants_rev, new_queue_items_rev) =
         list.fold(custom_type.variants, #([], []), fn(acc, variant) {
           let #(disc_acc, queue_acc) = acc
           let float_indices = detect_float_fields(variant.fields)
@@ -262,14 +272,19 @@ fn process_type_ast(
             )
           #([disc_item, ..disc_acc], list.append(field_refs, queue_acc))
         })
-      let new_discovered =
-        list.append(state.discovered, list.reverse(new_discovered_rev))
+      let discovered_type =
+        DiscoveredType(
+          module_path: module_path,
+          type_name: type_name,
+          type_params: custom_type.parameters,
+          variants: list.reverse(variants_rev),
+        )
       let new_queue_items = list.reverse(new_queue_items_rev)
       do_walk(
         WalkerState(
           ..state,
           queue: list.append(state.queue, new_queue_items),
-          discovered: new_discovered,
+          discovered: list.append(state.discovered, [discovered_type]),
         ),
       )
     }

@@ -33,7 +33,9 @@ pub fn walk_and_write_dispatch_atoms_test() {
   let assert True = string.contains(dispatch, "test@rpc_atoms")
 
   // Verify discovered variants include MsgFromClient and MsgFromServer constructors
-  let variant_names = list.map(discovered, fn(v) { v.variant_name })
+  let variant_names =
+    list.flat_map(discovered, fn(t) { t.variants })
+    |> list.map(fn(v) { v.variant_name })
 
   // MsgFromClient variants
   let assert True = list.contains(variant_names, "Create")
