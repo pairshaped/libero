@@ -26,8 +26,8 @@ pub fn walk_and_write_dispatch_atoms_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "test@rpc_atoms",
-      shared_state_module: "server/shared_state",
-      app_error_module: "server/app_error",
+      shared_state_module: "core/shared_state",
+      app_error_module: "core/app_error",
     )
   let assert Ok(dispatch) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -35,7 +35,9 @@ pub fn walk_and_write_dispatch_atoms_test() {
   let assert True = string.contains(dispatch, "test@rpc_atoms")
 
   // Verify discovered variants include MsgFromClient and MsgFromServer constructors
-  let variant_names = list.map(discovered, fn(v) { v.variant_name })
+  let variant_names =
+    list.flat_map(discovered, fn(t) { t.variants })
+    |> list.map(fn(v) { v.variant_name })
 
   // MsgFromClient variants
   let assert True = list.contains(variant_names, "Create")

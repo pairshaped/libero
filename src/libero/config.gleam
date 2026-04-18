@@ -31,12 +31,17 @@ pub type Config {
     /// path-to-module convention (@ separators).
     atoms_module: String,
     config_output: String,
-    register_gleam_output: String,
-    register_ffi_output: String,
     /// Bundle-relative prefix that prepends every import in the
-    /// generated FFI .mjs file. Depth depends on where the register
+    /// generated FFI .mjs file. Depth depends on where the decoder
     /// files land inside the consumer client package.
     register_relpath_prefix: String,
+    /// Path to the generated rpc_decoders_ffi.mjs file.
+    decoders_ffi_output: String,
+    /// Path to the generated rpc_decoders.gleam wrapper file.
+    decoders_gleam_output: String,
+    /// Import path the generated decoders FFI uses to pull from the
+    /// static decoders_prelude.mjs shipped with libero.
+    decoders_prelude_import_path: String,
     shared_src: option.Option(String),
     server_src: option.Option(String),
     server_generated: String,
@@ -126,8 +131,8 @@ pub fn build_config(
   shared_root shared_root: Result(String, Nil),
   server_root server_root: Result(String, Nil),
 ) -> Config {
-  // In the final JS bundle, registration files land at:
-  //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_register_ffi.mjs
+  // In the final JS bundle, decoder files land at:
+  //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_decoders_ffi.mjs
   // So from the ffi file's directory, the bundle root is:
   //   - 4 levels up for no-namespace (client_pkg/client/generated/libero/)
   //   - 5 levels up for namespaced  (client_pkg/client/generated/libero/<ns>/)
@@ -135,17 +140,17 @@ pub fn build_config(
     atoms_output,
     atoms_module,
     config_output,
-    register_gleam_output,
-    register_ffi_output,
     register_relpath_prefix,
+    decoders_ffi_output,
+    decoders_gleam_output,
   ) = case namespace {
     None -> #(
       "src/server@generated@libero@rpc_atoms.erl",
       "server@generated@libero@rpc_atoms",
       client_root <> "/src/client/generated/libero/rpc_config.gleam",
-      client_root <> "/src/client/generated/libero/rpc_register.gleam",
-      client_root <> "/src/client/generated/libero/rpc_register_ffi.mjs",
       "../../../../",
+      client_root <> "/src/client/generated/libero/rpc_decoders_ffi.mjs",
+      client_root <> "/src/client/generated/libero/rpc_decoders.gleam",
     )
     Some(ns) -> #(
       "src/server@generated@libero@" <> ns <> "@rpc_atoms.erl",
@@ -154,15 +159,15 @@ pub fn build_config(
         <> "/src/client/generated/libero/"
         <> ns
         <> "/rpc_config.gleam",
-      client_root
-        <> "/src/client/generated/libero/"
-        <> ns
-        <> "/rpc_register.gleam",
-      client_root
-        <> "/src/client/generated/libero/"
-        <> ns
-        <> "/rpc_register_ffi.mjs",
       "../../../../../",
+      client_root
+        <> "/src/client/generated/libero/"
+        <> ns
+        <> "/rpc_decoders_ffi.mjs",
+      client_root
+        <> "/src/client/generated/libero/"
+        <> ns
+        <> "/rpc_decoders.gleam",
     )
   }
   // Paths derived from --shared and --server flags.
@@ -186,6 +191,8 @@ pub fn build_config(
     None -> client_root <> "/src/client/generated/libero"
     Some(ns) -> client_root <> "/src/client/generated/libero/" <> ns
   }
+  let decoders_prelude_import_path =
+    register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
   Config(
     ws_mode: ws_mode,
     namespace: namespace,
@@ -193,9 +200,10 @@ pub fn build_config(
     atoms_output: atoms_output,
     atoms_module: atoms_module,
     config_output: config_output,
-    register_gleam_output: register_gleam_output,
-    register_ffi_output: register_ffi_output,
     register_relpath_prefix: register_relpath_prefix,
+    decoders_ffi_output: decoders_ffi_output,
+    decoders_gleam_output: decoders_gleam_output,
+    decoders_prelude_import_path: decoders_prelude_import_path,
     shared_src: shared_src,
     server_src: server_src,
     server_generated: server_generated,

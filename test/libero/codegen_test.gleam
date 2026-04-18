@@ -14,7 +14,7 @@ pub fn dispatch_contains_state_threading_test() {
       file_path: "examples/todos/src/core/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: ["server/store"],
+      handler_modules: ["core/handler"],
     ),
   ]
   let output_dir = "build/.test_codegen_dispatch"
@@ -23,8 +23,8 @@ pub fn dispatch_contains_state_threading_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "server@generated@libero@rpc_atoms",
-      shared_state_module: "server/shared_state",
-      app_error_module: "server/app_error",
+      shared_state_module: "core/shared_state",
+      app_error_module: "core/app_error",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -35,10 +35,10 @@ pub fn dispatch_contains_state_threading_test() {
   let assert True = string.contains(content, "ensure_atoms()")
   // Must import discovered handler module with alias
   let assert True =
-    string.contains(content, "import server/store as server_store_handler")
+    string.contains(content, "import core/handler as core_handler_handler")
   // Must use alias in dispatch call
   let assert True =
-    string.contains(content, "server_store_handler.update_from_client")
+    string.contains(content, "core_handler_handler.update_from_client")
   // Must thread state to dispatch
   let assert True = string.contains(content, "dispatch(state, fn()")
   // Must have atoms external
@@ -67,16 +67,17 @@ pub fn send_function_contains_module_path_test() {
   let assert True = string.contains(content, "module: \"core/messages\"")
   // Must import rpc
   let assert True = string.contains(content, "import libero/rpc")
-  // Must import rpc_register for auto-registration
-  let assert True = string.contains(content, "rpc_register")
-  // Must call register_all before send
-  let assert True = string.contains(content, "rpc_register.register_all()")
+  // Must import rpc_decoders so the typed decoder FFI side-effect runs on load
+  let assert True = string.contains(content, "rpc_decoders")
+  // Must reference decode_msg_from_server to prevent import stripping
+  let assert True =
+    string.contains(content, "rpc_decoders.decode_msg_from_server")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
-pub fn register_ffi_contains_framework_types_test() {
+pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert Ok(#(modules, module_files)) =
     scanner.scan_message_modules(shared_src: "examples/todos/src/core")
   let assert Ok(discovered) =
@@ -88,52 +89,34 @@ pub fn register_ffi_contains_framework_types_test() {
     config.build_config(
       ws_mode: config.WsFullUrl(url: "ws://localhost:8080/ws"),
       namespace: option.None,
-      client_root: "build/.test_register_ffi",
+      client_root: "build/.test_decoders_ffi",
       shared_root: Ok("../shared"),
       server_root: Ok("."),
     )
   let assert Ok(Nil) =
-    codegen.write_register(config: config, discovered: discovered)
+    codegen.write_decoders_ffi(config: config, discovered: discovered)
   let assert Ok(content) =
     simplifile.read(
-      "build/.test_register_ffi/src/client/generated/libero/rpc_register_ffi.mjs",
+      "build/.test_decoders_ffi/src/client/generated/libero/rpc_decoders_ffi.mjs",
     )
 
-  // Must import framework setter functions
+  // Must import stdlib constructors
+  let assert True = string.contains(content, "Ok, Error as ResultError")
+  let assert True = string.contains(content, "Empty, NonEmpty")
+  let assert True = string.contains(content, "gleam_stdlib/gleam.mjs")
+  let assert True = string.contains(content, "Some, None")
+  let assert True = string.contains(content, "gleam_stdlib/gleam/option.mjs")
+
+  // Must import the three setters from decoders_prelude
+  let assert True = string.contains(content, "setResultCtors")
+  let assert True = string.contains(content, "setOptionCtors")
   let assert True = string.contains(content, "setListCtors")
-  let assert True = string.contains(content, "setDictFromList")
-  let assert True = string.contains(content, "setGleamCustomType")
 
-  // Must import from gleam prelude
-  let assert True = string.contains(content, "gleam.mjs")
-  // Must import from libero/wire (DecodeError)
-  let assert True = string.contains(content, "wire.mjs")
-  // Must import from libero/error
-  let assert True = string.contains(content, "error.mjs")
-  // Must import from gleam_stdlib/gleam/option
-  let assert True = string.contains(content, "option.mjs")
-  // Must import from gleam_stdlib/gleam/dict
-  let assert True = string.contains(content, "dict.mjs")
-
-  // Must register Ok/Error
-  let assert True = string.contains(content, "registerConstructor(\"ok\"")
-  let assert True = string.contains(content, "registerConstructor(\"error\"")
-  // Must register Some/None
-  let assert True = string.contains(content, "registerConstructor(\"some\"")
-  let assert True = string.contains(content, "registerConstructor(\"none\"")
-  // Must register DecodeError
-  let assert True =
-    string.contains(content, "registerConstructor(\"decode_error\"")
-  // Must register framework error variants
-  let assert True =
-    string.contains(content, "registerConstructor(\"app_error\"")
-  let assert True =
-    string.contains(content, "registerConstructor(\"malformed_request\"")
-  let assert True =
-    string.contains(content, "registerConstructor(\"unknown_function\"")
-  let assert True =
-    string.contains(content, "registerConstructor(\"internal_error\"")
+  // Must call setters at module load time
+  let assert True = string.contains(content, "setResultCtors(Ok, ResultError)")
+  let assert True = string.contains(content, "setOptionCtors(Some, None)")
+  let assert True = string.contains(content, "setListCtors(Empty, NonEmpty)")
 
   // Cleanup
-  let assert Ok(Nil) = simplifile.delete_all(["build/.test_register_ffi"])
+  let assert Ok(Nil) = simplifile.delete_all(["build/.test_decoders_ffi"])
 }

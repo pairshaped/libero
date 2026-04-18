@@ -12,7 +12,7 @@ import libero/codegen
 import libero/gen_error
 import libero/scanner
 import libero/toml_config
-import libero/walker
+import libero/walker.{type DiscoveredType}
 import simplifile
 
 /// Run the `gen` command from the given project path (usually `"."`).
@@ -144,7 +144,7 @@ fn run_client_codegen(
   toml_cfg toml_cfg: toml_config.TomlConfig,
   client client: toml_config.ClientConfig,
   message_modules message_modules: List(scanner.MessageModule),
-  discovered discovered: List(walker.DiscoveredVariant),
+  discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, String) {
   io.println("libero: generating stubs for client: " <> client.name)
 
@@ -237,10 +237,17 @@ fn run_client_codegen(
     }),
   )
   use _ <- result.try(
-    codegen.write_register(config:, discovered:)
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "write_register failed"
+    codegen.write_decoders_gleam(config:)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_decoders_gleam failed"
+    }),
+  )
+  use _ <- result.try(
+    codegen.write_decoders_ffi(config:, discovered:)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_decoders_ffi failed"
     }),
   )
   use _ <- result.try(

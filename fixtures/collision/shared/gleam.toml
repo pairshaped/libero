@@ -1,0 +1,5 @@
+name = "collision_fixture"
+version = "0.0.0"
+
+[dependencies]
+gleam_stdlib = ">= 0.52.0"

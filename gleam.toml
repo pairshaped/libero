@@ -45,6 +45,19 @@ unused_exports = "off"
   "unnecessary_string_concatenation",
   "label_possible",
 ]
+"src/libero/codegen.gleam" = [
+  "unnecessary_string_concatenation",
+  "label_possible",
+  "thrown_away_error",
+  "deep_nesting",
+]
+"src/libero/remote_data.gleam" = [
+  "discarded_result",
+  "avoid_panic",
+]
+"src/libero/walker.gleam" = [
+  "deep_nesting",
+]
 "src/libero/trace.gleam" = [
   # try_call catches arbitrary Erlang panics from the runtime. The
   # reason comes back as a stringified diagnostic - there's no

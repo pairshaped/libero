@@ -131,21 +131,6 @@ pub fn tag_push(module module: String, msg msg: a) -> BitArray {
   <<1, data:bits>>
 }
 
-// ---------- MsgFromServer envelope unwrap (server-only) ----------
-
-/// Strip the `MsgFromServer` envelope from a dispatch response. Generated
-/// dispatch code calls this so the wire response is the payload directly
-/// (`Result(payload, RpcError)`) rather than the wrapped variant
-/// (`Result(MsgFromServer.SomeVariant(payload), RpcError)`). The client
-/// pairs response→request via FIFO matching, so the variant tag is
-/// redundant on the response path. Push messages take a different code
-/// path that keeps the envelope.
-@external(erlang, "libero_ffi", "unwrap_msg_from_server")
-pub fn unwrap_response(value: a) -> Dynamic {
-  let _ = value
-  panic as "libero/wire.unwrap_response is server-only, unreachable on JavaScript"
-}
-
 // ---------- Coerce ----------
 
 /// Cast a Dynamic value to any type.
