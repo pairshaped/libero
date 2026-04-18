@@ -4,14 +4,16 @@
 // Eliminates the global constructor registry - each decoder knows
 // exactly which module's constructor to instantiate.
 
-import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array, decode_nil, decode_list_of, decode_option_of, decode_result_of, decode_dict_of, decode_tuple_of, DecodeError, setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors } from "../../../../libero/libero/decoders_prelude.mjs";
+import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array, decode_nil, decode_list_of, decode_option_of, decode_result_of, decode_dict_of, decode_tuple_of, DecodeError, setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors, setDictFromList } from "../../../../libero/libero/decoders_prelude.mjs";
 import { Ok, Error as ResultError, Empty, NonEmpty } from "../../../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../../../gleam_stdlib/gleam/option.mjs";
+import { from_list as dictFromList } from "../../../../gleam_stdlib/gleam/dict.mjs";
 import * as _m_core_messages from "../../../../core/core/messages.mjs";
 
 setResultCtors(Ok, ResultError);
 setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
+setDictFromList(dictFromList);
 
 export function decode_core_messages_todo(term) {
   return new _m_core_messages.Todo(

@@ -5,11 +5,9 @@ import core/messages.{
   Toggle,
 }
 import core/shared_state.{type SharedState}
+import ets_store
 
 /// Handle RPC messages from clients.
-///
-/// This example returns static responses. A real app would use ETS
-/// or a database for persistence.
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
@@ -19,12 +17,29 @@ pub fn update_from_client(
       case params.title {
         "" -> Ok(#(TodoCreated(Error(TitleRequired)), state))
         title -> {
-          let item = Todo(id: 1, title:, completed: False)
+          let id = ets_store.next_id()
+          let item = Todo(id:, title:, completed: False)
+          ets_store.insert(id, item)
           Ok(#(TodoCreated(Ok(item)), state))
         }
       }
-    Toggle(id: _id) -> Ok(#(TodoToggled(Error(NotFound)), state))
-    Delete(id: _id) -> Ok(#(TodoDeleted(Error(NotFound)), state))
-    LoadAll -> Ok(#(TodosLoaded(Ok([])), state))
+    Toggle(id:) ->
+      case ets_store.lookup(id) {
+        Error(Nil) -> Ok(#(TodoToggled(Error(NotFound)), state))
+        Ok(item) -> {
+          let toggled = Todo(..item, completed: !item.completed)
+          ets_store.insert(id, toggled)
+          Ok(#(TodoToggled(Ok(toggled)), state))
+        }
+      }
+    Delete(id:) ->
+      case ets_store.lookup(id) {
+        Error(Nil) -> Ok(#(TodoDeleted(Error(NotFound)), state))
+        Ok(_) -> {
+          ets_store.delete(id)
+          Ok(#(TodoDeleted(Ok(id)), state))
+        }
+      }
+    LoadAll -> Ok(#(TodosLoaded(Ok(ets_store.all())), state))
   }
 }
