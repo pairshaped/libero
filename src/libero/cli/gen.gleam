@@ -150,7 +150,7 @@ fn run_client_codegen(
 
   // Convert TomlConfig to codegen Config for this client
   use config <- result.try(
-    toml_config.to_codegen_config(toml_cfg, client: client.name, ws_path: "/ws"),
+    toml_config.to_codegen_config(toml_cfg:, client: client.name, ws_path: "/ws"),
   )
 
   // Ensure generated directories exist

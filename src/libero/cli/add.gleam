@@ -60,9 +60,8 @@ pub fn add_client(
     False -> {
       let addition =
         "\n[libero.clients." <> name <> "]\ntarget = \"" <> target <> "\"\n"
-      map_err(simplifile.append(path <> "/gleam.toml", addition), fn(_) {
-        Ok(Nil)
-      })
+      use _ <- map_err(simplifile.append(path <> "/gleam.toml", addition))
+      Ok(Nil)
     }
   }
 }

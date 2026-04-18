@@ -49,7 +49,7 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
 /// Convert a `TomlConfig` and client name into the `Config` type used by
 /// the codegen pipeline.
 pub fn to_codegen_config(
-  toml_cfg: TomlConfig,
+  toml_cfg toml_cfg: TomlConfig,
   client client_name: String,
   ws_path ws_path: String,
 ) -> Result(Config, String) {
