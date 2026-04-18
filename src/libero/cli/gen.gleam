@@ -48,10 +48,10 @@ fn run_with_clients(
   toml_cfg toml_cfg: toml_config.TomlConfig,
   clients clients: List(toml_config.ClientConfig),
 ) -> Result(Nil, String) {
-  let shared_src = project_path <> "/src/core"
-  let server_src = project_path <> "/src"
+  let shared_src = project_path <> "/" <> toml_cfg.shared_src_dir
+  let server_src = project_path <> "/" <> toml_cfg.server_src_dir
 
-  // 4. Scan src/core/ for message modules
+  // 4. Scan shared src dir for message modules
   use #(message_modules, module_files) <- result.try(
     scanner.scan_message_modules(shared_src: shared_src)
     |> result.map_error(fn(errors) {
@@ -63,16 +63,34 @@ fn run_with_clients(
   io.println(
     "libero: found "
     <> int.to_string(list.length(message_modules))
-    <> " message module(s) in src/core/",
+    <> " message module(s) in "
+    <> toml_cfg.shared_src_dir,
   )
 
   // 5. Validate conventions
+  //
+  // shared_state and app_error can live in either the shared or server src.
+  // If both exist, the server copy takes precedence (matches how Gleam's
+  // within-package vs cross-package imports resolve).
+  let shared_state_path = case
+    simplifile.is_file(server_src <> "/shared_state.gleam")
+  {
+    Ok(True) -> server_src <> "/shared_state.gleam"
+    _ -> shared_src <> "/shared_state.gleam"
+  }
+  let app_error_path = case
+    simplifile.is_file(server_src <> "/app_error.gleam")
+  {
+    Ok(True) -> server_src <> "/app_error.gleam"
+    _ -> shared_src <> "/app_error.gleam"
+  }
+
   use message_modules <- result.try(
     scanner.validate_conventions(
       message_modules: message_modules,
       server_src: server_src,
-      shared_state_path: shared_src <> "/shared_state.gleam",
-      app_error_path: shared_src <> "/app_error.gleam",
+      shared_state_path: shared_state_path,
+      app_error_path: app_error_path,
     )
     |> result.map_error(fn(errors) {
       list.each(errors, gen_error.print_error)
@@ -127,8 +145,8 @@ fn run_with_clients(
     codegen.write_main(
       app_name: toml_cfg.name,
       port: toml_cfg.port,
-      server_generated: "src/core/generated",
-      shared_state_module: "core/shared_state",
+      server_generated: toml_cfg.server_generated_dir,
+      shared_state_module: toml_cfg.shared_state_module,
       js_client_names:,
     )
     |> result.map_error(fn(err) {
@@ -185,8 +203,8 @@ fn run_client_codegen(
       message_modules:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
-      shared_state_module: "core/shared_state",
-      app_error_module: "core/app_error",
+      shared_state_module: toml_cfg.shared_state_module,
+      app_error_module: toml_cfg.app_error_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -206,7 +224,7 @@ fn run_client_codegen(
   use _ <- result.try(
     codegen.write_websocket(
       server_generated: config.server_generated,
-      shared_state_module: "core/shared_state",
+      shared_state_module: toml_cfg.shared_state_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
