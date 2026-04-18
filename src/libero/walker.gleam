@@ -466,20 +466,28 @@ fn field_type_of(
         option.None, "Bool", [] -> BoolField
         option.None, "BitArray", [] -> BitArrayField
         option.None, "Nil", [] -> NilField
-        // List
-        option.None, "List", [elem] ->
+        // List (unqualified or qualified)
+        option.None, "List", [elem]
+        | option.Some("gleam"), "List", [elem]
+        ->
           ListOf(field_type_of(t: elem, resolver:, current_module:))
-        // Option (gleam/option)
-        option.None, "Option", [inner] ->
+        // Option (unqualified or qualified as option.Option)
+        option.None, "Option", [inner]
+        | option.Some("option"), "Option", [inner]
+        ->
           OptionOf(field_type_of(t: inner, resolver:, current_module:))
-        // Result
-        option.None, "Result", [ok, err] ->
+        // Result (unqualified or qualified as result.Result)
+        option.None, "Result", [ok, err]
+        | option.Some("result"), "Result", [ok, err]
+        ->
           ResultOf(
             ok: field_type_of(t: ok, resolver:, current_module:),
             err: field_type_of(t: err, resolver:, current_module:),
           )
-        // Dict
-        option.None, "Dict", [key, value] ->
+        // Dict (unqualified or qualified as dict.Dict)
+        option.None, "Dict", [key, value]
+        | option.Some("dict"), "Dict", [key, value]
+        ->
           DictOf(
             key: field_type_of(t: key, resolver:, current_module:),
             value: field_type_of(t: value, resolver:, current_module:),

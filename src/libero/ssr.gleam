@@ -31,10 +31,12 @@ pub fn call(
   let #(response_bytes, _, _) = handle(state, data)
   case response_bytes {
     <<_tag, etf:bytes>> -> {
-      let decoded = wire.decode(etf)
+      // dispatch encodes Ok(MsgFromServer_variant) or Error(RpcError).
+      // wire.decode returns the Gleam value directly via coerce.
+      let decoded: Result(payload, _) = wire.decode(etf)
       case decoded {
-        Ok(Ok(payload)) -> Ok(payload)
-        _ -> Error(DispatchError)
+        Ok(payload) -> Ok(payload)
+        Error(_) -> Error(DispatchError)
       }
     }
     _ -> Error(BadResponse)

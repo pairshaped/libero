@@ -288,8 +288,8 @@ class ETFDecoder {
       const val = this.decodeTerm();
       pairs.push([key, val]);
     }
-    const pairsList = this.raw ? pairs : arrayToGleamList(pairs);
-    return dictFromList(pairsList);
+    if (this.raw) return pairs;
+    return dictFromList(arrayToGleamList(pairs));
   }
 }
 
@@ -620,6 +620,16 @@ export function decode_value_raw(buffer) {
   return decoder.decode();
 }
 
+// Gleam's wire.DecodeError(message) custom type.
+// Must extend CustomType so Gleam pattern matching works.
+class WireDecodeError extends CustomType {
+  constructor(message) {
+    super();
+    this.message = message;
+    this[0] = message;
+  }
+}
+
 // Safe variant of decode_value that returns a Result instead of throwing.
 // Used by the public `libero.wire.decode_safe` function.
 export function decode_safe(buffer) {
@@ -629,7 +639,7 @@ export function decode_safe(buffer) {
     return new Ok(value);
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    return new ResultError({ type: "DecodeError", 0: msg });
+    return new ResultError(new WireDecodeError(msg));
   }
 }
 

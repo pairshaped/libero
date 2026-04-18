@@ -14,7 +14,7 @@ pg_join(Topic) ->
     nil.
 
 pg_leave(Topic) ->
-    ok = pg:leave(?SCOPE, Topic, self()),
+    _ = pg:leave(?SCOPE, Topic, self()),
     nil.
 
 pg_send(Topic, Frame) ->

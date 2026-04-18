@@ -18,8 +18,23 @@ pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
     string.split(path, "/")
     |> list.last
     |> result.unwrap(path)
-  let core_dir = path <> "/src/core"
 
+  // Abort if the project already exists
+  case simplifile.is_file(path <> "/gleam.toml") {
+    Ok(True) ->
+      Error("project already exists at " <> path <> " (gleam.toml found)")
+    _ -> {
+      let core_dir = path <> "/src/core"
+      scaffold_files(name:, path:, core_dir:)
+    }
+  }
+}
+
+fn scaffold_files(
+  name name: String,
+  path path: String,
+  core_dir core_dir: String,
+) -> Result(Nil, String) {
   use _ <- map_err(simplifile.create_directory_all(core_dir))
   // TODO: detect libero path from current project or use hex version once published
   let libero_path = "../libero"

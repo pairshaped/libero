@@ -86,6 +86,10 @@ unused_exports = "off"
 ]
 # v4 CLI modules use String errors for simplicity — these are CLI
 # tools where structured error types add overhead without benefit.
+"src/libero/ssr.gleam" = [
+  # ssr.call maps wire-level errors to the opaque SsrError type
+  "thrown_away_error",
+]
 "src/libero/cli/new.gleam" = ["stringly_typed_error", "label_possible"]
 "src/libero/cli/add.gleam" = ["stringly_typed_error", "label_possible", "thrown_away_error"]
 "src/libero/cli/gen.gleam" = ["stringly_typed_error", "discarded_result"]
