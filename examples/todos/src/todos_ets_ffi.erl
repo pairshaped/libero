@@ -28,5 +28,7 @@ delete(Id) ->
 all() ->
     [V || {_, V} <- ets:tab2list(todos)].
 
+%% Simple auto-increment. Not safe under concurrent writes —
+%% use ets:update_counter/3 with a dedicated counter key for production.
 next_id() ->
     ets:info(todos, size) + 1.

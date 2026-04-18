@@ -462,7 +462,7 @@ pub fn decode_msg_from_server(raw: Dynamic) -> Dynamic
 /// so tests can assert on the output without filesystem I/O.
 pub fn emit_typed_decoders(discovered: List(DiscoveredType)) -> String {
   let type_decoders =
-    list.map(discovered, fn(t) { emit_type_decoder(t, discovered) })
+    list.map(discovered, fn(t) { emit_type_decoder(t) })
   let entry = emit_msg_from_server_decoder(discovered)
   let parts = list.filter([string.join(type_decoders, "\n\n"), entry], fn(s) {
     s != ""
@@ -586,19 +586,19 @@ fn all_variants_zero_arity(variants: List(DiscoveredVariant)) -> Bool {
 }
 
 /// Emit one JS decoder function for a discovered type.
-fn emit_type_decoder(t: DiscoveredType, all: List(DiscoveredType)) -> String {
+fn emit_type_decoder(t: DiscoveredType) -> String {
   let fn_name = decoder_fn_name(t.module_path, t.type_name)
   let body = case t.variants {
     [] -> "  throw new DecodeError(\"empty type\");"
     [single] ->
       case single.fields {
         [] -> emit_enum_decoder(t.variants)
-        _ -> emit_record_decoder(single, all)
+        _ -> emit_record_decoder(single)
       }
     variants ->
       case all_variants_zero_arity(variants) {
         True -> emit_enum_decoder(variants)
-        False -> emit_tagged_union_decoder(variants, all)
+        False -> emit_tagged_union_decoder(variants)
       }
   }
   "export function " <> fn_name <> "(term) {\n" <> body <> "\n}"
@@ -623,11 +623,10 @@ fn emit_enum_decoder(variants: List(DiscoveredVariant)) -> String {
 /// Emit the body of a single-variant record decoder.
 fn emit_record_decoder(
   variant: DiscoveredVariant,
-  all: List(DiscoveredType),
 ) -> String {
   let field_lines =
     list.index_map(variant.fields, fn(ft, i) {
-      "    " <> field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]", all)
+      "    " <> field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]")
     })
   "  return new _m_"
   <> module_alias(variant.module_path)
@@ -641,7 +640,6 @@ fn emit_record_decoder(
 /// Emit the body of a multi-variant tagged union decoder.
 fn emit_tagged_union_decoder(
   variants: List(DiscoveredVariant),
-  all: List(DiscoveredType),
 ) -> String {
   let arms =
     list.map(variants, fn(v) {
@@ -660,7 +658,6 @@ fn emit_tagged_union_decoder(
               field_decoder_call(
                 ft,
                 "term[" <> int.to_string(i + 1) <> "]",
-                all,
               )
             })
           "    case \""
@@ -686,7 +683,6 @@ fn emit_tagged_union_decoder(
 fn field_decoder_call(
   ft: walker.FieldType,
   term_expr: String,
-  all: List(DiscoveredType),
 ) -> String {
   case ft {
     walker.IntField -> "decode_int(" <> term_expr <> ")"
@@ -697,35 +693,35 @@ fn field_decoder_call(
     walker.NilField -> "decode_nil(" <> term_expr <> ")"
     walker.ListOf(inner) ->
       "decode_list_of((t) => "
-      <> field_decoder_call(inner, "t", all)
+      <> field_decoder_call(inner, "t")
       <> ", "
       <> term_expr
       <> ")"
     walker.OptionOf(inner) ->
       "decode_option_of((t) => "
-      <> field_decoder_call(inner, "t", all)
+      <> field_decoder_call(inner, "t")
       <> ", "
       <> term_expr
       <> ")"
     walker.ResultOf(ok, err) ->
       "decode_result_of((t) => "
-      <> field_decoder_call(ok, "t", all)
+      <> field_decoder_call(ok, "t")
       <> ", (t) => "
-      <> field_decoder_call(err, "t", all)
+      <> field_decoder_call(err, "t")
       <> ", "
       <> term_expr
       <> ")"
     walker.DictOf(k, v) ->
       "decode_dict_of((t) => "
-      <> field_decoder_call(k, "t", all)
+      <> field_decoder_call(k, "t")
       <> ", (t) => "
-      <> field_decoder_call(v, "t", all)
+      <> field_decoder_call(v, "t")
       <> ", "
       <> term_expr
       <> ")"
     walker.TupleOf(elems) -> {
       let decoders =
-        list.map(elems, fn(e) { "(t) => " <> field_decoder_call(e, "t", all) })
+        list.map(elems, fn(e) { "(t) => " <> field_decoder_call(e, "t") })
       "decode_tuple_of(["
       <> string.join(decoders, ", ")
       <> "], "
@@ -765,7 +761,6 @@ fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
                   field_decoder_call(
                     ft,
                     "term[" <> int.to_string(i + 1) <> "]",
-                    discovered,
                   )
                 })
               "    case \""
@@ -1020,7 +1015,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/string
 import libero/push
 import libero/ws_logger
@@ -1038,6 +1033,7 @@ import "
 pub fn main() {
   push.init()
   let state = shared_state.new()
+  let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
     fn(req: Request(Connection)) {
@@ -1047,9 +1043,9 @@ pub fn main() {
             request: req,
             state:,
             topics: [],
-            logger: ws_logger.default_logger(),
+            logger:,
           )
-        http.Post, [\"rpc\"] -> handle_rpc(req, state)"
+        http.Post, [\"rpc\"] -> handle_rpc(req, state, logger)"
     <> js_routes
     <> index_route <> "
       }
@@ -1066,11 +1062,26 @@ pub fn main() {
 fn handle_rpc(
   req: Request(Connection),
   state: shared_state.SharedState,
+  logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
+  // Note: HTTP RPC is stateless — state mutations are not persisted across
+  // requests. Use WebSocket for stateful interactions.
   case mist.read_body(req, 1_000_000) {
     Ok(req) -> {
-      let #(response_bytes, _maybe_panic, _new_state) =
+      let #(response_bytes, maybe_panic, _new_state) =
         dispatch.handle(state:, data: req.body)
+      case maybe_panic {
+        Some(info) ->
+          logger.error(
+            \"RPC panic: \"
+            <> info.fn_name
+            <> \" (trace \"
+            <> info.trace_id
+            <> \"): \"
+            <> info.reason,
+          )
+        None -> Nil
+      }
       response.new(200)
       |> response.set_header(\"content-type\", \"application/octet-stream\")
       |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(response_bytes)))

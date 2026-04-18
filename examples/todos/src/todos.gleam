@@ -5,7 +5,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/string
 import libero/push
 import libero/ws_logger
@@ -17,6 +17,7 @@ import core/shared_state
 pub fn main() {
   push.init()
   let state = shared_state.new()
+  let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
     fn(req: Request(Connection)) {
@@ -26,9 +27,9 @@ pub fn main() {
             request: req,
             state:,
             topics: [],
-            logger: ws_logger.default_logger(),
+            logger:,
           )
-        http.Post, ["rpc"] -> handle_rpc(req, state)
+        http.Post, ["rpc"] -> handle_rpc(req, state, logger)
         _, ["web", ..path] ->
           serve_file(
             "clients/web/build/dev/javascript/" <> string.join(path, "/"),
@@ -60,11 +61,26 @@ pub fn main() {
 fn handle_rpc(
   req: Request(Connection),
   state: shared_state.SharedState,
+  logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
+  // Note: HTTP RPC is stateless — state mutations are not persisted across
+  // requests. Use WebSocket for stateful interactions.
   case mist.read_body(req, 1_000_000) {
     Ok(req) -> {
-      let #(response_bytes, _maybe_panic, _new_state) =
+      let #(response_bytes, maybe_panic, _new_state) =
         dispatch.handle(state:, data: req.body)
+      case maybe_panic {
+        Some(info) ->
+          logger.error(
+            "RPC panic: "
+            <> info.fn_name
+            <> " (trace "
+            <> info.trace_id
+            <> "): "
+            <> info.reason,
+          )
+        None -> Nil
+      }
       response.new(200)
       |> response.set_header("content-type", "application/octet-stream")
       |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(response_bytes)))

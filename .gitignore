@@ -1,5 +1,6 @@
 build/
 erl_crash.dump
+.DS_Store
 .beans/
 .beans.yml
 test/tmp/

@@ -20,12 +20,12 @@ pub fn parse_command() -> Command {
   case args {
     ["new", name, ..] -> New(name:)
     ["add", name, "--target", target, ..] -> Add(name:, target:)
-    ["add", name, ..] -> {
+    ["add", _name, ..] -> {
       io.println_error("error: --target is required")
       io.println_error(
         "  Usage: gleam run -m libero -- add <name> --target <javascript|erlang>",
       )
-      Add(name:, target: "")
+      Unknown
     }
     ["gen", ..] -> Gen
     ["build", ..] -> Build
