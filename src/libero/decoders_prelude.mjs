@@ -46,6 +46,12 @@ export function setListCtors(empty, nonEmpty) {
   _NonEmpty = nonEmpty;
 }
 
+let _dictFromList = null;
+
+export function setDictFromList(fn) {
+  _dictFromList = fn;
+}
+
 // --- DecodeError ---
 
 export class DecodeError extends Error {
@@ -140,13 +146,21 @@ export function decode_result_of(okDecoder, errDecoder, term) {
   throw new DecodeError("expected Result, got " + String(term));
 }
 
-export function decode_dict_of(_keyDecoder, _valueDecoder, _term) {
-  // Dict decoding requires the Gleam Dict constructor and from_list, which
-  // take a Gleam linked list of 2-tuples. Wire this up when Task 7 surfaces
-  // a concrete Dict field in a discovered type.
-  throw new DecodeError(
-    "decode_dict_of not yet wired - extend when needed (see Task 7)",
-  );
+export function decode_dict_of(keyDecoder, valueDecoder, term) {
+  // In raw mode, Dict arrives as an array of [k, v] pairs.
+  if (!Array.isArray(term)) {
+    throw new DecodeError("expected Dict pairs array, got " + typeof term);
+  }
+  if (_dictFromList === null) throw new DecodeError("setDictFromList not called");
+  if (_Empty === null || _NonEmpty === null)
+    throw new DecodeError("setListCtors not called");
+  const decoded = term.map(([k, v]) => [keyDecoder(k), valueDecoder(v)]);
+  // Build a Gleam linked list of 2-tuples and hand it to dict.from_list.
+  let list = new _Empty();
+  for (let i = decoded.length - 1; i >= 0; i--) {
+    list = new _NonEmpty(decoded[i], list);
+  }
+  return _dictFromList(list);
 }
 
 export function decode_tuple_of(elementDecoders, term) {

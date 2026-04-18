@@ -85,10 +85,6 @@ fn try_parse(
   }
 }
 
-fn return_error(msg: String) -> Result(Nil, String) {
-  Error(msg)
-}
-
 fn gleam_build(dir: String) -> Int {
   ffi_run_command(dir, ["build"])
 }

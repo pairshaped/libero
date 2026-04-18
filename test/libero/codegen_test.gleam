@@ -107,15 +107,21 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert True = string.contains(content, "Some, None")
   let assert True = string.contains(content, "gleam_stdlib/gleam/option.mjs")
 
-  // Must import the three setters from decoders_prelude
+  // Must import the setters from decoders_prelude
   let assert True = string.contains(content, "setResultCtors")
   let assert True = string.contains(content, "setOptionCtors")
   let assert True = string.contains(content, "setListCtors")
+  let assert True = string.contains(content, "setDictFromList")
 
   // Must call setters at module load time
   let assert True = string.contains(content, "setResultCtors(Ok, ResultError)")
   let assert True = string.contains(content, "setOptionCtors(Some, None)")
   let assert True = string.contains(content, "setListCtors(Empty, NonEmpty)")
+  let assert True = string.contains(content, "setDictFromList(dictFromList)")
+
+  // Must import dict.from_list from stdlib
+  let assert True = string.contains(content, "from_list as dictFromList")
+  let assert True = string.contains(content, "gleam_stdlib/gleam/dict.mjs")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all(["build/.test_decoders_ffi"])

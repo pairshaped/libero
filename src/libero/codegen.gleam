@@ -483,6 +483,7 @@ pub fn write_decoders_ffi(
     "setResultCtors(Ok, ResultError);\n"
     <> "setOptionCtors(Some, None);\n"
     <> "setListCtors(Empty, NonEmpty);\n"
+    <> "setDictFromList(dictFromList);\n"
   // Append auto-registration when decode_msg_from_server was emitted.
   // This wires the typed decoder into the push frame path in rpc_ffi.mjs
   // at module load time, without requiring any consumer code changes.
@@ -537,7 +538,8 @@ fn emit_decoder_imports(
     "import { decode_int, decode_float, decode_string, decode_bool, "
     <> "decode_bit_array, decode_nil, decode_list_of, decode_option_of, "
     <> "decode_result_of, decode_dict_of, decode_tuple_of, DecodeError, "
-    <> "setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors } from \""
+    <> "setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors, "
+    <> "setDictFromList } from \""
     <> config.decoders_prelude_import_path
     <> "\";"
   let prefix = config.register_relpath_prefix
@@ -547,7 +549,10 @@ fn emit_decoder_imports(
     <> "gleam_stdlib/gleam.mjs\";\n"
     <> "import { Some, None } from \""
     <> prefix
-    <> "gleam_stdlib/gleam/option.mjs\";"
+    <> "gleam_stdlib/gleam/option.mjs\";\n"
+    <> "import { from_list as dictFromList } from \""
+    <> prefix
+    <> "gleam_stdlib/gleam/dict.mjs\";"
   let module_imports =
     list.map(module_paths, fn(mp) {
       "import * as _m_"

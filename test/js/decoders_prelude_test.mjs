@@ -16,10 +16,12 @@ import {
   decode_list_of,
   decode_option_of,
   decode_result_of,
+  decode_dict_of,
   decode_tuple_of,
   setOptionCtors,
   setResultCtors,
   setListCtors,
+  setDictFromList,
 } from "../../src/libero/decoders_prelude.mjs";
 
 // --- Minimal stubs for Gleam stdlib types ---
@@ -51,6 +53,18 @@ class NonEmpty {
 setOptionCtors(Some, None);
 setResultCtors(Ok, ResultError);
 setListCtors(Empty, NonEmpty);
+
+// Mock dictFromList: converts a Gleam linked list of [k,v] pairs into a Map
+function dictFromList(list) {
+  const map = new Map();
+  let cur = list;
+  while (cur && cur.head !== undefined) {
+    map.set(cur.head[0], cur.head[1]);
+    cur = cur.tail;
+  }
+  return map;
+}
+setDictFromList(dictFromList);
 
 // --- Helpers ---
 
@@ -151,6 +165,26 @@ assert.deepStrictEqual(tup, ["hello", 42], "decode_tuple_of values");
 assertThrows(
   () => decode_tuple_of([decode_string, decode_int], ["hello"]),
   "decode_tuple_of throws on arity mismatch",
+);
+
+// decode_dict_of
+const dict = decode_dict_of(decode_string, decode_int, [["a", 1], ["b", 2]]);
+assert.ok(dict instanceof Map, "decode_dict_of returns Map");
+assert.strictEqual(dict.get("a"), 1, "decode_dict_of key a");
+assert.strictEqual(dict.get("b"), 2, "decode_dict_of key b");
+assert.strictEqual(dict.size, 2, "decode_dict_of size");
+
+const empty_dict = decode_dict_of(decode_string, decode_int, []);
+assert.strictEqual(empty_dict.size, 0, "decode_dict_of empty");
+
+assertThrows(
+  () => decode_dict_of(decode_string, decode_int, "not-an-array"),
+  "decode_dict_of throws on non-array",
+);
+
+assertThrows(
+  () => decode_dict_of(decode_int, decode_int, [["a", 1]]),
+  "decode_dict_of propagates key decode error",
 );
 
 // DecodeError is instanceof Error
