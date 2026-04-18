@@ -13,6 +13,7 @@ import simplifile
 ///
 /// Creates the directory tree and writes starter source files so the
 /// project compiles and runs out of the box.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
   let name =
     string.split(path, "/")
@@ -30,6 +31,7 @@ pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
   }
 }
 
+// nolint: stringly_typed_error
 fn scaffold_files(
   name name: String,
   path path: String,
@@ -49,6 +51,7 @@ fn scaffold_files(
   Ok(Nil)
 }
 
+// nolint: stringly_typed_error
 fn map_err(
   result: Result(a, simplifile.FileError),
   next: fn(a) -> Result(Nil, String),

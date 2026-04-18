@@ -20,6 +20,7 @@ import gleam/crypto
 /// success; on failure, returns the stringified exception reason.
 /// Callers typically pair this with a trace id from `new_trace_id` and
 /// log both under a single correlation id.
+/// nolint: stringly_typed_error -- wraps OTP catch; exception reason is inherently a string
 pub fn try_call(action: fn() -> a) -> Result(a, String) {
   do_try_call(action)
 }
@@ -39,4 +40,5 @@ pub fn new_trace_id() -> String {
 // WebSocket handler, not in library code.
 
 @external(erlang, "libero_ffi", "try_call")
+// nolint: stringly_typed_error
 fn do_try_call(action: fn() -> a) -> Result(a, String)

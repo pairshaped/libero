@@ -12,6 +12,7 @@ import simplifile
 /// when the src directory contains no files yet. Generates a `gleam.toml`
 /// for the client package if missing. Appends the `[libero.clients.<name>]`
 /// section to the root `gleam.toml` only when that section is absent.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn add_client(
   project_path path: String,
   name name: String,
@@ -53,7 +54,7 @@ pub fn add_client(
   use toml_content <- map_err(simplifile.read(path <> "/gleam.toml"))
   let already_declared = case toml_config.parse(toml_content) {
     Ok(cfg) -> list.any(cfg.clients, fn(c) { c.name == name })
-    Error(_) -> False
+    Error(_) -> False // nolint: thrown_away_error -- unparseable toml treated as "not declared"
   }
   case already_declared {
     True -> Ok(Nil)
@@ -66,6 +67,7 @@ pub fn add_client(
   }
 }
 
+// nolint: stringly_typed_error, thrown_away_error -- best-effort name lookup, errors fall back to "app"
 fn try_read_root_name(
   path: String,
   next: fn(String) -> Result(Nil, String),
@@ -80,6 +82,7 @@ fn try_read_root_name(
   }
 }
 
+// nolint: stringly_typed_error
 fn write_if_missing(
   path: String,
   content: String,
@@ -95,6 +98,7 @@ fn write_if_missing(
   }
 }
 
+// nolint: stringly_typed_error
 fn map_err(
   result: Result(a, simplifile.FileError),
   next: fn(a) -> Result(Nil, String),

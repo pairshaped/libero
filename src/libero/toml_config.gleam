@@ -25,6 +25,7 @@ pub type TomlConfig {
 /// Parse a TOML string into a `TomlConfig`.
 ///
 /// Returns `Error(String)` for parse failures or missing required fields.
+/// nolint: stringly_typed_error, error_context_lost -- config parsing; tom errors are opaque, string messages are more useful
 pub fn parse(input: String) -> Result(TomlConfig, String) {
   use parsed <- result.try(
     tom.parse(input) |> result.map_error(fn(_) { "invalid TOML" }),
@@ -48,6 +49,7 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
 
 /// Convert a `TomlConfig` and client name into the `Config` type used by
 /// the codegen pipeline.
+/// nolint: stringly_typed_error, error_context_lost
 pub fn to_codegen_config(
   toml_cfg toml_cfg: TomlConfig,
   client client_name: String,
@@ -89,6 +91,7 @@ pub fn to_codegen_config(
 
 // ---------- Private helpers ----------
 
+// nolint: stringly_typed_error, thrown_away_error, error_context_lost -- tom errors are opaque
 fn parse_clients(
   parsed: dict.Dict(String, tom.Toml),
 ) -> Result(List(ClientConfig), String) {

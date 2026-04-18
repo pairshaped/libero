@@ -221,6 +221,7 @@ fn process_type_file(
   }
 }
 
+// nolint: deep_nesting -- recursive AST walker, nesting reflects data structure
 fn process_type_ast(
   module_path module_path: String,
   type_name type_name: String,

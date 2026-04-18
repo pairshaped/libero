@@ -19,6 +19,7 @@ import simplifile
 ///
 /// Reads `gleam.toml`, discovers message modules under `src/core/`, validates
 /// conventions, and runs codegen for each declared client.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Read gleam.toml
   use toml_content <- result.try(
@@ -41,6 +42,7 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
   }
 }
 
+// nolint: stringly_typed_error
 fn run_with_clients(
   project_path project_path: String,
   toml_cfg toml_cfg: toml_config.TomlConfig,
@@ -139,6 +141,7 @@ fn run_with_clients(
   Ok(Nil)
 }
 
+// nolint: stringly_typed_error
 fn run_client_codegen(
   project_path project_path: String,
   toml_cfg toml_cfg: toml_config.TomlConfig,

@@ -14,7 +14,7 @@ repository = { type = "github", user = "pairshaped", repo = "libero" }
 # JavaScript consumer packages.
 
 [dependencies]
-gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
 glance = "~> 6.0"
 simplifile = "~> 2.0"
 gleam_crypto = "~> 1.5"
@@ -23,7 +23,7 @@ argv = "~> 1.0"
 tom = ">= 2.0.2 and < 3.0.0"
 
 [dev-dependencies]
-glinter = "~> 2.12"
+glinter = "~> 2.14"
 gleeunit = "~> 1.0"
 
 [tools.glinter]
@@ -39,38 +39,3 @@ include = ["src/"]
 # type and function as unused. Turn off the check globally for the
 # library.
 unused_exports = "off"
-
-[tools.glinter.ignore]
-"src/libero.gleam" = [
-  "unnecessary_string_concatenation",
-]
-"src/libero/codegen.gleam" = [
-  "unnecessary_string_concatenation",
-  "label_possible",
-  "thrown_away_error",
-  "deep_nesting",
-]
-"src/libero/rpc.gleam" = [
-  # Single-target @external (JS only) — Gleam fallback bodies are
-  # unreachable on Erlang but must exist for cross-target compilation.
-  "avoid_panic",
-  "discarded_result",
-]
-"src/libero/wire.gleam" = [
-  # Mixed: some functions have dual @external, ffi_decode_call has
-  # only @external(erlang) — JS fallback body is unreachable.
-  "avoid_panic",
-  "discarded_result",
-]
-"src/libero/walker.gleam" = [
-  "deep_nesting",
-]
-"src/libero/trace.gleam" = [
-  "stringly_typed_error",
-]
-# v4 CLI modules use String errors for simplicity.
-"src/libero/cli/new.gleam" = ["stringly_typed_error"]
-"src/libero/cli/add.gleam" = ["stringly_typed_error", "thrown_away_error"]
-"src/libero/cli/gen.gleam" = ["stringly_typed_error"]
-"src/libero/cli/build.gleam" = ["stringly_typed_error"]
-"src/libero/toml_config.gleam" = ["stringly_typed_error", "error_context_lost", "thrown_away_error"]

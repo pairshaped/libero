@@ -1,7 +1,6 @@
 import gleam/bit_array
 import gleam/option.{None}
 import gleam/string
-import libero/error.{type PanicInfo}
 import libero/ssr
 import libero/wire
 

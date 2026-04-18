@@ -481,6 +481,7 @@ pub fn write_decoders_ffi(
   let body = emit_typed_decoders(discovered)
   // Inject stdlib constructor setters at module load time so that
   // decode_result_of / decode_option_of / decode_list_of work correctly.
+  // nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
   let ctor_setters =
     "setResultCtors(Ok, ResultError);\n"
     <> "setOptionCtors(Some, None);\n"
@@ -493,6 +494,7 @@ pub fn write_decoders_ffi(
     list.any(discovered, fn(t) { t.type_name == "MsgFromServer" })
   let auto_register = case has_msg_from_server {
     True ->
+      // nolint: unnecessary_string_concatenation -- codegen template
       "\n// Auto-register the typed decoder so push frames bypass the\n"
       <> "// global constructor registry. Called at module load time.\n"
       <> "setMsgFromServerDecoder(decode_msg_from_server);\n"
@@ -693,6 +695,7 @@ fn field_decoder_call(
   field_decoder_call_depth(ft, term_expr, 0)
 }
 
+// nolint: label_possible -- internal recursive helper, labels add noise
 fn field_decoder_call_depth(
   ft: walker.FieldType,
   term_expr: String,
@@ -761,7 +764,7 @@ fn field_decoder_call_depth(
 /// If no MsgFromServer type is found in the discovered list, returns "".
 fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
   case list.find(discovered, fn(t) { t.type_name == "MsgFromServer" }) {
-    Error(_) -> ""
+    Error(_) -> "" // nolint: thrown_away_error -- absence means no decoder needed
     Ok(t) -> {
       let fn_name = decoder_fn_name(t.module_path, t.type_name)
       "export function decode_msg_from_server(term) {\n"

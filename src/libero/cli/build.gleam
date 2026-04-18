@@ -7,6 +7,7 @@ import libero/toml_config
 import simplifile
 
 /// Run gen, then build the server and each client package.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Run gen
   use _ <- try(gen.run(project_path:))
@@ -55,6 +56,7 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
   Ok(Nil)
 }
 
+// nolint: stringly_typed_error
 fn try(
   result: Result(Nil, String),
   next: fn(Nil) -> Result(Nil, String),
@@ -65,6 +67,7 @@ fn try(
   }
 }
 
+// nolint: stringly_typed_error
 fn try_read(
   path: String,
   next: fn(String) -> Result(Nil, String),
@@ -75,6 +78,7 @@ fn try_read(
   }
 }
 
+// nolint: stringly_typed_error
 fn try_parse(
   content: String,
   next: fn(toml_config.TomlConfig) -> Result(Nil, String),
