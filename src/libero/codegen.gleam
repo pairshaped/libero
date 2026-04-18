@@ -211,6 +211,8 @@ pub fn send_to_server(
   msg msg: MsgFromClient,
   on_response on_response: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
+  // Reference rpc_decoders to ensure its side-effecting module-level code
+  // (constructor setters, decoder registration) runs before any RPC call.
   let _ = rpc_decoders.decode_msg_from_server
   rpc.send(
     url: rpc_config.ws_url(),
@@ -598,7 +600,7 @@ fn emit_type_decoder(t: DiscoveredType) -> String {
     variants ->
       case all_variants_zero_arity(variants) {
         True -> emit_enum_decoder(variants)
-        False -> emit_tagged_union_decoder(variants)
+        False -> emit_tagged_union_decoder(variants, error_label: "variant")
       }
   }
   "export function " <> fn_name <> "(term) {\n" <> body <> "\n}"
@@ -638,8 +640,11 @@ fn emit_record_decoder(
 }
 
 /// Emit the body of a multi-variant tagged union decoder.
+/// `error_label` is used in the default throw message (e.g. "variant" or
+/// "MsgFromServer variant").
 fn emit_tagged_union_decoder(
   variants: List(DiscoveredVariant),
+  error_label error_label: String,
 ) -> String {
   let arms =
     list.map(variants, fn(v) {
@@ -675,7 +680,7 @@ fn emit_tagged_union_decoder(
   "  const tag = Array.isArray(term) ? term[0] : term;\n"
   <> "  switch (tag) {\n"
   <> string.join(arms, "\n")
-  <> "\n    default:\n      throw new DecodeError(\"unknown variant: \" + String(tag));\n"
+  <> "\n    default:\n      throw new DecodeError(\"unknown " <> error_label <> ": \" + String(tag));\n"
   <> "  }"
 }
 
@@ -743,46 +748,10 @@ fn field_decoder_call(
 fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
   case list.find(discovered, fn(t) { t.type_name == "MsgFromServer" }) {
     Error(_) -> ""
-    Ok(t) -> {
-      let arms =
-        list.map(t.variants, fn(v) {
-          case v.fields {
-            [] ->
-              "    case \""
-              <> v.atom_name
-              <> "\":\n      return new _m_"
-              <> module_alias(v.module_path)
-              <> "."
-              <> v.variant_name
-              <> "();"
-            fields -> {
-              let field_args =
-                list.index_map(fields, fn(ft, i) {
-                  field_decoder_call(
-                    ft,
-                    "term[" <> int.to_string(i + 1) <> "]",
-                  )
-                })
-              "    case \""
-              <> v.atom_name
-              <> "\":\n      return new _m_"
-              <> module_alias(v.module_path)
-              <> "."
-              <> v.variant_name
-              <> "("
-              <> string.join(field_args, ", ")
-              <> ");"
-            }
-          }
-        })
+    Ok(t) ->
       "export function decode_msg_from_server(term) {\n"
-      <> "  const tag = Array.isArray(term) ? term[0] : term;\n"
-      <> "  switch (tag) {\n"
-      <> string.join(arms, "\n")
-      <> "\n    default:\n      throw new DecodeError(\"unknown MsgFromServer variant: \" + String(tag));\n"
-      <> "  }\n"
-      <> "}"
-    }
+      <> emit_tagged_union_decoder(t.variants, error_label: "MsgFromServer variant")
+      <> "\n}"
   }
 }
 

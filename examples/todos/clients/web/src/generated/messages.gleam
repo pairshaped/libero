@@ -11,6 +11,8 @@ pub fn send_to_server(
   msg msg: MsgFromClient,
   on_response on_response: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
+  // Reference rpc_decoders to ensure its side-effecting module-level code
+  // (constructor setters, decoder registration) runs before any RPC call.
   let _ = rpc_decoders.decode_msg_from_server
   rpc.send(
     url: rpc_config.ws_url(),

@@ -1,7 +1,7 @@
 //// `libero add` — scaffold a new client inside an existing Libero project.
 
+import gleam/list
 import gleam/result
-import gleam/string
 import libero/cli/templates
 import libero/toml_config
 import simplifile
@@ -51,8 +51,11 @@ pub fn add_client(
 
   // Append [libero.clients.<name>] to root gleam.toml if missing
   use toml_content <- map_err(simplifile.read(path <> "/gleam.toml"))
-  let section_header = "[libero.clients." <> name <> "]"
-  case string.contains(toml_content, section_header) {
+  let already_declared = case toml_config.parse(toml_content) {
+    Ok(cfg) -> list.any(cfg.clients, fn(c) { c.name == name })
+    Error(_) -> False
+  }
+  case already_declared {
     True -> Ok(Nil)
     False -> {
       let addition =

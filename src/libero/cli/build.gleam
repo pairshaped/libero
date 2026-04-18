@@ -19,7 +19,7 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
     _ -> Error("server build failed")
   })
 
-  // 3. Read config to find clients
+  // 3. Read config to find clients (re-parses gleam.toml; acceptable for CLI)
   use toml_content <- try_read(project_path <> "/gleam.toml")
   use toml_cfg <- try_parse(toml_content)
 
