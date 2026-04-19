@@ -11,7 +11,7 @@ pub fn dispatch_contains_state_threading_test() {
   let modules = [
     scanner.MessageModule(
       module_path: "core/messages",
-      file_path: "examples/todos/src/core/messages.gleam",
+      file_path: "examples/todos/shared/src/shared/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
       handler_modules: ["core/handler"],
@@ -51,7 +51,7 @@ pub fn dispatch_contains_state_threading_test() {
 
 pub fn send_function_contains_module_path_test() {
   let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let output_dir = "build/.test_codegen_send"
   let assert Ok(Nil) =
     codegen.write_send_functions(
@@ -62,9 +62,9 @@ pub fn send_function_contains_module_path_test() {
 
   // Must import the shared type
   let assert True =
-    string.contains(content, "import core/messages.{type MsgFromClient}")
+    string.contains(content, "import shared/messages.{type MsgFromClient}")
   // Must reference the correct module path
-  let assert True = string.contains(content, "module: \"core/messages\"")
+  let assert True = string.contains(content, "module: \"shared/messages\"")
   // Must import rpc
   let assert True = string.contains(content, "import libero/rpc")
   // Must import rpc_decoders so the typed decoder FFI side-effect runs on load
@@ -79,7 +79,7 @@ pub fn send_function_contains_module_path_test() {
 
 pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,

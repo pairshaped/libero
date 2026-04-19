@@ -1,6 +1,6 @@
 //// Thin wrapper around an ETS named table for storing todos.
 
-import core/messages.{type Todo}
+import shared/messages.{type Todo}
 
 /// Create the ETS table. Call once at startup.
 @external(erlang, "todos_ets_ffi", "init")

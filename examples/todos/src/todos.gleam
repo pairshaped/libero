@@ -11,9 +11,9 @@ import gleam/string
 import libero/push
 import libero/ws_logger
 import mist.{type Connection}
-import core/generated/dispatch
-import core/generated/websocket as ws
-import core/shared_state
+import server/generated/dispatch
+import server/generated/websocket as ws
+import server/shared_state
 
 pub fn main() {
   push.init()

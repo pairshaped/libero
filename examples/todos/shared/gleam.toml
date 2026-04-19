@@ -1,0 +1,11 @@
+name = "shared"
+version = "0.1.0"
+
+# No target specified - compiles to both Erlang and JavaScript.
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+libero = { path = "../../../" }
+
+[dev-dependencies]
+gleeunit = "~> 1.0"

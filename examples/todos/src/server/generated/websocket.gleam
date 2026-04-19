@@ -14,8 +14,8 @@ import gleam/string
 import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
-import core/generated/dispatch
-import core/shared_state.{type SharedState}
+import server/generated/dispatch
+import server/shared_state.{type SharedState}
 
 pub type ConnState {
   ConnState(state: SharedState, topics: List(String), logger: Logger)

@@ -1,10 +1,10 @@
 import gleam/list
-import core/handler
-import core/messages.{
+import server/handler
+import shared/messages.{
   Create, Delete, LoadAll, Todo, TodoCreated, TodoDeleted, TodoToggled,
   TodoParams, TodosLoaded, Toggle,
 }
-import core/shared_state
+import server/shared_state
 import gleeunit
 
 pub fn main() {

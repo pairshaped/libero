@@ -1,8 +1,8 @@
 //// `libero gen` — TOML-driven codegen command.
 ////
-//// Reads `gleam.toml` from the project path, scans `src/core/` for message
-//// modules, validates conventions, and runs the full codegen pipeline for
-//// each declared client.
+//// Reads `gleam.toml` from the project path, scans `shared/src/shared/` for
+//// message modules, validates conventions, and runs the full codegen pipeline
+//// for each declared client.
 
 import gleam/int
 import gleam/io
@@ -17,7 +17,7 @@ import simplifile
 
 /// Run the `gen` command from the given project path (usually `"."`).
 ///
-/// Reads `gleam.toml`, discovers message modules under `src/core/`, validates
+/// Reads `gleam.toml`, discovers message modules under `shared/src/shared/`, validates
 /// conventions, and runs codegen for each declared client.
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn run(project_path project_path: String) -> Result(Nil, String) {

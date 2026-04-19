@@ -1,10 +1,10 @@
-import core/app_error.{type AppError}
-import core/messages.{
+import server/app_error.{type AppError}
+import shared/messages.{
   type MsgFromClient, type MsgFromServer, Create, Delete, LoadAll, NotFound,
   TitleRequired, Todo, TodoCreated, TodoDeleted, TodoToggled, TodosLoaded,
   Toggle,
 }
-import core/shared_state.{type SharedState}
+import server/shared_state.{type SharedState}
 import ets_store
 
 /// Handle RPC messages from clients.

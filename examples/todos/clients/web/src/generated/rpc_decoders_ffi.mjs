@@ -4,71 +4,71 @@
 // Eliminates the global constructor registry - each decoder knows
 // exactly which module's constructor to instantiate.
 
-import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array, decode_nil, decode_list_of, decode_option_of, decode_result_of, decode_dict_of, decode_tuple_of, DecodeError, setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors, setDictFromList } from "../../../../libero/libero/decoders_prelude.mjs";
-import { Ok, Error as ResultError, Empty, NonEmpty } from "../../../../gleam_stdlib/gleam.mjs";
-import { Some, None } from "../../../../gleam_stdlib/gleam/option.mjs";
-import { from_list as dictFromList } from "../../../../gleam_stdlib/gleam/dict.mjs";
-import * as _m_core_messages from "../../../../core/core/messages.mjs";
+import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array, decode_nil, decode_list_of, decode_option_of, decode_result_of, decode_dict_of, decode_tuple_of, DecodeError, setMsgFromServerDecoder, setResultCtors, setOptionCtors, setListCtors, setDictFromList } from "../../libero/libero/decoders_prelude.mjs";
+import { Ok, Error as ResultError, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
+import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
+import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
+import * as _m_shared_messages from "../../shared/shared/messages.mjs";
 
 setResultCtors(Ok, ResultError);
 setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
 setDictFromList(dictFromList);
 
-export function decode_core_messages_todo(term) {
-  return new _m_core_messages.Todo(
+export function decode_shared_messages_todo(term) {
+  return new _m_shared_messages.Todo(
     decode_int(term[1]),
     decode_string(term[2]),
     decode_bool(term[3])
   );
 }
 
-export function decode_core_messages_todo_error(term) {
-  if (term === "not_found") return new _m_core_messages.NotFound();
-  if (term === "title_required") return new _m_core_messages.TitleRequired();
+export function decode_shared_messages_todo_error(term) {
+  if (term === "not_found") return new _m_shared_messages.NotFound();
+  if (term === "title_required") return new _m_shared_messages.TitleRequired();
   throw new DecodeError("unknown variant: " + String(term));
 }
 
-export function decode_core_messages_todo_params(term) {
-  return new _m_core_messages.TodoParams(
+export function decode_shared_messages_todo_params(term) {
+  return new _m_shared_messages.TodoParams(
     decode_string(term[1])
   );
 }
 
-export function decode_core_messages_msg_from_server(term) {
+export function decode_shared_messages_msg_from_server(term) {
   const tag = Array.isArray(term) ? term[0] : term;
   switch (tag) {
     case "todo_created":
-      return new _m_core_messages.TodoCreated(decode_result_of((t0) => decode_core_messages_todo(t0), (t0) => decode_core_messages_todo_error(t0), term[1]));
+      return new _m_shared_messages.TodoCreated(decode_result_of((t0) => decode_shared_messages_todo(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
     case "todo_toggled":
-      return new _m_core_messages.TodoToggled(decode_result_of((t0) => decode_core_messages_todo(t0), (t0) => decode_core_messages_todo_error(t0), term[1]));
+      return new _m_shared_messages.TodoToggled(decode_result_of((t0) => decode_shared_messages_todo(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
     case "todo_deleted":
-      return new _m_core_messages.TodoDeleted(decode_result_of((t0) => decode_int(t0), (t0) => decode_core_messages_todo_error(t0), term[1]));
+      return new _m_shared_messages.TodoDeleted(decode_result_of((t0) => decode_int(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
     case "todos_loaded":
-      return new _m_core_messages.TodosLoaded(decode_result_of((t0) => decode_list_of((t1) => decode_core_messages_todo(t1), t0), (t0) => decode_core_messages_todo_error(t0), term[1]));
+      return new _m_shared_messages.TodosLoaded(decode_result_of((t0) => decode_list_of((t1) => decode_shared_messages_todo(t1), t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
     default:
       throw new DecodeError("unknown variant: " + String(tag));
   }
 }
 
-export function decode_core_messages_msg_from_client(term) {
+export function decode_shared_messages_msg_from_client(term) {
   const tag = Array.isArray(term) ? term[0] : term;
   switch (tag) {
     case "create":
-      return new _m_core_messages.Create(decode_core_messages_todo_params(term[1]));
+      return new _m_shared_messages.Create(decode_shared_messages_todo_params(term[1]));
     case "toggle":
-      return new _m_core_messages.Toggle(decode_int(term[1]));
+      return new _m_shared_messages.Toggle(decode_int(term[1]));
     case "delete":
-      return new _m_core_messages.Delete(decode_int(term[1]));
+      return new _m_shared_messages.Delete(decode_int(term[1]));
     case "load_all":
-      return new _m_core_messages.LoadAll();
+      return new _m_shared_messages.LoadAll();
     default:
       throw new DecodeError("unknown variant: " + String(tag));
   }
 }
 
 export function decode_msg_from_server(term) {
-  return decode_core_messages_msg_from_server(term);
+  return decode_shared_messages_msg_from_server(term);
 }
 
 // Auto-register the typed decoder so push frames bypass the

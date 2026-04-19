@@ -1,7 +1,7 @@
 import gleam/dynamic
 import gleam/list
 import libero/wire
-import core/messages.{
+import shared/messages.{
   type MsgFromServer, type Todo, Create, Delete, LoadAll, TodoCreated,
   TodoDeleted, TodoParams, TodoToggled, TodosLoaded, Toggle,
 }

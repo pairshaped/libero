@@ -22,13 +22,16 @@ gleam run
 my_app/
   gleam.toml                         # server package + [libero] config
   src/
-    core/
-      messages.gleam                 # your message types
+    server/
       handler.gleam                  # your business logic
       shared_state.gleam             # server state type
       app_error.gleam                # error type
       generated/                     # dispatch, websocket, push (auto-generated)
     my_app.gleam                     # server entry point (auto-generated)
+  shared/
+    gleam.toml                       # target-agnostic package
+    src/shared/
+      messages.gleam                 # your message types
   clients/
     web/
       gleam.toml                     # client package (auto-generated if missing)
@@ -39,16 +42,23 @@ my_app/
     my_app_test.gleam                # handler test
 ```
 
-Two rules:
-- `src/core/` is the server. Write your messages, handlers, and business logic here.
-- `clients/` contains consumer apps. Each is a separate Gleam package with its own target.
+The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[libero]` config that declares clients and settings. `src/server/` is where your handlers and business logic live.
+
+`shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package — the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
+
+`shared/` exists so both sides can import the same message types. It has no target specified, so it compiles to both Erlang and JavaScript. Without it, JS clients would need to depend on the server package and pull in Erlang-only dependencies (mist, ETS, etc.).
+
+```
+root (server)     → shared, libero, mist     [target: erlang]
+clients/web       → shared, libero, lustre   [target: javascript]
+```
 
 ## Messages
 
-Define `MsgFromClient` and `MsgFromServer` in any module under `src/core/`. Libero scans for these types and generates dispatch + client stubs from them.
+Define `MsgFromClient` and `MsgFromServer` in any module under `shared/src/shared/`. Libero scans for these types and generates dispatch + client stubs from them.
 
 ```gleam
-// src/core/messages.gleam
+// shared/src/shared/messages.gleam
 
 pub type MsgFromClient {
   Create(params: TodoParams)
@@ -69,14 +79,14 @@ Each `MsgFromServer` variant wraps a single value, typically a `Result(payload, 
 
 ## Handlers
 
-Export `update_from_client` in any module under `src/core/`. Libero discovers it by scanning for the function signature.
+Export `update_from_client` in any module under `src/`. Libero discovers it by scanning for the function signature.
 
 ```gleam
-// src/core/handler.gleam
+// src/server/handler.gleam
 
-import core/messages.{type MsgFromClient, type MsgFromServer}
-import core/shared_state.{type SharedState}
-import core/app_error.{type AppError}
+import shared/messages.{type MsgFromClient, type MsgFromServer}
+import server/shared_state.{type SharedState}
+import server/app_error.{type AppError}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
@@ -117,6 +127,7 @@ gleam_erlang = "~> 1.0"
 gleam_http = "~> 4.0"
 mist = "~> 6.0"
 lustre = "~> 5.6"
+shared = { path = "shared" }
 libero = { path = "../libero" }
 
 [libero]
@@ -142,22 +153,22 @@ Commands:
 ```
 
 ### `libero new <name>`
-Scaffolds a project with `src/core/` (skeleton messages + handler), `test/` (handler test), and `gleam.toml`.
+Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton messages), `test/` (handler test), and `gleam.toml`.
 
 ### `libero add <name> --target <target>`
 Adds a client. Creates `clients/<name>/` with its own `gleam.toml` (generated once, never overwritten) and a starter app.
 
 ### `libero gen`
-Scans `src/core/` for message types and generates dispatch, stubs, and server entry point. Run after changing message types.
+Scans `shared/src/shared/` for message types and generates dispatch, stubs, and server entry point. Run after changing message types.
 
 ### `libero build`
 Runs `gen`, then builds the server and each client package.
 
 ## What Gets Generated
 
-**Server-side (`src/core/generated/`):**
-- `dispatch.gleam` — routes incoming messages to handlers
-- `websocket.gleam` — Mist WebSocket handler with push support
+**Server-side (`src/server/generated/`):**
+- `dispatch.gleam` -- routes incoming messages to handlers
+- `websocket.gleam` -- Mist WebSocket handler with push support
 - Per-module push wrappers (`send_to_client`, `send_to_clients`)
 
 **Server entry point (`src/<app_name>.gleam`):**
@@ -166,12 +177,12 @@ Runs `gen`, then builds the server and each client package.
 
 **Per client (`clients/<name>/src/generated/`):**
 - Typed `send_to_server` and `update_from_server` stubs
-- WebSocket config and type registration
+- WebSocket config and typed decoder registration
 - SSR flag reader (for hydration)
 
 Generation rules:
-- Starter apps and client `gleam.toml` — generated once, never overwritten
-- Everything in `generated/` — regenerated every `libero gen` or `libero build`
+- Starter apps and client `gleam.toml` -- generated once, never overwritten
+- Everything in `generated/` -- regenerated every `libero gen` or `libero build`
 
 ## How It Works
 
@@ -181,14 +192,14 @@ The client sends a `{module_path, MsgFromClient_value}` tuple. The server dispat
 
 ## Server Push
 
-The server can push messages to connected clients without a prior request. Uses BEAM [pg](https://www.erlang.org/doc/apps/kernel/pg.html) groups — no external dependencies.
+The server can push messages to connected clients without a prior request. Uses BEAM [pg](https://www.erlang.org/doc/apps/kernel/pg.html) groups -- no external dependencies.
 
 ```gleam
-// Server — push to all subscribers
-import core/generated/messages as messages_push
+// Server -- push to all subscribers
+import server/generated/messages as messages_push
 messages_push.send_to_clients(topic: "todos", msg: TodosLoaded(Ok(all())))
 
-// Client — subscribe to pushes (in init)
+// Client -- subscribe to pushes (in init)
 rpc.update_from_server(handler: fn(raw) { GotPush(wire.coerce(raw)) })
 ```
 
@@ -209,7 +220,7 @@ The same handlers serve all clients. Each client gets typed stubs for its target
 Any BEAM process can call the server over HTTP POST without WebSocket or a Libero dependency:
 
 ```gleam
-let payload = term_to_binary(#("core/messages", LoadAll))
+let payload = term_to_binary(#("shared/messages", LoadAll))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```

@@ -11,7 +11,7 @@ import libero/walker
 
 pub fn walk_discovers_toserver_variants_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -27,7 +27,7 @@ pub fn walk_discovers_toserver_variants_test() {
 
 pub fn walk_discovers_toclient_variants_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -43,7 +43,7 @@ pub fn walk_discovers_toclient_variants_test() {
 
 pub fn walk_discovers_transitive_types_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -59,7 +59,7 @@ pub fn walk_discovers_transitive_types_test() {
 
 pub fn walk_atom_names_are_snake_case_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -74,7 +74,7 @@ pub fn walk_atom_names_are_snake_case_test() {
 
 pub fn walk_no_duplicates_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -105,7 +105,7 @@ pub fn walk_empty_module_files_returns_error_test() {
 
 pub fn walk_populates_primitive_field_types_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -121,7 +121,7 @@ pub fn walk_populates_primitive_field_types_test() {
 
 pub fn walk_resolves_user_type_in_field_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -135,12 +135,12 @@ pub fn walk_resolves_user_type_in_field_test() {
   let assert [
     walker.ResultOf(
       ok: walker.ListOf(walker.UserType(
-        module_path: "core/messages",
+        module_path: "shared/messages",
         type_name: "Todo",
         args: [],
       )),
       err: walker.UserType(
-        module_path: "core/messages",
+        module_path: "shared/messages",
         type_name: "TodoError",
         args: [],
       ),
@@ -150,7 +150,7 @@ pub fn walk_resolves_user_type_in_field_test() {
 
 pub fn walk_groups_variants_under_type_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
+    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
   let assert Ok(types) =
     walker.walk_message_registry_types(
       message_modules: modules,
