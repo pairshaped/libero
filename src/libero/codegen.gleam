@@ -66,33 +66,35 @@ pub fn write_dispatch(
           )
         }
         [first_handler, ..rest_handlers] -> {
-          // Multiple handlers: chain with UnhandledMessage fallthrough
+          // Multiple handlers: chain with UnhandledMessage fallthrough.
+          // Handler calls live INSIDE the dispatch closure so panics in any
+          // handler are caught by trace.try_call - otherwise a crash in a
+          // handler escapes dispatch and takes down the websocket handler.
           let msg_alias = message_alias(m.module_path)
           let first_alias = handler_alias(first_handler)
           let typed_msg_line =
-            "      let typed_msg: "
+            "        let typed_msg: "
             <> msg_alias
             <> ".MsgFromClient = wire.coerce(msg)"
           let first_call =
-            "      let result = "
+            "        let result = "
             <> first_alias
             <> ".update_from_client(msg: typed_msg, state:)"
           let chain_calls =
             list.map(rest_handlers, fn(handler_mod) {
               let alias = handler_alias(handler_mod)
-              "      let result = case result {\n        Error(UnhandledMessage) -> "
+              "        let result = case result {\n          Error(UnhandledMessage) -> "
               <> alias
-              <> ".update_from_client(msg: typed_msg, state:)\n        other -> other\n      }"
+              <> ".update_from_client(msg: typed_msg, state:)\n          other -> other\n        }"
             })
           let body =
             string.join([typed_msg_line, first_call, ..chain_calls], "\n")
           Ok(
             "    Ok(#(\""
             <> m.module_path
-            <> "\", msg)) -> {\n"
+            <> "\", msg)) ->\n      dispatch(state, fn() {\n"
             <> body
-            <> "\n      dispatch(state, fn() { result })\n"
-            <> "    }",
+            <> "\n        result\n      })",
           )
         }
       }
@@ -150,14 +152,39 @@ fn dispatch(
     Ok(Ok(#(value, new_state))) ->
       // Ship the full MsgFromServer envelope on the response so the client's
       // typed decoder handles both push and response frames uniformly.
-      #(wire.tag_response(wire.encode(Ok(value))), None, new_state)
+      // Encoding runs under try_call so any serialization panic (e.g.
+      // a value containing an unencodable term) is captured and surfaced
+      // as InternalError instead of crashing the websocket handler.
+      safe_encode(fn() { wire.encode(Ok(value)) }, new_state, \"dispatch_encode_ok\")
     Ok(Error(app_err)) ->
-      #(wire.tag_response(wire.encode(Error(error.AppError(app_err)))), None, state)
+      safe_encode(fn() { wire.encode(Error(error.AppError(app_err))) }, state, \"dispatch_encode_app_err\")
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
         wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
         Some(error.PanicInfo(trace_id:, fn_name: \"dispatch\", reason:)),
+        state,
+      )
+    }
+  }
+}
+
+/// Run an encoder thunk under try_call protection. If encoding panics
+/// (e.g. a response value contains an unencodable term), return an
+/// InternalError response with the panic reason so the websocket handler
+/// can log it and stay alive.
+fn safe_encode(
+  encoder: fn() -> BitArray,
+  state: SharedState,
+  fn_name: String,
+) -> #(BitArray, Option(PanicInfo), SharedState) {
+  case trace.try_call(encoder) {
+    Ok(bytes) -> #(wire.tag_response(bytes), None, state)
+    Error(reason) -> {
+      let trace_id = trace.new_trace_id()
+      #(
+        wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Response encoding failed\")))),
+        Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
         state,
       )
     }
