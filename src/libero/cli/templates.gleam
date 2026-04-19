@@ -169,6 +169,7 @@ target = \""
 
 [dependencies]
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
+shared = { path = \"../../shared\" }
 "
   <> root_package
   <> " = { path = \"../../\" }

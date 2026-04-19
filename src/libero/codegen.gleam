@@ -1049,8 +1049,8 @@ import "
     <> "
 
 pub fn main() {
-  push.init()
-  dispatch.ensure_atoms()
+  let _ = push.init()
+  let _ = dispatch.ensure_atoms()
   let state = shared_state.new()
   let logger = ws_logger.default_logger()
 
