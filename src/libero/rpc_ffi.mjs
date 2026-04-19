@@ -8,7 +8,7 @@
 // generated per consumer (rpc_decoders_ffi.mjs).
 
 import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
-import { Ok, Error as ResultError, CustomType, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
+import { Ok, Error as ResultError, CustomType, Empty, NonEmpty, BitArray } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
 import { InternalError, AppError, MalformedRequest, UnknownFunction } from "./error.mjs";
@@ -601,7 +601,7 @@ export function encode_value(value) {
   const encoder = new ETFEncoder();
   encoder.writeUint8(131); // ETF version byte
   encoder.encodeTerm(value);
-  return encoder.result();
+  return new BitArray(new Uint8Array(encoder.result()));
 }
 
 // Decode a standalone Gleam value from an ETF binary. Used by the

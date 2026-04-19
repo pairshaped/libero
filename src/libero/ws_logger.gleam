@@ -20,7 +20,7 @@ pub type Logger {
 pub fn default_logger() -> Logger {
   Logger(
     debug: fn(msg) { io.println("[debug] " <> msg) },
-    warning: fn(msg) { io.println("[warning] " <> msg) },
-    error: fn(msg) { io.println("[error] " <> msg) },
+    warning: fn(msg) { io.println_error("[warning] " <> msg) },
+    error: fn(msg) { io.println_error("[error] " <> msg) },
   )
 }

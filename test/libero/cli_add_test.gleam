@@ -7,7 +7,7 @@ fn gleam_toml() -> String {
 }
 
 pub fn add_javascript_client_test() {
-  let dir = "/tmp/libero_test_add_javascript_client_test"
+  let dir = "build/.test_cli_add_javascript"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/gleam.toml", gleam_toml())
@@ -34,7 +34,7 @@ pub fn add_javascript_client_test() {
 }
 
 pub fn add_erlang_client_test() {
-  let dir = "/tmp/libero_test_add_erlang_client_test"
+  let dir = "build/.test_cli_add_erlang"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/gleam.toml", gleam_toml())
@@ -54,7 +54,7 @@ pub fn add_erlang_client_test() {
 }
 
 pub fn add_skips_existing_app_test() {
-  let dir = "/tmp/libero_test_add_skips_existing_app_test"
+  let dir = "build/.test_cli_add_skips_existing"
   let _ = simplifile.delete(dir)
   let assert Ok(Nil) = simplifile.create_directory_all(dir)
   let assert Ok(Nil) = simplifile.write(dir <> "/gleam.toml", gleam_toml())

@@ -20,6 +20,17 @@ pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
     |> list.last
     |> result.unwrap(path)
 
+  case validate_name(name) {
+    Error(msg) -> Error(msg)
+    Ok(Nil) -> scaffold_validated(name:, path:)
+  }
+}
+
+// nolint: stringly_typed_error
+fn scaffold_validated(
+  name name: String,
+  path path: String,
+) -> Result(Nil, String) {
   // Abort if the project already exists
   case simplifile.is_file(path <> "/gleam.toml") {
     Ok(True) ->
@@ -29,6 +40,45 @@ pub fn scaffold(name _name: String, path path: String) -> Result(Nil, String) {
       scaffold_files(name:, path:, server_dir:)
     }
   }
+}
+
+// nolint: stringly_typed_error
+fn validate_name(name: String) -> Result(Nil, String) {
+  case string.to_graphemes(name) {
+    [] -> Error("project name cannot be empty")
+    [first, ..rest] ->
+      case is_lowercase_letter(first) {
+        False ->
+          Error(
+            "project name must start with a lowercase letter, got: " <> name,
+          )
+        True ->
+          case
+            list.all(rest, fn(ch) {
+              is_lowercase_letter(ch) || is_digit(ch) || ch == "_"
+            })
+          {
+            False ->
+              Error(
+                "project name must contain only lowercase letters, digits, and underscores, got: "
+                <> name,
+              )
+            True -> Ok(Nil)
+          }
+      }
+  }
+}
+
+const lowercase_letters = "abcdefghijklmnopqrstuvwxyz"
+
+const digits = "0123456789"
+
+fn is_lowercase_letter(ch: String) -> Bool {
+  string.contains(lowercase_letters, ch)
+}
+
+fn is_digit(ch: String) -> Bool {
+  string.contains(digits, ch)
 }
 
 // nolint: stringly_typed_error

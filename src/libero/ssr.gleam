@@ -7,6 +7,7 @@
 
 import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/option.{type Option}
 import gleam/result
 import libero/error.{type PanicInfo}
@@ -58,10 +59,13 @@ pub fn encode_flags(data: a) -> String {
 /// Decode flags from a Dynamic value (base64 ETF string).
 /// Use this in a Lustre init function to decode server-embedded flags.
 pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
-  let encoded: String = wire.coerce(flags)
-  bit_array.base64_decode(encoded)
-  |> result.map(wire.decode)
-  |> result.replace_error(BadFlags)
+  case decode.run(flags, decode.string) {
+    Error(_) -> Error(BadFlags)
+    Ok(encoded) ->
+      bit_array.base64_decode(encoded)
+      |> result.map(wire.decode)
+      |> result.replace_error(BadFlags)
+  }
 }
 
 /// Generate a complete HTML document with a pre-rendered body,
