@@ -235,6 +235,11 @@ Libero is a good fit when:
 - You want typed end-to-end communication without JSON codecs
 - You want clear client/server state boundaries
 
+## Examples
+
+- [`examples/todos`](examples/todos) -- Basic Lustre SPA with CRUD operations and WebSocket RPC
+- [`examples/counter`](examples/counter) -- SSR + hydration with client-side routing, shared views across Erlang and JavaScript
+
 ## Prior Art & Credits
 
 Libero's JS-side ETF codec is independently implemented but aligns with [arnu515/erlang-etf.js](https://github.com/arnu515/erlang-etf.js) (MIT) on `BIT_BINARY_EXT` handling and atom-length validation. Credit to that project for clear spec references — libero's codec adds encoding, a BEAM-native path, the float field registry, and offset-based parsing.
