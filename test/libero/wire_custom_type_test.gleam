@@ -90,7 +90,7 @@ pub fn roundtrip_0_arity_cancelled_test() {
 
 pub fn roundtrip_point_test() {
   let result: Point = unsafe_coerce(roundtrip(Point(x: 1.5, y: -2.3)))
-  let assert Point(x: x, y: y) = result
+  let Point(x: x, y: y) = result
   let assert True = x >. 1.4 && x <. 1.6
   let assert True = y >. -2.4 && y <. -2.2
 }
