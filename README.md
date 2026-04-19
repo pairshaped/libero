@@ -9,7 +9,6 @@ Like server components, but your client is a real SPA with typed RPC — and the
 ## Getting Started
 
 ```bash
-# From a project that depends on libero:
 gleam run -m libero -- new my_app
 cd my_app
 gleam run -m libero -- add web --target javascript
