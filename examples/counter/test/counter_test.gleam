@@ -34,15 +34,19 @@ pub fn decrement_returns_negative_one_test() {
     handler.update_from_client(msg: Decrement, state:)
 }
 
-pub fn ssr_call_returns_msg_from_server_test() {
+pub fn ssr_call_with_expect_test() {
   let state = fresh_state()
   let _ = dispatch.ensure_atoms()
-  let assert Ok(messages.CounterUpdated(Ok(0))) =
+  let assert Ok(0) =
     ssr.call(
       handle: dispatch.handle,
       state:,
       module: "shared/messages",
       msg: GetCounter,
+      expect: fn(resp) {
+        let assert CounterUpdated(Ok(n)) = resp
+        n
+      },
     )
 }
 
@@ -56,16 +60,20 @@ pub fn element_to_string_renders_html_test() {
 pub fn full_ssr_render_test() {
   let state = fresh_state()
   let _ = dispatch.ensure_atoms()
-  let assert Ok(messages.CounterUpdated(Ok(0))) =
+  let assert Ok(counter) =
     ssr.call(
       handle: dispatch.handle,
       state:,
       module: "shared/messages",
       msg: GetCounter,
+      expect: fn(resp) {
+        let assert CounterUpdated(Ok(n)) = resp
+        n
+      },
     )
-  let model = Model(route: views.DecPage, counter: 0)
+  let model = Model(route: views.DecPage, counter:)
   let body = element.to_string(views.view(model))
-  let flags = ssr.encode_flags(0)
+  let flags = ssr.encode_flags(counter)
   let doc =
     ssr.document(
       title: "Counter",

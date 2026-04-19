@@ -17,7 +17,7 @@ import mist.{type Connection}
 import server/generated/dispatch
 import server/generated/websocket as ws
 import server/shared_state
-import shared/messages.{type MsgFromServer, CounterUpdated, GetCounter}
+import shared/messages.{CounterUpdated, GetCounter}
 import shared/views.{Model}
 
 pub fn main() {
@@ -55,17 +55,20 @@ fn render_ssr(
   state: shared_state.SharedState,
 ) -> response.Response(mist.ResponseData) {
   // Fetch the counter value through dispatch (same path as client RPC).
-  // ssr.call returns the full MsgFromServer envelope, so we unwrap it.
-  let response: Result(MsgFromServer, _) =
+  let counter = case
     ssr.call(
       handle: dispatch.handle,
       state:,
       module: "shared/messages",
       msg: GetCounter,
+      expect: fn(resp) {
+        let assert CounterUpdated(Ok(n)) = resp
+        n
+      },
     )
-  let counter = case response {
-    Ok(CounterUpdated(Ok(n))) -> n
-    _ -> 0
+  {
+    Ok(n) -> n
+    Error(_) -> 0
   }
   // Build the model and render the view to HTML.
   let model = Model(route:, counter:)

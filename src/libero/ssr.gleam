@@ -19,14 +19,34 @@ pub type SsrError {
   BadFlags
 }
 
-/// Call a dispatch handler directly on the server, returning the
-/// decoded response payload. Encodes the call envelope, invokes
-/// the handler, strips the wire framing, and unwraps the result.
+/// Call a dispatch handler directly on the server, returning a
+/// decoded payload. Encodes the call envelope, invokes the handler,
+/// strips the wire framing, and passes the `MsgFromServer` response
+/// through the `expect` function to extract the desired value.
+///
+/// The `expect` parameter works like Elm's `Http.expect` — you tell
+/// the call how to unwrap the response variant into the value you
+/// actually want:
+///
+/// ```gleam
+/// ssr.call(
+///   handle: dispatch.handle,
+///   state:,
+///   module: "shared/messages",
+///   msg: GetCounter,
+///   expect: fn(resp) {
+///     let assert CounterUpdated(Ok(n)) = resp
+///     n
+///   },
+/// )
+/// // Returns Result(Int, SsrError)
+/// ```
 pub fn call(
   handle handle: fn(state, BitArray) -> #(BitArray, Option(PanicInfo), state),
   state state: state,
   module module: String,
   msg msg: msg,
+  expect expect: fn(response) -> payload,
 ) -> Result(payload, SsrError) {
   let data = wire.encode_call(module:, msg:)
   let #(response_bytes, maybe_panic, _state) = handle(state, data)
@@ -37,9 +57,9 @@ pub fn call(
         <<_tag, etf:bytes>> -> {
           // dispatch encodes Ok(MsgFromServer_variant) or Error(RpcError).
           // wire.decode returns the Gleam value directly via coerce.
-          let decoded: Result(payload, _) = wire.decode(etf)
+          let decoded: Result(response, _) = wire.decode(etf)
           case decoded {
-            Ok(payload) -> Ok(payload)
+            Ok(response) -> Ok(expect(response))
             Error(_) -> Error(DispatchError)
           }
         }

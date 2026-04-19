@@ -25,7 +25,7 @@ pub fn encode_flags_produces_valid_base64_test() {
 
 // --- ssr.call ---
 
-pub fn call_returns_decoded_payload_test() {
+pub fn call_with_expect_extracts_payload_test() {
   // Simulate a dispatch handler that returns Ok(payload)
   let handler = fn(_state: Nil, data: BitArray) {
     // Decode the call, ignore the module/msg, return a canned response
@@ -34,8 +34,31 @@ pub fn call_returns_decoded_payload_test() {
     #(response, None, Nil)
   }
   let result =
-    ssr.call(handle: handler, state: Nil, module: "test", msg: "ping")
+    ssr.call(
+      handle: handler,
+      state: Nil,
+      module: "test",
+      msg: "ping",
+      expect: fn(resp) { resp },
+    )
   let assert Ok("pong") = result
+}
+
+pub fn call_expect_transforms_response_test() {
+  let handler = fn(_state: Nil, data: BitArray) {
+    let _ = data
+    let response = wire.tag_response(wire.encode(Ok("hello")))
+    #(response, None, Nil)
+  }
+  let result =
+    ssr.call(
+      handle: handler,
+      state: Nil,
+      module: "test",
+      msg: "ping",
+      expect: fn(resp: String) { string.length(resp) },
+    )
+  let assert Ok(5) = result
 }
 
 pub fn call_returns_dispatch_error_on_error_response_test() {
@@ -45,14 +68,26 @@ pub fn call_returns_dispatch_error_on_error_response_test() {
     #(response, None, Nil)
   }
   let result: Result(String, ssr.SsrError) =
-    ssr.call(handle: handler, state: Nil, module: "test", msg: "ping")
+    ssr.call(
+      handle: handler,
+      state: Nil,
+      module: "test",
+      msg: "ping",
+      expect: fn(resp) { resp },
+    )
   let assert Error(ssr.DispatchError) = result
 }
 
 pub fn call_returns_bad_response_on_empty_bytes_test() {
   let handler = fn(_state: Nil, _data: BitArray) { #(<<>>, None, Nil) }
   let result: Result(String, ssr.SsrError) =
-    ssr.call(handle: handler, state: Nil, module: "test", msg: "ping")
+    ssr.call(
+      handle: handler,
+      state: Nil,
+      module: "test",
+      msg: "ping",
+      expect: fn(resp) { resp },
+    )
   let assert Error(ssr.BadResponse) = result
 }
 
