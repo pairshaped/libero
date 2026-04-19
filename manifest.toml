@@ -25,6 +25,7 @@ packages = [
 argv = { version = "~> 1.0" }
 glance = { version = "~> 6.0" }
 gleam_crypto = { version = "~> 1.5" }
+gleam_erlang = { version = "~> 1.0" }
 gleam_stdlib = { version = ">= 0.69.0 and < 2.0.0" }
 gleeunit = { version = "~> 1.0" }
 glinter = { version = "~> 2.14" }

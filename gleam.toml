@@ -25,6 +25,7 @@ tom = ">= 2.0.2 and < 3.0.0"
 [dev-dependencies]
 glinter = "~> 2.14"
 gleeunit = "~> 1.0"
+gleam_erlang = "~> 1.0"
 
 [tools.glinter]
 stats = true

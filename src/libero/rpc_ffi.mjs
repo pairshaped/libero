@@ -393,7 +393,7 @@ class ETFEncoder {
     }
 
     // Gleam linked list
-    if (value.head !== undefined || (Empty !== null && value instanceof Empty)) {
+    if (value instanceof Empty || value instanceof NonEmpty) {
       const arr = gleamListToArray(value);
       this.encodeList(arr);
       return;
@@ -790,6 +790,12 @@ function ensureSocket(url) {
   ws.addEventListener("close", () => {
     ws = null;
     clearAllPending("WebSocket connection closed");
+    // Note: no automatic reconnection. The next send() call will create a
+    // new connection via ensureSocket(). However, push handlers registered
+    // via registerPushHandler() will silently stop receiving messages until
+    // that reconnection happens. Consumers that rely on push should handle
+    // reconnection in their app layer (e.g., re-send a subscription message
+    // or reload data after ServerResponded triggers a new connection).
   });
 
   ws.addEventListener("error", () => {
@@ -838,6 +844,9 @@ export function registerPushHandler(module, callback) {
 
 // Encode a call envelope: {module_name, msg} as ETF binary.
 // Symmetric with the server-side wire.encode_call.
+// Returns a raw ArrayBuffer (not a Gleam BitArray) because this is only
+// called internally by send(), which passes it directly to WebSocket.send().
+// Compare with encode_value() which returns a BitArray for Gleam callers.
 export function encode_call(module, msg) {
   const encoder = new ETFEncoder();
   encoder.writeUint8(131); // ETF version byte

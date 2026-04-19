@@ -3,7 +3,12 @@
 // Standalone Node.js test - inlines the decoder/encoder classes from rpc_ffi.mjs
 // because top-level await imports in rpc_ffi.mjs prevent direct import.
 //
-// Run: cd server && node ../lib/libero/test/js/etf_codec_test.mjs
+// The inlined decoder runs in "raw" mode (no Gleam prelude): atoms stay as
+// strings, tagged tuples stay as plain arrays, and lists are JS arrays.
+// This matches the production decoder's raw mode, which the typed decoder
+// (rpc_decoders_ffi.mjs) post-processes into proper Gleam constructors.
+//
+// Run: node test/js/etf_codec_test.mjs
 
 import { execSync } from "child_process";
 import { strict as assert } from "assert";
@@ -18,30 +23,9 @@ function registerFloatFields(atomName, fieldIndices) {
   floatFieldRegistry.set(atomName, new Set(fieldIndices));
 }
 
-const registry = new Map();
-
-function registerConstructor(atomName, ctor) {
-  registry.set(atomName, ctor);
-}
-
-// Standalone mode - no Gleam prelude
-const Empty = null;
-const NonEmpty = null;
-const GleamCustomType = null;
-
+// Standalone mode - no Gleam prelude. Lists are plain JS arrays.
 function arrayToGleamList(arr) {
-  return arr; // standalone mode
-}
-
-function gleamListToArray(list) {
-  if (Array.isArray(list)) return list;
-  const out = [];
-  let cur = list;
-  while (cur && cur.head !== undefined) {
-    out.push(cur.head);
-    cur = cur.tail;
-  }
-  return out;
+  return arr;
 }
 
 const utf8Decoder = new TextDecoder();
@@ -160,18 +144,20 @@ class ETFDecoder {
     if (name === "true") return true;
     if (name === "false") return false;
     if (name === "nil" || name === "undefined") return undefined;
-    const Ctor = registry.get(name);
-    if (Ctor) return new Ctor();
+    // Raw mode: return atom as string. The typed decoder (rpc_decoders_ffi.mjs)
+    // resolves the correct constructor per type at a higher level.
     return name;
   }
 
   decodeTuple(arity) {
     if (arity === 0) return [];
+
     const firstTag = this.bytes[this.offset];
     if (firstTag === 118 || firstTag === 119) {
       this.offset += 1;
       const atomLen = firstTag === 119 ? this.readUint8() : this.readUint16();
       const atomName = this.readString(atomLen);
+
       if (atomName === "true" || atomName === "false" || atomName === "nil" || atomName === "undefined") {
         const firstVal = atomName === "true" ? true
           : atomName === "false" ? false
@@ -182,20 +168,16 @@ class ETFDecoder {
         }
         return elements;
       }
-      const Ctor = registry.get(atomName);
-      if (Ctor) {
-        const fields = [];
-        for (let i = 1; i < arity; i++) {
-          fields.push(this.decodeTerm());
-        }
-        return new Ctor(...fields);
-      }
+
+      // Atom-tagged tuple: return as array with atom string as first element.
+      // Typed decoder (rpc_decoders_ffi.mjs) resolves the correct constructor.
       const elements = [atomName];
       for (let i = 1; i < arity; i++) {
         elements.push(this.decodeTerm());
       }
       return elements;
     }
+
     const elements = [];
     for (let i = 0; i < arity; i++) {
       elements.push(this.decodeTerm());
@@ -452,14 +434,13 @@ function etfFromErlang(erlangExpr) {
 }
 
 function etfDecodeInErlang(b64) {
-  // Decode ETF in Erlang and return the term as a string
   const cmd = `erl -noshell -eval 'Bin = base64:decode(<<"${b64}">>), Term = erlang:binary_to_term(Bin), io:format("~p", [Term]), halt().'`;
   return execSync(cmd, { encoding: "utf-8" }).trim();
 }
 
 function jsEncode(value) {
   const encoder = new ETFEncoder();
-  encoder.writeUint8(131); // version byte
+  encoder.writeUint8(131);
   encoder.encodeTerm(value);
   return encoder.result();
 }
@@ -541,7 +522,6 @@ testDecode("float (1.0e10)", "1.0e10", r => assert.equal(r, 1.0e10));
 testDecode("string (hello)", "<<\"hello\">>", r => assert.equal(r, "hello"));
 testDecode("empty string", "<<>>", r => assert.equal(r, ""));
 testDecode("unicode string (cafe)", "unicode:characters_to_binary(<<67,97,102,195,169>>)", r => assert.equal(r, "Caf\u00e9"));
-
 testDecode("unicode string (emoji)", "unicode:characters_to_binary(<<240,159,142,179>>)", r => assert.equal(r, "\u{1F3B3}"));
 
 // --- Booleans ---
@@ -551,26 +531,13 @@ testDecode("boolean false", "false", r => assert.equal(r, false));
 // --- Nil ---
 testDecode("nil atom", "nil", r => assert.equal(r, undefined));
 
-// --- Bare atoms ---
+// --- Bare atoms (raw mode: returned as strings) ---
 testDecode("bare atom (none)", "none", r => {
-  // No constructor registered in standalone mode, returns string
   assert.equal(r, "none");
 });
 
 testDecode("bare atom (custom)", "my_atom", r => {
   assert.equal(r, "my_atom");
-});
-
-// --- Bare atom with registered constructor ---
-test("Decode", "bare atom with registered constructor", () => {
-  class None {}
-  registerConstructor("none", None);
-  const buf = etfFromErlang("none");
-  const decoder = new ETFDecoder(buf);
-  const result = decoder.decode();
-  assert.ok(result instanceof None);
-  // Clean up
-  registry.delete("none");
 });
 
 // --- Tuples ---
@@ -586,42 +553,17 @@ testDecode("3-tuple (no atom tag)", "{1, 2, 3}", r => {
   assert.deepEqual(r, [1, 2, 3]);
 });
 
-// --- Atom-tagged tuples (constructors) ---
-testDecode("atom-tagged tuple (unknown ctor)", "{some, 42}", r => {
-  // No constructor registered, returns array with atom name string
+// --- Atom-tagged tuples (raw mode: atom string + fields as array) ---
+testDecode("atom-tagged tuple (raw)", "{some, 42}", r => {
   assert.deepEqual(r, ["some", 42]);
 });
 
-test("Decode", "atom-tagged tuple with registered constructor", () => {
-  class Some {
-    constructor(value) { this.value = value; }
-  }
-  registerConstructor("some", Some);
-  const buf = etfFromErlang("{some, 42}");
-  const decoder = new ETFDecoder(buf);
-  const result = decoder.decode();
-  assert.ok(result instanceof Some);
-  assert.equal(result.value, 42);
-  registry.delete("some");
+testDecode("atom-tagged tuple with multiple fields", "{ok, 1, <<\"hello\">>}", r => {
+  assert.deepEqual(r, ["ok", 1, "hello"]);
 });
 
-test("Decode", "nested custom types with registered constructors", () => {
-  class Ok {
-    constructor(value) { this[0] = value; }
-  }
-  class Some {
-    constructor(value) { this[0] = value; }
-  }
-  registerConstructor("ok", Ok);
-  registerConstructor("some", Some);
-  const buf = etfFromErlang("{ok, {some, 42}}");
-  const decoder = new ETFDecoder(buf);
-  const result = decoder.decode();
-  assert.ok(result instanceof Ok);
-  assert.ok(result[0] instanceof Some);
-  assert.equal(result[0][0], 42);
-  registry.delete("ok");
-  registry.delete("some");
+testDecode("nested atom-tagged tuples", "{ok, {some, 42}}", r => {
+  assert.deepEqual(r, ["ok", ["some", 42]]);
 });
 
 // --- Tuple with special atom in first position ---
@@ -685,36 +627,9 @@ testDecode("nested map", "#{<<\"x\">> => #{<<\"y\">> => 42}}", r => {
   assert.equal(inner.get("y"), 42);
 });
 
-// --- Complex structures ---
-test("Decode", "complex: ok wrapping list of optionals", () => {
-  class Ok {
-    constructor(v) { this[0] = v; }
-  }
-  class Some {
-    constructor(v) { this[0] = v; }
-  }
-  class None {}
-  registerConstructor("ok", Ok);
-  registerConstructor("some", Some);
-  registerConstructor("none", None);
-
-  const buf = etfFromErlang("{ok, [{some, 1}, none, {some, 3}]}");
-  const decoder = new ETFDecoder(buf);
-  const result = decoder.decode();
-
-  assert.ok(result instanceof Ok);
-  const list = result[0];
-  assert.ok(Array.isArray(list));
-  assert.equal(list.length, 3);
-  assert.ok(list[0] instanceof Some);
-  assert.equal(list[0][0], 1);
-  assert.ok(list[1] instanceof None);
-  assert.ok(list[2] instanceof Some);
-  assert.equal(list[2][0], 3);
-
-  registry.delete("ok");
-  registry.delete("some");
-  registry.delete("none");
+// --- Complex structures (raw mode) ---
+testDecode("complex: ok wrapping list of optionals", "{ok, [{some, 1}, none, {some, 3}]}", r => {
+  assert.deepEqual(r, ["ok", [["some", 1], "none", ["some", 3]]]);
 });
 
 // --- Deeply nested ---
@@ -724,16 +639,6 @@ testDecode("deeply nested structure", "[[[[1]]]]", r => {
 
 // --- Improper list rejection ---
 test("Decode", "improper list throws", () => {
-  // Manually construct an improper list ETF: [1 | 2]
-  // Version(131) LIST_EXT(108) count(1) SMALL_INT(97,1) SMALL_INT(97,2)
-  const buf = new ArrayBuffer(8);
-  const v = new DataView(buf);
-  v.setUint8(0, 131);  // version
-  v.setUint8(1, 108);  // LIST_EXT
-  v.setUint32(2, 1);   // count = 1
-  v.setUint8(6, 97);   // SMALL_INTEGER_EXT
-  // Wait, need the element value too
-  // Let me recalculate: 131 108 00 00 00 01 97 01 97 02
   const buf2 = new ArrayBuffer(10);
   const v2 = new DataView(buf2);
   v2.setUint8(0, 131);  // version
@@ -748,7 +653,6 @@ test("Decode", "improper list throws", () => {
   assert.throws(() => decoder.decode(), /improper list/);
 });
 
-// Actually let's also test with erl producing an improper list
 test("Decode", "improper list from Erlang throws", () => {
   const buf = etfFromErlang("[1 | 2]");
   const decoder = new ETFDecoder(buf);
@@ -759,8 +663,8 @@ test("Decode", "improper list from Erlang throws", () => {
 test("Decode", "unknown tag throws", () => {
   const buf = new ArrayBuffer(3);
   const v = new DataView(buf);
-  v.setUint8(0, 131);  // version
-  v.setUint8(1, 200);  // bogus tag
+  v.setUint8(0, 131);
+  v.setUint8(1, 200);
   const decoder = new ETFDecoder(buf);
   assert.throws(() => decoder.decode(), /unknown tag 200/);
 });
@@ -769,7 +673,7 @@ test("Decode", "unknown tag throws", () => {
 test("Decode", "wrong version byte throws", () => {
   const buf = new ArrayBuffer(2);
   const v = new DataView(buf);
-  v.setUint8(0, 99);  // wrong version
+  v.setUint8(0, 99);
   v.setUint8(1, 97);
   const decoder = new ETFDecoder(buf);
   assert.throws(() => decoder.decode(), /expected version byte 131/);
@@ -829,7 +733,6 @@ test("Encode", "map", () => {
   const buf = jsEncode(m);
   const b64 = bufferToBase64(buf);
   const erlResult = etfDecodeInErlang(b64);
-  // Map ordering might vary, check both keys are present
   assert.ok(erlResult.includes("<<\"a\">> => 1"), `Expected key a in: ${erlResult}`);
   assert.ok(erlResult.includes("<<\"b\">> => 2"), `Expected key b in: ${erlResult}`);
 });
@@ -908,20 +811,12 @@ test("RoundTrip", "map", () => {
 console.log("\nFloat field registry tests:");
 
 test("FloatRegistry", "whole-number float encoded as NEW_FLOAT_EXT when registered", () => {
-  // Simulate a custom type with a float field at index 0
-  // The encoder checks floatFieldRegistry when encoding custom type fields.
-  // Since we don't have GleamCustomType in standalone, we'll test the
-  // encoder's encodeNumber directly - a whole number gets INTEGER_EXT,
-  // but with float field registry it should get NEW_FLOAT_EXT.
-
-  // First, verify that 2 encodes as SMALL_INTEGER_EXT (tag 97) normally
   const enc1 = new ETFEncoder();
   enc1.writeUint8(131);
   enc1.encodeNumber(2);
   const bytes1 = new Uint8Array(enc1.result());
   assert.equal(bytes1[1], 97, "Without registry, 2 should use SMALL_INTEGER_EXT (97)");
 
-  // Now verify that when we manually write a float, tag 70 is used
   const enc2 = new ETFEncoder();
   enc2.writeUint8(131);
   enc2.writeUint8(70); // NEW_FLOAT_EXT
@@ -929,7 +824,6 @@ test("FloatRegistry", "whole-number float encoded as NEW_FLOAT_EXT when register
   const bytes2 = new Uint8Array(enc2.result());
   assert.equal(bytes2[1], 70, "NEW_FLOAT_EXT tag should be 70");
 
-  // Verify the float decodes back to 2.0 in Erlang
   const b64 = bufferToBase64(enc2.result());
   const erlResult = etfDecodeInErlang(b64);
   assert.equal(erlResult, "2.0");
@@ -946,24 +840,18 @@ test("FloatRegistry", "registerFloatFields stores and retrieves correctly", () =
 });
 
 test("FloatRegistry", "encoder uses registry for custom type float fields", () => {
-  // We can't fully test this without GleamCustomType, but we can test
-  // the mechanism: register fields, then verify the registry is consulted.
   registerFloatFields("point", [0, 1]);
   const indices = floatFieldRegistry.get("point");
   assert.ok(indices.has(0));
   assert.ok(indices.has(1));
 
-  // Manually build what the encoder would produce for a point{x: 2, y: 3}:
-  // tuple {point, 2.0, 3.0} with float encoding forced
   const enc = new ETFEncoder();
   enc.writeUint8(131);
   enc.writeUint8(104); // SMALL_TUPLE_EXT
   enc.writeUint8(3);   // arity: atom + 2 fields
   enc.writeAtom("point");
-  // Field 0 (registered as float): force NEW_FLOAT_EXT
   enc.writeUint8(70);
   enc.writeFloat64(2.0);
-  // Field 1 (registered as float): force NEW_FLOAT_EXT
   enc.writeUint8(70);
   enc.writeFloat64(3.0);
 
@@ -971,14 +859,13 @@ test("FloatRegistry", "encoder uses registry for custom type float fields", () =
   const erlResult = etfDecodeInErlang(b64);
   assert.equal(erlResult, "{point,2.0,3.0}");
 
-  // Verify that without float forcing, 2 would be an integer
   const enc2 = new ETFEncoder();
   enc2.writeUint8(131);
   enc2.writeUint8(104);
   enc2.writeUint8(3);
   enc2.writeAtom("point");
-  enc2.encodeNumber(2);  // This will produce SMALL_INTEGER_EXT
-  enc2.encodeNumber(3);  // This too
+  enc2.encodeNumber(2);
+  enc2.encodeNumber(3);
   const b642 = bufferToBase64(enc2.result());
   const erlResult2 = etfDecodeInErlang(b642);
   assert.equal(erlResult2, "{point,2,3}");
@@ -993,14 +880,13 @@ test("FloatRegistry", "encoder uses registry for custom type float fields", () =
 console.log("\nEdge case tests:");
 
 test("Decode", "ATOM_UTF8_EXT (tag 118) long atom", () => {
-  // Build an ETF binary with a long atom using tag 118
-  const atomName = "a".repeat(300); // > 255 bytes, forces ATOM_UTF8_EXT
+  const atomName = "a".repeat(300);
   const encoded = textEncoder.encode(atomName);
   const buf = new ArrayBuffer(1 + 1 + 2 + encoded.length);
   const view = new DataView(buf);
   let off = 0;
-  view.setUint8(off++, 131);  // version
-  view.setUint8(off++, 118);  // ATOM_UTF8_EXT
+  view.setUint8(off++, 131);
+  view.setUint8(off++, 118);
   view.setUint16(off, encoded.length); off += 2;
   new Uint8Array(buf).set(encoded, off);
 
@@ -1010,12 +896,11 @@ test("Decode", "ATOM_UTF8_EXT (tag 118) long atom", () => {
 });
 
 test("Decode", "0-arity tuple", () => {
-  // {}, encoded as SMALL_TUPLE_EXT with arity 0
   const buf = new ArrayBuffer(3);
   const view = new DataView(buf);
   view.setUint8(0, 131);
-  view.setUint8(1, 104); // SMALL_TUPLE_EXT
-  view.setUint8(2, 0);   // arity 0
+  view.setUint8(1, 104);
+  view.setUint8(2, 0);
   const decoder = new ETFDecoder(buf);
   const result = decoder.decode();
   assert.deepEqual(result, []);
@@ -1024,15 +909,11 @@ test("Decode", "0-arity tuple", () => {
 // ============================================================
 // Constructor input shapes - regression for `wire.decode` from
 // Gleam JS. The Gleam BitArray exposes its bytes as a Uint8Array
-// at `.rawBuffer`, NOT as an ArrayBuffer, so a naive `new DataView(input)`
-// throws. ETFDecoder must accept all three shapes the codec sees in
-// the wild: ArrayBuffer (WebSocket onmessage), Uint8Array, BitArray.
+// at `.rawBuffer`, NOT as an ArrayBuffer.
 // ============================================================
 
 console.log("\nConstructor input shape tests:");
 
-// Build a small ETF binary once to feed into each shape variant.
-// Encoding for the integer 42: <<131, 97, 42>> (version, SMALL_INTEGER_EXT, value).
 function makeIntegerArrayBuffer() {
   const buf = new ArrayBuffer(3);
   const view = new DataView(buf);
@@ -1054,20 +935,15 @@ test("Decode", "constructor accepts Uint8Array", () => {
 });
 
 test("Decode", "constructor accepts Gleam BitArray (mock)", () => {
-  // Gleam JS BitArray exposes its data as `rawBuffer` (a Uint8Array).
-  // Mocking it here avoids depending on the Gleam prelude.
   const mockBitArray = { rawBuffer: new Uint8Array(makeIntegerArrayBuffer()) };
   const decoder = new ETFDecoder(mockBitArray);
   assert.equal(decoder.decode(), 42);
 });
 
 test("Decode", "constructor handles Uint8Array with non-zero byteOffset", () => {
-  // Important edge case: a Uint8Array sliced from a larger ArrayBuffer
-  // has byteOffset != 0. The DataView must be constructed with the
-  // matching offset/length, not over the whole underlying buffer.
   const wide = new Uint8Array(10);
-  wide.set([0, 0, 0, 131, 97, 42, 0, 0, 0, 0]); // ETF payload at offset 3
-  const slice = wide.subarray(3, 6); // length 3, byteOffset 3
+  wide.set([0, 0, 0, 131, 97, 42, 0, 0, 0, 0]);
+  const slice = wide.subarray(3, 6);
   assert.equal(slice.byteOffset, 3);
   const decoder = new ETFDecoder(slice);
   assert.equal(decoder.decode(), 42);
@@ -1083,7 +959,6 @@ test("Decode", "constructor rejects unsupported input", () => {
 // snakeCase tests - must match Gleam to_snake_case
 // ============================================================
 
-// Inline the snakeCase function from rpc_ffi.mjs
 function snakeCase(name) {
   let result = "";
   for (let i = 0; i < name.length; i++) {
