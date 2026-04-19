@@ -126,3 +126,35 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all(["build/.test_decoders_ffi"])
 }
+
+pub fn write_if_missing_preserves_existing_file_test() {
+  let dir = "build/.test_write_if_missing_preserve"
+  let _ = simplifile.delete(dir)
+  let assert Ok(Nil) = simplifile.create_directory_all(dir)
+  let path = dir <> "/app.gleam"
+  let custom_content = "// custom entry point, do not overwrite"
+  let assert Ok(Nil) = simplifile.write(path, custom_content)
+
+  let assert Ok(Nil) =
+    codegen.write_if_missing(path: path, content: "// generated content")
+
+  let assert Ok(content) = simplifile.read(path)
+  let assert True = content == custom_content
+
+  let assert Ok(Nil) = simplifile.delete_all([dir])
+}
+
+pub fn write_if_missing_writes_when_file_absent_test() {
+  let dir = "build/.test_write_if_missing_fresh"
+  let _ = simplifile.delete(dir)
+  let assert Ok(Nil) = simplifile.create_directory_all(dir)
+  let path = dir <> "/app.gleam"
+
+  let assert Ok(Nil) =
+    codegen.write_if_missing(path: path, content: "// generated content")
+
+  let assert Ok(content) = simplifile.read(path)
+  let assert True = content == "// generated content"
+
+  let assert Ok(Nil) = simplifile.delete_all([dir])
+}

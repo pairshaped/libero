@@ -1148,7 +1148,22 @@ fn content_type(path: String) -> String {
 "
 
   ensure_parent_dir(path: output)
-  write_file(path: output, content: content)
+  write_if_missing(path: output, content: content)
+}
+
+/// Write content to a file, skipping if the file already exists.
+/// Used for scaffolded files that users may customize after generation.
+pub fn write_if_missing(
+  path path: String,
+  content content: String,
+) -> Result(Nil, GenError) {
+  case simplifile.is_file(path) |> result.unwrap(False) {
+    True -> {
+      io.println("  kept " <> path <> " (exists, not overwriting)")
+      Ok(Nil)
+    }
+    False -> write_file(path: path, content: content)
+  }
 }
 
 // ---------- File utilities ----------
