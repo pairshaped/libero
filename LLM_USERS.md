@@ -1,25 +1,75 @@
 # Libero Context
 
-Libero is a typed RPC framework for Gleam SPAs using Lustre. It generates client/server glue from shared message type definitions. Transport is WebSocket with ETF (Erlang Term Format) encoding. No REST, no JSON codecs, no manual dispatch.
+Libero is a full-stack Gleam framework with typed RPC. Define message types, write handlers, Libero generates dispatch, client stubs, and server bootstrap. Transport is WebSocket with ETF encoding. No REST, no JSON codecs, no manual dispatch.
 
 ## Project Structure
 
-A Libero app is three Gleam packages:
-
 ```
-shared/   -- Gleam, target: erlang. Message types + domain types only. No logic.
-server/   -- Gleam, target: erlang. Handlers, bootstrap, state. Depends on shared + libero + mist.
-client/   -- Gleam, target: javascript. Lustre SPA. Depends on shared + libero + lustre.
+my_app/
+  gleam.toml                       # server package (erlang) + [libero] config
+  src/
+    core/
+      messages.gleam               # MsgFromClient, MsgFromServer types
+      handler.gleam                # update_from_client function
+      shared_state.gleam           # server state type
+      app_error.gleam              # error type
+      generated/                   # dispatch, websocket, push (auto-generated)
+    my_app.gleam                   # server entry point (auto-generated)
+  clients/
+    web/
+      gleam.toml                   # client package (javascript), generated if missing
+      src/
+        app.gleam                  # Lustre SPA
+        generated/                 # client stubs (auto-generated)
+  test/
+    my_app_test.gleam
 ```
 
-Codegen writes into `server/src/<app>/generated/libero/` and `client/src/<app>/generated/libero/`. Never hand-edit generated files.
+Rules:
+- `src/core/` is the server. All messages, types, handlers, and business logic live here.
+- `clients/<name>/` are consumer apps. Each is a separate Gleam package with its own target.
+- Never edit files in `generated/` directories.
+- Each client's `gleam.toml` is generated once by `libero add`, never overwritten.
 
-## Message Types (The Core Contract)
+## CLI
 
-All of Libero flows from two type names in shared modules:
+```bash
+gleam run -m libero -- new <name>                     # scaffold project
+gleam run -m libero -- add <name> --target <target>   # add a client
+gleam run -m libero -- gen                            # regenerate stubs
+gleam run -m libero -- build                          # gen + build server + all clients
+```
+
+## Configuration
+
+Libero config lives in `gleam.toml` under `[libero]`:
+
+```toml
+name = "my_app"
+version = "0.1.0"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+gleam_erlang = "~> 1.0"
+gleam_http = "~> 4.0"
+mist = "~> 6.0"
+lustre = "~> 5.6"
+libero = { path = "../libero" }
+
+[libero]
+port = 8080
+
+[libero.clients.web]
+target = "javascript"
+```
+
+## Message Types
+
+Libero scans `src/core/` for modules exporting `MsgFromClient` and/or `MsgFromServer`:
 
 ```gleam
-// shared/src/shared/todos.gleam
+// src/core/messages.gleam
 
 pub type MsgFromClient {
   Create(params: TodoParams)
@@ -38,45 +88,49 @@ pub type MsgFromServer {
 
 Rules:
 - Every `MsgFromServer` variant must have exactly one field.
-- Wrap that field in `Result(payload, DomainError)` to get RemoteData integration.
-- File layout is free. Libero scans for the type names `MsgFromClient` and `MsgFromServer`, not file paths.
-- You can have multiple shared modules (e.g., `shared/todos.gleam`, `shared/auth.gleam`). Each gets its own generated stubs.
+- Wrap that field in `Result(payload, DomainError)` for RemoteData integration.
+- File layout is free. Libero scans for the type names, not file paths.
+- Multiple message modules are supported (e.g., `messages.gleam`, `auth.gleam`). Each gets its own stubs.
 
 ## Server Handler
 
-Handlers must export this exact signature:
+Handlers export `update_from_client` with this signature:
 
 ```gleam
-// server/src/server/store.gleam
+// src/core/handler.gleam
+
+import core/messages.{type MsgFromClient, type MsgFromServer}
+import core/shared_state.{type SharedState}
+import core/app_error.{type AppError}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(MsgFromServer, SharedState), AppError)
+) -> Result(#(MsgFromServer, SharedState), AppError) {
+  case msg {
+    messages.LoadAll -> Ok(#(TodosLoaded(Ok(all())), state))
+    messages.Create(params:) -> Ok(#(TodoCreated(Ok(insert(params.title))), state))
+    // ...
+  }
+}
 ```
 
-- Pattern match on `msg` to handle each `MsgFromClient` variant.
-- Return `#(response_msg, new_state)` wrapped in `Result`.
 - Domain errors go inside the `MsgFromServer` field: `Ok(#(TodoCreated(Error(NotFound)), state))`.
 - App-level errors go in the outer Result: `Error(AppError("db connection lost"))`.
-- Multiple handlers per module are supported. Return `Error(UnhandledMessage)` to pass to the next handler in the chain.
-
-`SharedState` is typically a unit type. Actual state lives in ETS, a database, or OTP processes. Handlers query/mutate external stores directly.
+- Multiple handlers per module supported. Return `Error(UnhandledMessage)` to pass to the next handler.
+- `SharedState` is typically a unit type. Actual state lives in ETS or a database.
 
 ## Client Usage (Lustre)
 
 ```gleam
-// client/src/client/app.gleam
+// clients/web/src/app.gleam
 
-import client/generated/libero/todos as rpc
-import libero/remote_data.{type RemoteData, type RpcFailure, Loading, NotAsked, Success, Failure}
+import generated/messages as rpc
+import libero/remote_data.{type RemoteData, type RpcFailure, Loading, Success, Failure}
 import libero/wire
-import shared/todos.{type MsgFromServer, type Todo}
 
 pub type Model {
-  Model(
-    items: RemoteData(List(Todo), RpcFailure),
-  )
+  Model(items: RemoteData(List(Todo), RpcFailure))
 }
 
 pub type Msg {
@@ -84,8 +138,7 @@ pub type Msg {
   GotPush(MsgFromServer)
 }
 
-pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
-  // Subscribe to server pushes + fetch initial data
+pub fn init(_flags) -> #(Model, Effect(Msg)) {
   let subscribe = rpc.update_from_server(handler: fn(raw) {
     GotPush(wire.coerce(raw))
   })
@@ -93,76 +146,80 @@ pub fn init(_flags: Nil) -> #(Model, Effect(Msg)) {
 }
 
 fn load_all() -> Effect(Msg) {
-  rpc.send_to_server(msg: todos.LoadAll, on_response: fn(raw) {
-    TodosLoadedMsg(remote_data.to_remote(raw: raw, format_domain: format_error))
+  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
+    TodosLoadedMsg(remote_data.to_remote(raw:, format_domain: format_error))
   })
-}
-
-pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
-  case msg {
-    TodosLoadedMsg(rd) -> #(Model(..model, items: rd), effect.none())
-    GotPush(todos.TodosLoaded(Ok(items))) -> #(Model(..model, items: Success(items)), effect.none())
-    GotPush(_) -> #(model, effect.none())
-  }
-}
-
-pub fn view(model: Model) -> Element(Msg) {
-  case model.items {
-    NotAsked | Loading -> html.p([], [element.text("Loading...")])
-    Failure(err) -> html.p([], [element.text("Error: " <> err.message)])
-    Success(items) -> view_list(items)
-  }
 }
 ```
 
 Key patterns:
-- `rpc.send_to_server()` returns a Lustre `Effect`. Wire encoding is handled internally.
-- `remote_data.to_remote(raw, format_error)` converts the wire response into `RemoteData`.
-- `wire.coerce(raw)` casts a `Dynamic` to a typed value (safe when client/server are built from the same shared types).
-- Push messages arrive via `rpc.update_from_server()` subscription, separate from request/response flow.
+- `rpc.send_to_server()` returns a Lustre `Effect`. Wire encoding handled internally.
+- `remote_data.to_remote(raw, format_error)` converts wire response to `RemoteData`.
+- `wire.coerce(raw)` casts `Dynamic` to a typed value (safe when built from same types).
+- Push messages arrive via `rpc.update_from_server()` subscription.
 
-## BEAM Clients (CLI, Services, Scripts)
+## BEAM Clients (CLI, Services)
 
-Any BEAM process (Gleam, Erlang, Elixir) can be a Libero client over HTTP with no Libero dependency. The wire format is native ETF, so you just use `term_to_binary`/`binary_to_term`:
+Any BEAM process can call the server over HTTP POST with native ETF:
 
 ```gleam
-// cli/src/cli.gleam
-
-// Call envelope is a tuple: {module_name, MsgFromClient_value}
-let payload = term_to_binary(#("shared/todos", LoadAll))
-
-// POST to the server's /rpc endpoint
-let response = httpc.request(Post, "http://localhost:8080/rpc", payload)
-
-// Response is Result(payload, RpcError) in ETF
-let result: Result(List(Todo), String) = binary_to_term(response.body)
+let payload = term_to_binary(#("core/messages", LoadAll))
+let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
+let result = binary_to_term(response.body)
 ```
 
-No WebSocket, no generated stubs, no Libero import. The server's `dispatch.handle()` handles both HTTP and WebSocket calls identically. This works for CLI tools, backend services, batch jobs, or any BEAM process that needs to call Libero handlers.
+No WebSocket, no generated stubs, no Libero dependency needed. Push is WebSocket-only.
 
-Push (server-initiated messages) is WebSocket-only. HTTP clients only get request/response.
+## Server Push
 
-## JavaScript Clients (Non-Lustre)
+Server can broadcast to connected clients using BEAM pg groups:
 
-Libero includes a JavaScript ETF encoder/decoder (`rpc_ffi.mjs`) that the generated Lustre client uses internally. Non-Lustre JS clients (Node, Deno, browser fetch) can use the same codec to call the `/rpc` HTTP endpoint:
+```gleam
+import core/generated/messages as messages_push
 
-```javascript
-// Encode a call envelope: {module_name, MsgFromClient_value}
-const payload = ETFEncoder.encode(["shared/todos", constructLoadAll()]);
+// Broadcast to all clients on a topic
+messages_push.send_to_clients(topic: "todos", msg: TodosLoaded(Ok(items)))
 
-// POST to the server
-const response = await fetch("http://localhost:8080/rpc", {
-  method: "POST",
-  body: payload,
-});
-
-// Decode the ETF response: Result(payload, RpcError)
-const result = ETFDecoder.decode(new Uint8Array(await response.arrayBuffer()));
+// Send to a specific client
+messages_push.send_to_client(client_id: "user:42", msg: TodoCreated(Ok(item)))
 ```
 
-Type reconstruction on the client side is handled by the generated typed decoders (`rpc_decoders.gleam` + `rpc_decoders_ffi.mjs`). Each type reachable from `MsgFromClient`/`MsgFromServer` gets its own decoder function; the wire's bare atoms are disambiguated by the decoder's type context rather than a global registry. This eliminates the old atom-collision bug where variants sharing a name across modules (e.g. `line_item.Paid` vs `order.Paid`) would reconstruct as the wrong type. Primitives and combinators used by the generated decoders come from the static `libero/decoders_prelude.mjs` that ships with libero. See `docs/superpowers/specs/2026-04-17-typed-decoders-design.md` and the regression test at `test/libero/collision_regression_test.gleam` for full details.
+Topics are set during WebSocket upgrade (in the generated server entry point).
 
-For languages without an ETF library (Python, Ruby, Go, etc.), there is currently no JSON wire format. Non-BEAM, non-JS clients would need a third-party ETF library or a JSON gateway in front of Libero.
+## What Gets Generated
+
+**Server dispatch (`src/core/generated/`):**
+- `dispatch.gleam` — routes messages to handlers
+- `websocket.gleam` — Mist WebSocket handler with push (pure Gleam, no FFI)
+- `<module>.gleam` — push wrappers per message module
+
+**Server entry point (`src/<app_name>.gleam`):**
+- Boots Mist with WebSocket on `/ws`, HTTP RPC on `/rpc`
+- Serves HTML shell at `/` loading the first JS client
+- Serves client JS bundles at `/<client_name>/*`
+
+**Per client (`clients/<name>/src/generated/`):**
+- `<module>.gleam` — `send_to_server` and `update_from_server` stubs
+- `rpc_config.gleam` — WebSocket URL
+- `rpc_register.gleam` + `.mjs` — type registry for ETF decoder
+- `ssr.gleam` + `.mjs` — SSR flag reader
+
+**Atom registration (`src/<app>@generated@rpc_atoms.erl`):**
+- Pre-registers Erlang atoms for safe ETF decoding
+
+## Wire Protocol
+
+- Format: ETF (Erlang External Term Format). Binary, not text.
+- Call envelope: `{module_path, MsgFromClient_value}` (e.g., `{"core/messages", LoadAll}`).
+- Response: `Result(payload, RpcError(AppError))`. The `MsgFromServer` variant wrapper is stripped.
+- Frame tags: byte `0` = response, byte `1` = push.
+
+## Error Model
+
+Three tiers:
+1. **Domain errors** — inside `MsgFromServer` field: `Result(payload, DomainError)`. User-facing.
+2. **App errors** — handler returns `Error(AppError(...))`. Wire envelope: `Error(AppError(value))`.
+3. **Framework errors** — `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`.
 
 ## RemoteData
 
@@ -177,104 +234,9 @@ pub type RemoteData(value, error) {
 
 Helpers: `to_remote`, `to_result`, `map`, `map_error`, `unwrap`, `to_option`, `is_success`, `is_loading`.
 
-## Server Push
-
-Server can broadcast to clients subscribed to a topic:
-
-```gleam
-// In server handler or anywhere on the BEAM
-import server/generated/libero/todos as todos_push
-
-// Broadcast to all clients on a topic
-todos_push.send_to_clients(topic: "todos", msg: TodosLoaded(Ok(all_items)))
-
-// Send to a specific client
-todos_push.send_to_client(client_id: client_id, msg: TodoCreated(Ok(item)))
-```
-
-Topic subscriptions are set during WebSocket upgrade:
-
-```gleam
-ws.upgrade(request: req, state: shared, topics: ["todos"], logger: logger)
-```
-
-Push uses BEAM pg (process groups). No external dependencies.
-
-## Server Bootstrap
-
-```gleam
-// server/src/server.gleam
-import server/generated/libero/websocket as ws
-
-pub fn main() {
-  store.init()
-  push.init()
-  let shared = shared_state.new()
-
-  let assert Ok(_) =
-    fn(req) {
-      case req.method, request.path_segments(req) {
-        _, ["ws"] -> ws.upgrade(request: req, state: shared, topics: ["todos"], logger: logger)
-        http.Post, ["rpc"] -> handle_rpc(req, shared)  // HTTP endpoint (optional)
-        _, _ -> serve_static(req)
-      }
-    }
-    |> mist.new
-    |> mist.port(8080)
-    |> mist.start
-
-  process.sleep_forever()
-}
-```
-
-The HTTP `/rpc` endpoint calls `dispatch.handle(state, body)` directly -- same handler as WebSocket, different transport.
-
-## Codegen
-
-Run from the server package:
-
-```bash
-gleam run -m libero -- \
-  --ws-path=/ws \
-  --shared=../shared \
-  --server=. \
-  --client=../client
-```
-
-Flags:
-- `--ws-url=<url>` or `--ws-path=<path>` (one required). `--ws-path` resolves from `window.location` at runtime.
-- `--shared=<path>` (required). Path to shared package.
-- `--server=<path>` (optional, defaults to `.`).
-- `--client=<path>` (optional, defaults to `../client`).
-- `--namespace=<name>` (optional). Scopes generated paths for multi-SPA setups.
-
-Generated files:
-- **Server:** `dispatch.gleam` (routes messages to handlers), `websocket.gleam` (Mist WebSocket handler), `<module>.gleam` (push wrappers per shared module), `rpc_atoms.erl` (atom pre-registration).
-- **Client:** `<module>.gleam` (RPC stubs per shared module), `rpc_config.gleam` (WebSocket URL), `rpc_decoders.gleam` + `rpc_decoders_ffi.mjs` (typed decoders for ETF reconstruction).
-
-## Wire Protocol
-
-- Format: ETF (Erlang External Term Format). Binary, not text.
-- Call envelope: `{module_name_string, MsgFromClient_value}` (e.g., `{"shared/todos", LoadAll}`).
-- Response envelope: `Result(payload, RpcError(AppError))`. The `MsgFromServer` variant wrapper is stripped (client pairs responses via FIFO order).
-- Frame tags: byte `0` prefix = response (routed to FIFO callback queue), byte `1` prefix = push (routed to push handler).
-- BEAM clients (Gleam/Erlang/Elixir) can call the HTTP endpoint directly using native `term_to_binary`/`binary_to_term` with no Libero dependency.
-
-## Error Model
-
-Three tiers:
-
-1. **Domain errors** -- inside `MsgFromServer` field: `Result(payload, DomainError)`. Expected, user-facing. Surfaces via RemoteData.
-2. **App errors** -- handler returns `Error(AppError(...))`. Unexpected but recoverable. Wire envelope: `Error(AppError(value))`.
-3. **Framework errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`. Panics are caught, assigned a trace_id, and surfaced to the WebSocket logger.
-
-## FIFO Response Matching
-
-Client sends requests sequentially over WebSocket. Server responds in the same order. Client matches responses by position in a FIFO queue, not by message type. This is why the `MsgFromServer` variant wrapper is stripped from responses -- the client already knows which variant to expect based on request order.
-
 ## Key Dependencies
 
-- `lustre` -- Gleam UI framework (client, compiles to JS)
-- `mist` -- HTTP/WebSocket server (server, runs on BEAM)
-- `gleam_crypto` -- used for trace IDs
-- `glance` -- Gleam parser (used by codegen to scan shared modules)
+- `lustre` — Gleam UI framework (client, compiles to JS)
+- `mist` — HTTP/WebSocket server (server, runs on BEAM)
+- `glance` — Gleam parser (used by codegen to scan modules)
+- `tom` — TOML parser (reads `[libero]` config from gleam.toml)

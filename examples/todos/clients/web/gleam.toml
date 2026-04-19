@@ -1,0 +1,9 @@
+name = "web"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+todos = { path = "../../" }
+libero = { path = "../../../../" }
+lustre = "~> 5.6"

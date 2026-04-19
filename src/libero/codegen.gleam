@@ -19,6 +19,8 @@ pub fn write_dispatch(
   message_modules message_modules: List(MessageModule),
   server_generated server_generated: String,
   atoms_module atoms_module: String,
+  shared_state_module shared_state_module: String,
+  app_error_module app_error_module: String,
 ) -> Result(Nil, GenError) {
   // Only modules with MsgFromClient need dispatch arms.
   let msg_from_client_modules =
@@ -64,33 +66,35 @@ pub fn write_dispatch(
           )
         }
         [first_handler, ..rest_handlers] -> {
-          // Multiple handlers: chain with UnhandledMessage fallthrough
+          // Multiple handlers: chain with UnhandledMessage fallthrough.
+          // Handler calls live INSIDE the dispatch closure so panics in any
+          // handler are caught by trace.try_call - otherwise a crash in a
+          // handler escapes dispatch and takes down the websocket handler.
           let msg_alias = message_alias(m.module_path)
           let first_alias = handler_alias(first_handler)
           let typed_msg_line =
-            "      let typed_msg: "
+            "        let typed_msg: "
             <> msg_alias
             <> ".MsgFromClient = wire.coerce(msg)"
           let first_call =
-            "      let result = "
+            "        let result = "
             <> first_alias
             <> ".update_from_client(msg: typed_msg, state:)"
           let chain_calls =
             list.map(rest_handlers, fn(handler_mod) {
               let alias = handler_alias(handler_mod)
-              "      let result = case result {\n        Error(UnhandledMessage) -> "
+              "        let result = case result {\n          Error(UnhandledMessage) -> "
               <> alias
-              <> ".update_from_client(msg: typed_msg, state:)\n        other -> other\n      }"
+              <> ".update_from_client(msg: typed_msg, state:)\n          other -> other\n        }"
             })
           let body =
             string.join([typed_msg_line, first_call, ..chain_calls], "\n")
           Ok(
             "    Ok(#(\""
             <> m.module_path
-            <> "\", msg)) -> {\n"
+            <> "\", msg)) ->\n      dispatch(state, fn() {\n"
             <> body
-            <> "\n      dispatch(state, fn() { result })\n"
-            <> "    }",
+            <> "\n        result\n      })",
           )
         }
       }
@@ -121,21 +125,20 @@ import gleam/option.{type Option, None, Some}
 import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFunction}
 import libero/trace
 import libero/wire
-import server/app_error.{type AppError" <> case needs_unhandled_import {
+import " <> app_error_module <> ".{type AppError" <> case needs_unhandled_import {
       True -> ", UnhandledMessage"
       False -> ""
     } <> "}
-import server/shared_state.{type SharedState}
+import " <> shared_state_module <> ".{type SharedState}
 " <> string.join(all_imports, "\n") <> "
 
 @external(erlang, \"" <> atoms_module <> "\", \"ensure\")
-fn ensure_atoms() -> Nil
+pub fn ensure_atoms() -> Nil
 
 pub fn handle(
   state state: SharedState,
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
-  let Nil = ensure_atoms()
   case wire.decode_call(data) {
 " <> string.join(all_arms, "\n") <> "
   }
@@ -149,14 +152,39 @@ fn dispatch(
     Ok(Ok(#(value, new_state))) ->
       // Ship the full MsgFromServer envelope on the response so the client's
       // typed decoder handles both push and response frames uniformly.
-      #(wire.tag_response(wire.encode(Ok(value))), None, new_state)
+      // Encoding runs under try_call so any serialization panic (e.g.
+      // a value containing an unencodable term) is captured and surfaced
+      // as InternalError instead of crashing the websocket handler.
+      safe_encode(fn() { wire.encode(Ok(value)) }, new_state, \"dispatch_encode_ok\")
     Ok(Error(app_err)) ->
-      #(wire.tag_response(wire.encode(Error(error.AppError(app_err)))), None, state)
+      safe_encode(fn() { wire.encode(Error(error.AppError(app_err))) }, state, \"dispatch_encode_app_err\")
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
         wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
         Some(error.PanicInfo(trace_id:, fn_name: \"dispatch\", reason:)),
+        state,
+      )
+    }
+  }
+}
+
+/// Run an encoder thunk under try_call protection. If encoding panics
+/// (e.g. a response value contains an unencodable term), return an
+/// InternalError response with the panic reason so the websocket handler
+/// can log it and stay alive.
+fn safe_encode(
+  encoder: fn() -> BitArray,
+  state: SharedState,
+  fn_name: String,
+) -> #(BitArray, Option(PanicInfo), SharedState) {
+  case trace.try_call(encoder) {
+    Ok(bytes) -> #(wire.tag_response(bytes), None, state)
+    Error(reason) -> {
+      let trace_id = trace.new_trace_id()
+      #(
+        wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Response encoding failed\")))),
+        Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
         state,
       )
     }
@@ -176,9 +204,10 @@ fn handler_alias(module_path: String) -> String {
 }
 
 /// Convert a message module path to a safe Gleam import alias.
-/// e.g. "shared/messages/admin" -> "messages_admin"
+/// Uses a "_msg" suffix to avoid collision with handler_alias.
+/// e.g. "shared/messages/admin" -> "shared_messages_admin_msg"
 fn message_alias(module_path: String) -> String {
-  string.replace(module_path, "/", "_")
+  string.replace(module_path, "/", "_") <> "_msg"
 }
 
 // ---------- Client send function generator ----------
@@ -209,6 +238,8 @@ pub fn send_to_server(
   msg msg: MsgFromClient,
   on_response on_response: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
+  // Reference rpc_decoders to ensure its side-effecting module-level code
+  // (constructor setters, decoder registration) runs before any RPC call.
   let _ = rpc_decoders.decode_msg_from_server
   rpc.send(
     url: rpc_config.ws_url(),
@@ -302,33 +333,32 @@ pub fn send_to_clients(
 /// Also writes the Erlang FFI for decoding push messages.
 pub fn write_websocket(
   server_generated server_generated: String,
+  shared_state_module shared_state_module: String,
 ) -> Result(Nil, GenError) {
   let gleam_output = server_generated <> "/websocket.gleam"
-  // Erlang module name uses @ separators and must match the Gleam
-  // module path (without the src/ prefix).
   let module_path = case string.split_once(server_generated, "src/") {
     Ok(#(_, after)) -> after
     Error(Nil) -> server_generated
   }
-  let ffi_module = string.replace(module_path, "/", "@") <> "@websocket"
-  let ffi_output = "src/" <> ffi_module <> "_ffi.erl"
 
   let content = "//// Code generated by libero. DO NOT EDIT.
 ////
 //// WebSocket handler for mist. Handles dispatch, push frame
 //// forwarding, and topic cleanup on disconnect.
 
-import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
+import gleam/erlang/atom
 import gleam/erlang/process
 import gleam/http/request.{type Request}
 import gleam/list
 import gleam/option.{type Option, Some}
+import gleam/result
 import gleam/string
 import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
 import " <> module_path <> "/dispatch
-import server/shared_state.{type SharedState}
+import " <> shared_state_module <> ".{type SharedState}
 
 pub type ConnState {
   ConnState(state: SharedState, topics: List(String), logger: Logger)
@@ -366,12 +396,17 @@ fn on_init(state: SharedState, topics: List(String), logger: Logger) {
     list.each(topics, fn(t) { push.join(topic: t) })
     let selector =
       process.new_selector()
-      |> process.select_other(fn(msg: Dynamic) {
-        case decode_push_msg(msg) {
-          Ok(frame) -> PushFrame(frame)
-          Error(Nil) -> Ignored
-        }
-      })
+      |> process.select_record(
+        tag: atom.create(\"libero_push\"),
+        fields: 1,
+        mapping: fn(record) {
+          { use frame <- decode.field(1, decode.bit_array)
+            decode.success(PushFrame(frame))
+          }
+          |> decode.run(record, _)
+          |> result.unwrap(Ignored)
+        },
+      )
     #(ConnState(state:, topics:, logger:), Some(selector))
   }
 }
@@ -421,24 +456,10 @@ fn handler(
     mist.Text(_) -> mist.continue(state)
   }
 }
-
-@external(erlang, \"" <> ffi_module <> "_ffi\", \"decode_push_msg\")
-fn decode_push_msg(msg: Dynamic) -> Result(BitArray, Nil)
-"
-
-  let ffi_content =
-    "-module('" <> ffi_module <> "_ffi').\n" <> "-export([decode_push_msg/1]).
-
-decode_push_msg({libero_push, Frame}) when is_binary(Frame) ->
-    {ok, Frame};
-decode_push_msg(_) ->
-    {error, nil}.
 "
 
   ensure_parent_dir(path: gleam_output)
-  use _ <- result.try(write_file(path: gleam_output, content: content))
-  ensure_parent_dir(path: ffi_output)
-  write_file(path: ffi_output, content: ffi_content)
+  write_file(path: gleam_output, content: content)
 }
 
 
@@ -470,7 +491,7 @@ pub fn decode_msg_from_server(raw: Dynamic) -> Dynamic
 /// so tests can assert on the output without filesystem I/O.
 pub fn emit_typed_decoders(discovered: List(DiscoveredType)) -> String {
   let type_decoders =
-    list.map(discovered, fn(t) { emit_type_decoder(t, discovered) })
+    list.map(discovered, fn(t) { emit_type_decoder(t) })
   let entry = emit_msg_from_server_decoder(discovered)
   let parts = list.filter([string.join(type_decoders, "\n\n"), entry], fn(s) {
     s != ""
@@ -487,6 +508,7 @@ pub fn write_decoders_ffi(
   let body = emit_typed_decoders(discovered)
   // Inject stdlib constructor setters at module load time so that
   // decode_result_of / decode_option_of / decode_list_of work correctly.
+  // nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
   let ctor_setters =
     "setResultCtors(Ok, ResultError);\n"
     <> "setOptionCtors(Some, None);\n"
@@ -499,6 +521,7 @@ pub fn write_decoders_ffi(
     list.any(discovered, fn(t) { t.type_name == "MsgFromServer" })
   let auto_register = case has_msg_from_server {
     True ->
+      // nolint: unnecessary_string_concatenation -- codegen template
       "\n// Auto-register the typed decoder so push frames bypass the\n"
       <> "// global constructor registry. Called at module load time.\n"
       <> "setMsgFromServerDecoder(decode_msg_from_server);\n"
@@ -594,19 +617,19 @@ fn all_variants_zero_arity(variants: List(DiscoveredVariant)) -> Bool {
 }
 
 /// Emit one JS decoder function for a discovered type.
-fn emit_type_decoder(t: DiscoveredType, all: List(DiscoveredType)) -> String {
+fn emit_type_decoder(t: DiscoveredType) -> String {
   let fn_name = decoder_fn_name(t.module_path, t.type_name)
   let body = case t.variants {
     [] -> "  throw new DecodeError(\"empty type\");"
     [single] ->
       case single.fields {
         [] -> emit_enum_decoder(t.variants)
-        _ -> emit_record_decoder(single, all)
+        _ -> emit_record_decoder(single)
       }
     variants ->
       case all_variants_zero_arity(variants) {
         True -> emit_enum_decoder(variants)
-        False -> emit_tagged_union_decoder(variants, all)
+        False -> emit_tagged_union_decoder(variants, error_label: "variant")
       }
   }
   "export function " <> fn_name <> "(term) {\n" <> body <> "\n}"
@@ -631,11 +654,10 @@ fn emit_enum_decoder(variants: List(DiscoveredVariant)) -> String {
 /// Emit the body of a single-variant record decoder.
 fn emit_record_decoder(
   variant: DiscoveredVariant,
-  all: List(DiscoveredType),
 ) -> String {
   let field_lines =
     list.index_map(variant.fields, fn(ft, i) {
-      "    " <> field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]", all)
+      "    " <> field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]")
     })
   "  return new _m_"
   <> module_alias(variant.module_path)
@@ -647,9 +669,11 @@ fn emit_record_decoder(
 }
 
 /// Emit the body of a multi-variant tagged union decoder.
+/// `error_label` is used in the default throw message (e.g. "variant" or
+/// "MsgFromServer variant").
 fn emit_tagged_union_decoder(
   variants: List(DiscoveredVariant),
-  all: List(DiscoveredType),
+  error_label error_label: String,
 ) -> String {
   let arms =
     list.map(variants, fn(v) {
@@ -668,7 +692,6 @@ fn emit_tagged_union_decoder(
               field_decoder_call(
                 ft,
                 "term[" <> int.to_string(i + 1) <> "]",
-                all,
               )
             })
           "    case \""
@@ -686,16 +709,27 @@ fn emit_tagged_union_decoder(
   "  const tag = Array.isArray(term) ? term[0] : term;\n"
   <> "  switch (tag) {\n"
   <> string.join(arms, "\n")
-  <> "\n    default:\n      throw new DecodeError(\"unknown variant: \" + String(tag));\n"
+  <> "\n    default:\n      throw new DecodeError(\"unknown " <> error_label <> ": \" + String(tag));\n"
   <> "  }"
 }
 
 /// Produce the JS expression that decodes `term_expr` according to `ft`.
+/// `depth` tracks nesting to generate unique lambda param names (t0, t1, ...).
 fn field_decoder_call(
   ft: walker.FieldType,
   term_expr: String,
-  all: List(DiscoveredType),
 ) -> String {
+  field_decoder_call_depth(ft, term_expr, 0)
+}
+
+// nolint: label_possible -- internal recursive helper, labels add noise
+fn field_decoder_call_depth(
+  ft: walker.FieldType,
+  term_expr: String,
+  depth: Int,
+) -> String {
+  let param = "t" <> int.to_string(depth)
+  let next = depth + 1
   case ft {
     walker.IntField -> "decode_int(" <> term_expr <> ")"
     walker.FloatField -> "decode_float(" <> term_expr <> ")"
@@ -704,36 +738,39 @@ fn field_decoder_call(
     walker.BitArrayField -> "decode_bit_array(" <> term_expr <> ")"
     walker.NilField -> "decode_nil(" <> term_expr <> ")"
     walker.ListOf(inner) ->
-      "decode_list_of((t) => "
-      <> field_decoder_call(inner, "t", all)
+      "decode_list_of((" <> param <> ") => "
+      <> field_decoder_call_depth(inner, param, next)
       <> ", "
       <> term_expr
       <> ")"
     walker.OptionOf(inner) ->
-      "decode_option_of((t) => "
-      <> field_decoder_call(inner, "t", all)
+      "decode_option_of((" <> param <> ") => "
+      <> field_decoder_call_depth(inner, param, next)
       <> ", "
       <> term_expr
       <> ")"
     walker.ResultOf(ok, err) ->
-      "decode_result_of((t) => "
-      <> field_decoder_call(ok, "t", all)
-      <> ", (t) => "
-      <> field_decoder_call(err, "t", all)
+      "decode_result_of((" <> param <> ") => "
+      <> field_decoder_call_depth(ok, param, next)
+      <> ", (" <> param <> ") => "
+      <> field_decoder_call_depth(err, param, next)
       <> ", "
       <> term_expr
       <> ")"
     walker.DictOf(k, v) ->
-      "decode_dict_of((t) => "
-      <> field_decoder_call(k, "t", all)
-      <> ", (t) => "
-      <> field_decoder_call(v, "t", all)
+      "decode_dict_of((" <> param <> ") => "
+      <> field_decoder_call_depth(k, param, next)
+      <> ", (" <> param <> ") => "
+      <> field_decoder_call_depth(v, param, next)
       <> ", "
       <> term_expr
       <> ")"
     walker.TupleOf(elems) -> {
       let decoders =
-        list.map(elems, fn(e) { "(t) => " <> field_decoder_call(e, "t", all) })
+        list.map(elems, fn(e) {
+          "(" <> param <> ") => "
+          <> field_decoder_call_depth(e, param, next)
+        })
       "decode_tuple_of(["
       <> string.join(decoders, ", ")
       <> "], "
@@ -741,7 +778,6 @@ fn field_decoder_call(
       <> ")"
     }
     walker.TypeVar(name) ->
-      // TypeVar at a root field position is a bug - emit a runtime throw.
       "(() => { throw new DecodeError(\"TypeVar<"
       <> name
       <> "> not supported at runtime\"); })()"
@@ -751,49 +787,15 @@ fn field_decoder_call(
 }
 
 /// Emit the `decode_msg_from_server` entry point function.
+/// Delegates to the per-type decoder to avoid duplicating the switch body.
 /// If no MsgFromServer type is found in the discovered list, returns "".
 fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
   case list.find(discovered, fn(t) { t.type_name == "MsgFromServer" }) {
-    Error(_) -> ""
+    Error(_) -> "" // nolint: thrown_away_error -- absence means no decoder needed
     Ok(t) -> {
-      let arms =
-        list.map(t.variants, fn(v) {
-          case v.fields {
-            [] ->
-              "    case \""
-              <> v.atom_name
-              <> "\":\n      return new _m_"
-              <> module_alias(v.module_path)
-              <> "."
-              <> v.variant_name
-              <> "();"
-            fields -> {
-              let field_args =
-                list.index_map(fields, fn(ft, i) {
-                  field_decoder_call(
-                    ft,
-                    "term[" <> int.to_string(i + 1) <> "]",
-                    discovered,
-                  )
-                })
-              "    case \""
-              <> v.atom_name
-              <> "\":\n      return new _m_"
-              <> module_alias(v.module_path)
-              <> "."
-              <> v.variant_name
-              <> "("
-              <> string.join(field_args, ", ")
-              <> ");"
-            }
-          }
-        })
+      let fn_name = decoder_fn_name(t.module_path, t.type_name)
       "export function decode_msg_from_server(term) {\n"
-      <> "  const tag = Array.isArray(term) ? term[0] : term;\n"
-      <> "  switch (tag) {\n"
-      <> string.join(arms, "\n")
-      <> "\n    default:\n      throw new DecodeError(\"unknown MsgFromServer variant: \" + String(tag));\n"
-      <> "  }\n"
+      <> "  return " <> fn_name <> "(term);\n"
       <> "}"
     }
   }
@@ -962,6 +964,191 @@ export function readFlags() {
   ensure_parent_dir(path: gleam_path)
   use _ <- result.try(write_file(path: gleam_path, content: gleam_content))
   write_file(path: ffi_path, content: ffi_content)
+}
+
+// ---------- Server main generator ----------
+
+/// Generate the server entry point at `src/<app_name>.gleam`.
+pub fn write_main(
+  app_name app_name: String,
+  port port: Int,
+  server_generated server_generated: String,
+  shared_state_module shared_state_module: String,
+  js_client_names js_client_names: List(String),
+) -> Result(Nil, GenError) {
+  let output = "src/" <> string.replace(app_name, "-", "_") <> ".gleam"
+  let dispatch_module = case string.split_once(server_generated, "src/") {
+    Ok(#(_, after)) -> after
+    Error(Nil) -> server_generated
+  }
+  let ws_module = dispatch_module <> "/websocket"
+
+  let #(js_routes, index_route) = case js_client_names {
+    [] -> #("", "
+        _, _ ->
+          response.new(404)
+          |> response.set_body(mist.Bytes(bytes_tree.from_string(\"Not found\")))")
+    [first_js, ..] -> {
+      let routes =
+        list.map(js_client_names, fn(name) {
+          "        _, [\""
+          <> name
+          <> "\", ..path] ->
+          serve_file(
+            \"clients/"
+          <> name
+          <> "/build/dev/javascript/\" <> string.join(path, \"/\"),
+          )"
+        })
+        |> string.join("\n")
+        |> fn(r) { "\n" <> r }
+      let index = "
+        _, _ -> serve_html(\"<!DOCTYPE html>
+<html>
+<head>
+  <meta charset=\\\"utf-8\\\">
+  <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">
+</head>
+<body>
+  <div id=\\\"app\\\"></div>
+  <script type=\\\"module\\\">
+    import { main } from \\\"/" <> first_js <> "/" <> first_js <> "/app.mjs\\\";
+    main();
+  </script>
+</body>
+</html>\")"
+      #(routes, index)
+    }
+  }
+
+  // Note: the string below is the GENERATED Gleam file content.
+  // Imports here (gleam/list, gleam/string, etc.) appear in the consumer's
+  // generated main module, not in codegen.gleam itself.
+  let content =
+    "//// Code generated by libero. DO NOT EDIT.
+
+import gleam/bytes_tree
+import gleam/erlang/process
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/string
+import libero/push
+import libero/ws_logger
+import mist.{type Connection}
+import "
+    <> dispatch_module
+    <> "/dispatch
+import "
+    <> ws_module
+    <> " as ws
+import "
+    <> shared_state_module
+    <> "
+
+pub fn main() {
+  push.init()
+  dispatch.ensure_atoms()
+  let state = shared_state.new()
+  let logger = ws_logger.default_logger()
+
+  let assert Ok(_) =
+    fn(req: Request(Connection)) {
+      case req.method, request.path_segments(req) {
+        _, [\"ws\"] ->
+          ws.upgrade(
+            request: req,
+            state:,
+            topics: [],
+            logger:,
+          )
+        http.Post, [\"rpc\"] -> handle_rpc(req, state, logger)"
+    <> js_routes
+    <> index_route <> "
+      }
+    }
+    |> mist.new
+    |> mist.port("
+    <> int.to_string(port)
+    <> ")
+    |> mist.start
+
+  process.sleep_forever()
+}
+
+fn handle_rpc(
+  req: Request(Connection),
+  state: shared_state.SharedState,
+  logger: ws_logger.Logger,
+) -> response.Response(mist.ResponseData) {
+  // Note: HTTP RPC is stateless — state mutations are not persisted across
+  // requests. Use WebSocket for stateful interactions.
+  case mist.read_body(req, 1_000_000) {
+    Ok(req) -> {
+      let #(response_bytes, maybe_panic, _new_state) =
+        dispatch.handle(state:, data: req.body)
+      case maybe_panic {
+        Some(info) ->
+          logger.error(
+            \"RPC panic: \"
+            <> info.fn_name
+            <> \" (trace \"
+            <> info.trace_id
+            <> \"): \"
+            <> info.reason,
+          )
+        None -> Nil
+      }
+      response.new(200)
+      |> response.set_header(\"content-type\", \"application/octet-stream\")
+      |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(response_bytes)))
+    }
+    Error(_) ->
+      response.new(400)
+      |> response.set_body(mist.Bytes(bytes_tree.from_string(\"Bad request\")))
+  }
+}
+
+fn serve_html(html: String) -> response.Response(mist.ResponseData) {
+  response.new(200)
+  |> response.set_header(\"content-type\", \"text/html\")
+  |> response.set_body(mist.Bytes(bytes_tree.from_string(html)))
+}
+
+fn serve_file(
+  path: String,
+) -> response.Response(mist.ResponseData) {
+  case mist.send_file(path, offset: 0, limit: None) {
+    Ok(body) ->
+      response.new(200)
+      |> response.set_header(\"content-type\", content_type(path))
+      |> response.set_body(body)
+    Error(_) ->
+      response.new(404)
+      |> response.set_body(mist.Bytes(bytes_tree.from_string(\"Not found\")))
+  }
+}
+
+fn content_type(path: String) -> String {
+  case string.split(path, \".\") |> list.last {
+    Ok(\"js\") | Ok(\"mjs\") -> \"application/javascript\"
+    Ok(\"css\") -> \"text/css\"
+    Ok(\"html\") -> \"text/html\"
+    Ok(\"json\") -> \"application/json\"
+    Ok(\"wasm\") -> \"application/wasm\"
+    Ok(\"svg\") -> \"image/svg+xml\"
+    Ok(\"png\") -> \"image/png\"
+    Ok(\"ico\") -> \"image/x-icon\"
+    Ok(\"map\") -> \"application/json\"
+    _ -> \"application/octet-stream\"
+  }
+}
+"
+
+  ensure_parent_dir(path: output)
+  write_file(path: output, content: content)
 }
 
 // ---------- File utilities ----------

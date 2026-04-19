@@ -64,6 +64,9 @@ export class DecodeError extends Error {
 // --- Primitive decoders ---
 
 export const decode_int = (term) => {
+  // ETF decoder produces BigInt for integers exceeding Number.MAX_SAFE_INTEGER.
+  // Coerce to Number since Gleam's JS target uses Number for Int.
+  if (typeof term === "bigint") return Number(term);
   if (typeof term !== "number") {
     throw new DecodeError("expected Int, got " + typeof term);
   }

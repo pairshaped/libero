@@ -81,3 +81,17 @@ pub fn scan_populates_module_files_for_all_gleam_files_test() {
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([base])
 }
+
+/// derive_module_path should handle core/ prefix correctly.
+pub fn derive_module_path_core_test() {
+  let assert "core/todos" =
+    scanner.derive_module_path(file_path: "myapp/src/core/todos.gleam")
+  let assert "core/messages/admin" =
+    scanner.derive_module_path(file_path: "myapp/src/core/messages/admin.gleam")
+}
+
+/// derive_module_path should handle core/ with handler suffix.
+pub fn derive_module_path_handler_test() {
+  let assert "core/todos_handler" =
+    scanner.derive_module_path(file_path: "myapp/src/core/todos_handler.gleam")
+}

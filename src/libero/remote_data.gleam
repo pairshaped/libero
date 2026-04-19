@@ -104,6 +104,10 @@ pub fn to_remote(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
 ) -> RemoteData(payload, RpcFailure) {
+  // Safety: wire.coerce casts are safe here because both ends use the same
+  // Gleam types over ETF — the server encodes and the client decodes the
+  // same Result/MsgFromServer structures. A type mismatch would indicate a
+  // version skew between server and client, not a logic error.
   let outer: Result(Dynamic, RpcError(app)) = wire.coerce(raw)
   case outer {
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))

@@ -48,6 +48,7 @@ pub fn update_from_server(
   })
 }
 
+// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "registerPushHandler")
 fn ffi_register_push(
   module module: String,
@@ -58,6 +59,7 @@ fn ffi_register_push(
   panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
 }
 
+// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "send")
 fn ffi_send(
   url url: String,

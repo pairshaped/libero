@@ -221,13 +221,17 @@ fn process_type_file(
   }
 }
 
+// nolint: deep_nesting -- recursive AST walker, nesting reflects data structure
 fn process_type_ast(
   module_path module_path: String,
   type_name type_name: String,
   ast ast: glance.Module,
   state state: WalkerState,
 ) -> Result(List(DiscoveredType), List(GenError)) {
-  // Check type alias - skip silently
+  // Check type alias - skip silently.
+  // TODO: type aliases that wrap custom types are not walked transitively.
+  // If a custom type is only reachable through an alias, it will be missed.
+  // Fix by resolving the alias target and walking through it.
   let is_alias =
     list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
   use <- bool.lazy_guard(when: is_alias, return: fn() { do_walk(state) })
@@ -459,27 +463,37 @@ fn field_type_of(
     glance.HoleType(..) -> TypeVar(name: "_")
     glance.NamedType(name:, module:, parameters:, ..) ->
       case module, name, parameters {
-        // Primitives - no module qualifier needed
-        option.None, "Int", [] -> IntField
-        option.None, "Float", [] -> FloatField
-        option.None, "String", [] -> StringField
-        option.None, "Bool", [] -> BoolField
-        option.None, "BitArray", [] -> BitArrayField
-        option.None, "Nil", [] -> NilField
-        // List
-        option.None, "List", [elem] ->
+        // Primitives (unqualified or gleam-qualified)
+        option.None, "Int", [] | option.Some("gleam"), "Int", [] -> IntField
+        option.None, "Float", [] | option.Some("gleam"), "Float", [] -> FloatField
+        option.None, "String", [] | option.Some("gleam"), "String", [] ->
+          StringField
+        option.None, "Bool", [] | option.Some("gleam"), "Bool", [] -> BoolField
+        option.None, "BitArray", [] | option.Some("gleam"), "BitArray", [] ->
+          BitArrayField
+        option.None, "Nil", [] | option.Some("gleam"), "Nil", [] -> NilField
+        // List (unqualified or qualified)
+        option.None, "List", [elem]
+        | option.Some("gleam"), "List", [elem]
+        ->
           ListOf(field_type_of(t: elem, resolver:, current_module:))
-        // Option (gleam/option)
-        option.None, "Option", [inner] ->
+        // Option (unqualified or qualified as option.Option)
+        option.None, "Option", [inner]
+        | option.Some("option"), "Option", [inner]
+        ->
           OptionOf(field_type_of(t: inner, resolver:, current_module:))
-        // Result
-        option.None, "Result", [ok, err] ->
+        // Result (unqualified or qualified as result.Result)
+        option.None, "Result", [ok, err]
+        | option.Some("result"), "Result", [ok, err]
+        ->
           ResultOf(
             ok: field_type_of(t: ok, resolver:, current_module:),
             err: field_type_of(t: err, resolver:, current_module:),
           )
-        // Dict
-        option.None, "Dict", [key, value] ->
+        // Dict (unqualified or qualified as dict.Dict)
+        option.None, "Dict", [key, value]
+        | option.Some("dict"), "Dict", [key, value]
+        ->
           DictOf(
             key: field_type_of(t: key, resolver:, current_module:),
             value: field_type_of(t: value, resolver:, current_module:),

@@ -11,7 +11,7 @@ import simplifile
 
 pub fn walk_and_write_dispatch_atoms_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
+    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
 
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
@@ -26,6 +26,8 @@ pub fn walk_and_write_dispatch_atoms_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "test@rpc_atoms",
+      shared_state_module: "core/shared_state",
+      app_error_module: "core/app_error",
     )
   let assert Ok(dispatch) = simplifile.read(output_dir <> "/dispatch.gleam")
 

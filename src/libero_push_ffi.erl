@@ -4,7 +4,7 @@
 -define(SCOPE, libero_push).
 
 ensure_started() ->
-    case pg:start_link(?SCOPE) of
+    case pg:start(?SCOPE) of
         {ok, _Pid} -> nil;
         {error, {already_started, _Pid}} -> nil
     end.
@@ -14,7 +14,7 @@ pg_join(Topic) ->
     nil.
 
 pg_leave(Topic) ->
-    ok = pg:leave(?SCOPE, Topic, self()),
+    _ = pg:leave(?SCOPE, Topic, self()),
     nil.
 
 pg_send(Topic, Frame) ->

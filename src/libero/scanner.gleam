@@ -330,9 +330,9 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 pub fn validate_conventions(
   message_modules message_modules: List(MessageModule),
   server_src server_src: String,
+  shared_state_path shared_state_path: String,
+  app_error_path app_error_path: String,
 ) -> Result(List(MessageModule), List(GenError)) {
-  let shared_state_path = server_src <> "/server/shared_state.gleam"
-  let app_error_path = server_src <> "/server/app_error.gleam"
 
   let shared_state_errors = case
     simplifile.is_file(shared_state_path) |> result.unwrap(or: False)

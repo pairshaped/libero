@@ -157,13 +157,14 @@ pub fn msg_from_server_dispatches_all_four_variants_test() {
 pub fn msg_from_server_uses_list_decoder_for_list_field_test() {
   let js = codegen.emit_typed_decoders(sample_msg_from_server())
   let assert True = string.contains(js, "decode_list_of(")
-  let assert True = string.contains(js, "decode_shared_item_item(t)")
+  let assert True = string.contains(js, "decode_shared_item_item(t0)")
 }
 
-pub fn msg_from_server_has_default_throw_test() {
+pub fn msg_from_server_delegates_to_per_type_decoder_test() {
   let js = codegen.emit_typed_decoders(sample_msg_from_server())
+  // Entry point should delegate to the per-type decoder, not duplicate it
   let assert True =
-    string.contains(js, "unknown MsgFromServer variant")
+    string.contains(js, "return decode_shared_messages_msg_from_server(term)")
 }
 
 pub fn no_msg_from_server_emits_no_entry_point_test() {
@@ -196,8 +197,8 @@ pub fn result_field_uses_result_decoder_test() {
   ]
   let js = codegen.emit_typed_decoders(types)
   let assert True = string.contains(js, "decode_result_of(")
-  let assert True = string.contains(js, "decode_string(t)")
-  let assert True = string.contains(js, "decode_int(t)")
+  let assert True = string.contains(js, "decode_string(t0)")
+  let assert True = string.contains(js, "decode_int(t0)")
 }
 
 pub fn option_field_uses_option_decoder_test() {

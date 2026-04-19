@@ -97,12 +97,8 @@ pub fn decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
 }
 
 @external(erlang, "libero_wire_ffi", "decode_call")
+// nolint: avoid_panic, discarded_result -- Erlang-only @external; JS fallback is unreachable
 fn ffi_decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
-  // JS fallback. `decode_call` is specifically for parsing incoming
-  // RPC call envelopes, which only the server does. JavaScript
-  // consumers never call this - they call the generated client
-  // stubs, which handle response decoding via the internal `decode`
-  // helper in rpc_ffi.mjs, not via this Gleam-level function.
   let _ = data
   panic as "libero/wire.decode_call is a server-side function, unreachable on JavaScript target"
 }

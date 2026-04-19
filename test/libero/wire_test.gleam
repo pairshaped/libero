@@ -105,15 +105,15 @@ fn coerce(value: a) -> Dynamic
 fn unsafe_coerce(value: Dynamic) -> a
 
 pub fn encode_call_decode_call_roundtrip_string_test() {
-  let encoded = wire.encode_call(module: "shared/todos", msg: "hello")
-  let assert Ok(#("shared/todos", msg)) = wire.decode_call(encoded)
+  let encoded = wire.encode_call(module: "core/messages", msg: "hello")
+  let assert Ok(#("core/messages", msg)) = wire.decode_call(encoded)
   let decoded: String = wire.coerce(msg)
   let assert "hello" = decoded
 }
 
 pub fn encode_call_decode_call_roundtrip_int_test() {
-  let encoded = wire.encode_call(module: "shared/todos", msg: 42)
-  let assert Ok(#("shared/todos", msg)) = wire.decode_call(encoded)
+  let encoded = wire.encode_call(module: "core/messages", msg: 42)
+  let assert Ok(#("core/messages", msg)) = wire.decode_call(encoded)
   let decoded: Int = wire.coerce(msg)
   let assert 42 = decoded
 }

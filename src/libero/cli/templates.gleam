@@ -1,0 +1,193 @@
+//// Template strings for `libero new` scaffolding.
+////
+//// Each function returns a file's content as a String. The generated
+//// files give a new project a minimal skeleton to build from.
+
+/// Returns gleam.toml content for a new project (the server package).
+/// Libero config lives under the [libero] section.
+/// `libero_path` is the relative path to the libero package.
+pub fn gleam_toml(name name: String, libero_path libero_path: String) -> String {
+  "name = \""
+  <> name
+  <> "\"
+version = \"0.1.0\"
+target = \"erlang\"
+
+[dependencies]
+gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
+gleam_erlang = \"~> 1.0\"
+gleam_http = \"~> 4.0\"
+mist = \"~> 6.0\"
+lustre = \"~> 5.6\"
+shared = { path = \"shared\" }
+libero = { path = \""
+  <> libero_path
+  <> "\" }
+
+[dev-dependencies]
+gleeunit = \"~> 1.0\"
+
+[libero]
+port = 8080
+"
+}
+
+/// Returns gleam.toml content for the shared package.
+/// Target-agnostic so both the Erlang server and JS clients can import
+/// messages and types from it.
+pub fn shared_gleam_toml(libero_path libero_path: String) -> String {
+  "name = \"shared\"
+version = \"0.1.0\"
+
+# No target specified - compiles to both Erlang and JavaScript.
+
+[dependencies]
+gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
+libero = { path = \""
+  <> libero_path
+  <> "\" }
+
+[dev-dependencies]
+gleeunit = \"~> 1.0\"
+"
+}
+
+/// Returns a skeleton messages module.
+///
+/// Defines the typed RPC boundary between client and server.
+/// Add your message types here — libero scans for MsgFromClient
+/// and MsgFromServer to generate dispatch and client stubs.
+pub fn starter_messages() -> String {
+  "/// Define your message types here.
+/// Libero scans for MsgFromClient and MsgFromServer to generate
+/// dispatch and client stubs.
+
+pub type MsgFromClient {
+  Ping
+}
+
+pub type MsgFromServer {
+  Pong(String)
+}
+"
+}
+
+/// Returns a skeleton handler module.
+pub fn starter_handler() -> String {
+  "import server/app_error.{type AppError}
+import server/shared_state.{type SharedState}
+import shared/messages.{type MsgFromClient, type MsgFromServer, Ping, Pong}
+
+pub fn update_from_client(
+  msg msg: MsgFromClient,
+  state state: SharedState,
+) -> Result(#(MsgFromServer, SharedState), AppError) {
+  case msg {
+    Ping -> Ok(#(Pong(\"pong\"), state))
+  }
+}
+"
+}
+
+/// Returns a skeleton SharedState module.
+pub fn starter_shared_state() -> String {
+  "pub type SharedState {
+  SharedState
+}
+
+pub fn new() -> SharedState {
+  SharedState
+}
+"
+}
+
+/// Returns a skeleton AppError module.
+pub fn starter_app_error() -> String {
+  "pub type AppError {
+  AppError(reason: String)
+}
+"
+}
+
+/// Returns a skeleton test that verifies the handler works.
+pub fn starter_test() -> String {
+  "import server/handler
+import server/shared_state
+import shared/messages.{Ping, Pong}
+import gleeunit
+
+pub fn main() {
+  gleeunit.main()
+}
+
+pub fn ping_test() {
+  let state = shared_state.new()
+  let assert Ok(#(Pong(\"pong\"), _)) =
+    handler.update_from_client(msg: Ping, state:)
+}
+"
+}
+
+/// Returns a starter Lustre SPA app module.
+pub fn starter_spa(name name: String) -> String {
+  "import lustre
+import lustre/element
+import lustre/element/html
+
+pub fn main() {
+  let app = lustre.element(view())
+  let assert Ok(_) = lustre.start(app, \"#app\", Nil)
+  Nil
+}
+
+fn view() -> element.Element(msg) {
+  html.div([], [
+    html.h1([], [html.text(\""
+  <> name
+  <> "\")]),
+    html.p([], [html.text(\"Edit this file to get started.\")]),
+  ])
+}
+"
+}
+
+/// Returns a gleam.toml for a client package.
+/// `libero_path` is the relative path from the client dir to the libero package.
+pub fn client_gleam_toml(
+  name name: String,
+  target target: String,
+  root_package root_package: String,
+  libero_path libero_path: String,
+) -> String {
+  "name = \""
+  <> name
+  <> "\"
+version = \"0.1.0\"
+target = \""
+  <> target
+  <> "\"
+
+[dependencies]
+gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
+"
+  <> root_package
+  <> " = { path = \"../../\" }
+libero = { path = \""
+  <> libero_path
+  <> "\" }
+"
+  <> case target {
+    "javascript" -> "lustre = \"~> 5.6\"\n"
+    _ -> ""
+  }
+}
+
+/// Returns a starter CLI main module.
+pub fn starter_cli() -> String {
+  "import gleam/io
+
+pub fn main() -> Nil {
+  io.println(\"Hello from your Libero app!\")
+}
+"
+}

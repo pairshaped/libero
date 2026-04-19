@@ -11,6 +11,7 @@ import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
 import { Ok, Error as ResultError, CustomType, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
+import { InternalError, AppError, MalformedRequest, UnknownFunction } from "./error.mjs";
 
 // ---------- Identity helper (for Gleam FFI) ----------
 
@@ -51,7 +52,7 @@ function gleamListToArray(list) {
   if (Array.isArray(list)) return list;
   const out = [];
   let cur = list;
-  while (cur && cur.head !== undefined) {
+  while (cur instanceof NonEmpty) {
     out.push(cur.head);
     cur = cur.tail;
   }
@@ -620,6 +621,16 @@ export function decode_value_raw(buffer) {
   return decoder.decode();
 }
 
+// Gleam's wire.DecodeError(message) custom type.
+// Must extend CustomType so Gleam pattern matching works.
+class WireDecodeError extends CustomType {
+  constructor(message) {
+    super();
+    this.message = message;
+    this[0] = message;
+  }
+}
+
 // Safe variant of decode_value that returns a Result instead of throwing.
 // Used by the public `libero.wire.decode_safe` function.
 export function decode_safe(buffer) {
@@ -629,7 +640,7 @@ export function decode_safe(buffer) {
     return new Ok(value);
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    return new ResultError({ type: "DecodeError", 0: msg });
+    return new ResultError(new WireDecodeError(msg));
   }
 }
 
@@ -655,9 +666,33 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // Push handler registry: module path → callback
 const pushHandlers = new Map();
 
-// Build a connection-error value using imported constructors.
+// Build a connection-error value as a proper Gleam Result(_, RpcError)
+// so `wire.coerce` + pattern matching in remote_data.to_remote can extract
+// the InternalError and read its .message field.
 function makeConnectionError(message) {
-  return { type: "Error", 0: { type: "InternalError", 0: "", 1: message } };
+  return new ResultError(new InternalError("", message));
+}
+
+// Reconstruct a Gleam RpcError class instance from a raw ETF-decoded term.
+// 0-arity variants arrive as a bare atom string; variants with fields
+// arrive as atom-tagged arrays. Wire shape matches libero/error.gleam:
+//   "malformed_request"                -> MalformedRequest
+//   ["app_error", appErr]              -> AppError(appErr)
+//   ["unknown_function", name]         -> UnknownFunction(name)
+//   ["internal_error", traceId, msg]   -> InternalError(traceId, msg)
+function decodeRpcError(term) {
+  if (term === "malformed_request") return new MalformedRequest();
+  if (!Array.isArray(term)) {
+    return new InternalError("", "Malformed RpcError: " + String(term));
+  }
+  switch (term[0]) {
+    case "app_error": return new AppError(term[1]);
+    case "malformed_request": return new MalformedRequest();
+    case "unknown_function": return new UnknownFunction(term[1]);
+    case "internal_error": return new InternalError(term[1], term[2]);
+    default:
+      return new InternalError("", "Unknown RpcError variant: " + String(term[0]));
+  }
 }
 
 function clearAllPending(reason) {
@@ -735,8 +770,11 @@ function ensureSocket(url) {
         // Ok branch: apply the typed decoder to the inner MsgFromServer value.
         const typedVariant = typedDecoder(raw[1]);
         decoded = new Ok(typedVariant);
+      } else if (Array.isArray(raw) && raw[0] === "error" && raw[1] !== undefined) {
+        // Error branch: raw[1] is the RpcError tuple. Reconstruct the proper
+        // Gleam class instance so Gleam pattern matching and field access work.
+        decoded = new ResultError(decodeRpcError(raw[1]));
       } else {
-        // Error branch or unexpected shape: fall back to registry decode.
         decoded = decode_value(payload);
       }
     } else {
@@ -756,7 +794,9 @@ function ensureSocket(url) {
 
   ws.addEventListener("error", () => {
     if (ws) {
-      ws.close();
+      const sock = ws;
+      ws = null;
+      sock.close();
     }
   });
 }

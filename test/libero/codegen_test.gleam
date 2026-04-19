@@ -10,11 +10,11 @@ pub fn dispatch_contains_state_threading_test() {
   // Build a module with handler_module set, matching the todos example
   let modules = [
     scanner.MessageModule(
-      module_path: "shared/todos",
-      file_path: "examples/todos/shared/src/shared/todos.gleam",
+      module_path: "core/messages",
+      file_path: "examples/todos/src/core/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: ["server/store"],
+      handler_modules: ["core/handler"],
     ),
   ]
   let output_dir = "build/.test_codegen_dispatch"
@@ -23,6 +23,8 @@ pub fn dispatch_contains_state_threading_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "server@generated@libero@rpc_atoms",
+      shared_state_module: "core/shared_state",
+      app_error_module: "core/app_error",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -33,10 +35,10 @@ pub fn dispatch_contains_state_threading_test() {
   let assert True = string.contains(content, "ensure_atoms()")
   // Must import discovered handler module with alias
   let assert True =
-    string.contains(content, "import server/store as server_store_handler")
+    string.contains(content, "import core/handler as core_handler_handler")
   // Must use alias in dispatch call
   let assert True =
-    string.contains(content, "server_store_handler.update_from_client")
+    string.contains(content, "core_handler_handler.update_from_client")
   // Must thread state to dispatch
   let assert True = string.contains(content, "dispatch(state, fn()")
   // Must have atoms external
@@ -49,20 +51,20 @@ pub fn dispatch_contains_state_threading_test() {
 
 pub fn send_function_contains_module_path_test() {
   let assert Ok(#(modules, _module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
+    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
   let output_dir = "build/.test_codegen_send"
   let assert Ok(Nil) =
     codegen.write_send_functions(
       message_modules: modules,
       client_generated: output_dir,
     )
-  let assert Ok(content) = simplifile.read(output_dir <> "/todos.gleam")
+  let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
 
   // Must import the shared type
   let assert True =
-    string.contains(content, "import shared/todos.{type MsgFromClient}")
+    string.contains(content, "import core/messages.{type MsgFromClient}")
   // Must reference the correct module path
-  let assert True = string.contains(content, "module: \"shared/todos\"")
+  let assert True = string.contains(content, "module: \"core/messages\"")
   // Must import rpc
   let assert True = string.contains(content, "import libero/rpc")
   // Must import rpc_decoders so the typed decoder FFI side-effect runs on load
@@ -77,7 +79,7 @@ pub fn send_function_contains_module_path_test() {
 
 pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
+    scanner.scan_message_modules(shared_src: "examples/todos/src/core")
   let assert Ok(discovered) =
     walker.walk_message_registry_types(
       message_modules: modules,
@@ -105,15 +107,21 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert True = string.contains(content, "Some, None")
   let assert True = string.contains(content, "gleam_stdlib/gleam/option.mjs")
 
-  // Must import the three setters from decoders_prelude
+  // Must import the setters from decoders_prelude
   let assert True = string.contains(content, "setResultCtors")
   let assert True = string.contains(content, "setOptionCtors")
   let assert True = string.contains(content, "setListCtors")
+  let assert True = string.contains(content, "setDictFromList")
 
   // Must call setters at module load time
   let assert True = string.contains(content, "setResultCtors(Ok, ResultError)")
   let assert True = string.contains(content, "setOptionCtors(Some, None)")
   let assert True = string.contains(content, "setListCtors(Empty, NonEmpty)")
+  let assert True = string.contains(content, "setDictFromList(dictFromList)")
+
+  // Must import dict.from_list from stdlib
+  let assert True = string.contains(content, "from_list as dictFromList")
+  let assert True = string.contains(content, "gleam_stdlib/gleam/dict.mjs")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all(["build/.test_decoders_ffi"])

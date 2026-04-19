@@ -4,9 +4,9 @@ import libero/scanner
 // -- derive_module_path tests --
 
 pub fn derive_module_path_standard_test() {
-  let assert "shared/todos" =
+  let assert "core/messages" =
     scanner.derive_module_path(
-      file_path: "examples/todos/shared/src/shared/todos.gleam",
+      file_path: "examples/todos/src/core/messages.gleam",
     )
 }
 
@@ -30,8 +30,8 @@ pub fn derive_module_path_no_src_segment_test() {
 // -- module_to_mjs_path tests --
 
 pub fn module_to_mjs_multi_segment_test() {
-  let assert "shared/shared/todos.mjs" =
-    codegen.module_to_mjs_path("shared/todos")
+  let assert "core/core/messages.mjs" =
+    codegen.module_to_mjs_path("core/messages")
 }
 
 pub fn module_to_mjs_single_segment_test() {
