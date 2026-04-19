@@ -1,3 +1,5 @@
+// @ts-check
+//
 // ETF wire format for libero RPC.
 //
 // Wire shape: Erlang External Term Format (ETF), subset used by Gleam.
@@ -13,8 +15,41 @@ import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
 import { InternalError, AppError, MalformedRequest, UnknownFunction } from "./error.mjs";
 
+// ---------- Error names ----------
+//
+// Error.name values set on exceptions thrown by the codec. Consumers
+// that need to branch on failure mode can match `err.name === ERROR_X`
+// instead of parsing message strings.
+
+/** Input to ETFDecoder is not a supported buffer type. */
+export const ERROR_INVALID_INPUT = "ETF_INVALID_INPUT";
+/** First byte is not the ETF version tag (131). */
+export const ERROR_VERSION_BYTE = "ETF_VERSION_BYTE";
+/** Encountered a tag the decoder does not support. */
+export const ERROR_UNKNOWN_TAG = "ETF_UNKNOWN_TAG";
+/** List tail is not NIL_EXT. Gleam cannot produce improper lists. */
+export const ERROR_IMPROPER_LIST = "ETF_IMPROPER_LIST";
+/** Atom name exceeds the Erlang 255 codepoint limit. */
+export const ERROR_ATOM_TOO_LONG = "ETF_ATOM_TOO_LONG";
+
+/**
+ * @param {string} message
+ * @param {string} name
+ * @returns {Error}
+ */
+function makeError(message, name) {
+  const e = new Error(message);
+  e.name = name;
+  return e;
+}
+
 // ---------- Identity helper (for Gleam FFI) ----------
 
+/**
+ * @template T
+ * @param {T} x
+ * @returns {T}
+ */
 export function identity(x) {
   return x;
 }
@@ -34,12 +69,24 @@ export function identity(x) {
 // This is ETF-specific metadata - a JSON encoder would ignore it
 // since JSON has only one number type.
 
+/** @type {Map<string, Set<number>>} */
 const floatFieldRegistry = new Map();
 
+/**
+ * Register which field indices of a custom-type atom should be encoded
+ * as floats regardless of whether the JS value is a whole number.
+ * @param {string} atomName snake_case constructor name
+ * @param {number[]} fieldIndices 0-based positions of Float-typed fields
+ */
 export function registerFloatFields(atomName, fieldIndices) {
   floatFieldRegistry.set(atomName, new Set(fieldIndices));
 }
 
+/**
+ * Build a Gleam linked list from a plain JS array.
+ * @param {any[]} arr
+ * @returns {any}
+ */
 function arrayToGleamList(arr) {
   let list = new Empty();
   for (let i = arr.length - 1; i >= 0; i--) {
@@ -48,6 +95,11 @@ function arrayToGleamList(arr) {
   return list;
 }
 
+/**
+ * Flatten a Gleam linked list (or JS array) into a plain JS array.
+ * @param {any} list
+ * @returns {any[]}
+ */
 function gleamListToArray(list) {
   if (Array.isArray(list)) return list;
   const out = [];
@@ -63,10 +115,11 @@ function gleamListToArray(list) {
 //
 // Design note: no wrapper classes for atoms or tuples.
 //
-// A general-purpose ETF decoder (e.g. arnu515/erlang-etf.js) has to wrap
-// atoms in `Atom` and tuples in `Tuple` because, in raw JS, atoms collide
-// with binaries (both are strings) and tuples collide with lists (both
-// are arrays). Without wrappers, the consumer can't tell `:ok` from
+// A general-purpose ETF decoder (e.g. arnu515/erlang-etf.js — see
+// https://github.com/arnu515/erlang-etf.js, MIT) wraps atoms in `Atom`
+// and tuples in `Tuple` because, in raw JS, atoms collide with
+// binaries (both are strings) and tuples collide with lists (both are
+// arrays). Without wrappers, the consumer can't tell `:ok` from
 // `<<"ok">>` or `{1, 2}` from `[1, 2]`.
 //
 // Libero doesn't need wrappers because the typed decoder layer
@@ -80,28 +133,43 @@ function gleamListToArray(list) {
 // decoder unwraps. The cost is that raw mode is ambiguous on its own —
 // fine for libero, but the reason a future standalone ETF library
 // (split from this codec) would need wrappers.
+//
+// Prior art: libero's codec is independently implemented, but aligns
+// with erlang-etf.js on BIT_BINARY_EXT handling and atom-length
+// validation (255 codepoints). Credit to that project for the spec
+// references.
 
 const utf8Decoder = new TextDecoder();
 
+/**
+ * @typedef {ArrayBuffer | Uint8Array | { rawBuffer: Uint8Array }} DecoderInput
+ */
+
 class ETFDecoder {
-  // raw=true: atoms stay as strings and tagged tuples stay as plain
-  // JS arrays. Used when the typed decoder will re-interpret the result.
+  /**
+   * @param {DecoderInput} input ArrayBuffer, Uint8Array, or Gleam BitArray
+   * @param {boolean} [raw] if true, atoms stay as strings and tagged
+   *   tuples stay as plain JS arrays. Used when the typed decoder
+   *   will re-interpret the result.
+   */
   constructor(input, raw = false) {
     // Accept any of: ArrayBuffer (WebSocket onmessage with binaryType
     // "arraybuffer"), Uint8Array, or a Gleam JS BitArray (which exposes
     // its bytes as `rawBuffer`, a Uint8Array). Normalising here lets the
     // public `wire.decode` primitive take a Gleam BitArray directly,
     // matching the cross-target promise of the Gleam-side function.
+    /** @type {Uint8Array} */
     let bytes;
     if (input instanceof Uint8Array) {
       bytes = input;
     } else if (input instanceof ArrayBuffer) {
       bytes = new Uint8Array(input);
-    } else if (input && input.rawBuffer instanceof Uint8Array) {
-      bytes = input.rawBuffer;
+    } else if (input && /** @type {any} */ (input).rawBuffer instanceof Uint8Array) {
+      bytes = /** @type {any} */ (input).rawBuffer;
     } else {
-      throw new Error(
+      throw makeError(
         "ETFDecoder: input must be ArrayBuffer, Uint8Array, or Gleam BitArray",
+        ERROR_INVALID_INPUT,
       );
     }
     this.bytes = bytes;
@@ -110,10 +178,14 @@ class ETFDecoder {
     this.raw = raw;
   }
 
+  /** @returns {any} */
   decode() {
     const version = this.readUint8();
     if (version !== 131) {
-      throw new Error(`ETF decode: expected version byte 131, got ${version}`);
+      throw makeError(
+        `ETF decode: expected version byte 131, got ${version}`,
+        ERROR_VERSION_BYTE,
+      );
     }
     return this.decodeTerm();
   }
@@ -226,7 +298,10 @@ class ETFDecoder {
       }
 
       default:
-        throw new Error(`ETF decode: unknown tag ${tag} at offset ${this.offset - 1}`);
+        throw makeError(
+          `ETF decode: unknown tag ${tag} at offset ${this.offset - 1}`,
+          ERROR_UNKNOWN_TAG,
+        );
     }
   }
 
@@ -236,7 +311,10 @@ class ETFDecoder {
     // are 1-4 bytes, so a byte length under 256 can still produce <= 255
     // codepoints — but ATOM_UTF8_EXT (uint16 length) can exceed this.
     if (Array.from(name).length >= 256) {
-      throw new Error(`ETF decode: atom name exceeds 255 codepoints`);
+      throw makeError(
+        "ETF decode: atom name exceeds 255 codepoints",
+        ERROR_ATOM_TOO_LONG,
+      );
     }
     // Special atoms
     if (name === "true") return true;
@@ -297,7 +375,10 @@ class ETFDecoder {
     // corrupted data or a non-Gleam sender.
     const tailTag = this.readUint8();
     if (tailTag !== 106) {
-      throw new Error("ETF decode: improper list (non-nil tail) - Gleam cannot produce these");
+      throw makeError(
+        "ETF decode: improper list (non-nil tail) - Gleam cannot produce these",
+        ERROR_IMPROPER_LIST,
+      );
     }
     if (this.raw) return elements;
     return arrayToGleamList(elements);
@@ -338,13 +419,14 @@ const textEncoder = new TextEncoder();
 
 class ETFEncoder {
   constructor() {
-    // Start with 256 bytes, grow as needed
+    // Start with 256 bytes, grow as needed.
     this.buffer = new ArrayBuffer(256);
     this.view = new DataView(this.buffer);
     this.bytes = new Uint8Array(this.buffer);
     this.offset = 0;
   }
 
+  /** @param {number} needed */
   ensureCapacity(needed) {
     const required = this.offset + needed;
     if (required <= this.buffer.byteLength) return;
@@ -357,46 +439,54 @@ class ETFEncoder {
     this.bytes = new Uint8Array(this.buffer);
   }
 
+  /** @param {number} v */
   writeUint8(v) {
     this.ensureCapacity(1);
     this.view.setUint8(this.offset, v);
     this.offset += 1;
   }
 
+  /** @param {number} v */
   writeUint16(v) {
     this.ensureCapacity(2);
     this.view.setUint16(this.offset, v);
     this.offset += 2;
   }
 
+  /** @param {number} v */
   writeUint32(v) {
     this.ensureCapacity(4);
     this.view.setUint32(this.offset, v);
     this.offset += 4;
   }
 
+  /** @param {number} v */
   writeInt32(v) {
     this.ensureCapacity(4);
     this.view.setInt32(this.offset, v);
     this.offset += 4;
   }
 
+  /** @param {number} v */
   writeFloat64(v) {
     this.ensureCapacity(8);
     this.view.setFloat64(this.offset, v);
     this.offset += 8;
   }
 
+  /** @param {Uint8Array} bytes */
   writeBytes(bytes) {
     this.ensureCapacity(bytes.length);
     this.bytes.set(bytes, this.offset);
     this.offset += bytes.length;
   }
 
+  /** @returns {ArrayBuffer} */
   result() {
     return this.buffer.slice(0, this.offset);
   }
 
+  /** @param {any} value */
   encodeTerm(value) {
     if (value === undefined || value === null) {
       // Gleam Nil → atom "nil"
@@ -594,10 +684,14 @@ class ETFEncoder {
 
 // ---------- Helper ----------
 
-// Convert PascalCase to snake_case. Mirrors the Gleam `to_snake_case`
-// algorithm so runtime encoding and codegen-time registration agree.
-// Handles consecutive uppercase: "XMLParser" → "xml_parser",
-// "HTTPSConnection" → "https_connection".
+/**
+ * Convert PascalCase to snake_case. Mirrors Gleam's `to_snake_case`
+ * so runtime encoding and codegen-time atom registration agree.
+ * Handles consecutive uppercase: "XMLParser" → "xml_parser",
+ * "HTTPSConnection" → "https_connection".
+ * @param {string} name
+ * @returns {string}
+ */
 function snakeCase(name) {
   let result = "";
   for (let i = 0; i < name.length; i++) {
@@ -630,11 +724,15 @@ function snakeCase(name) {
 
 // ---------- Public codec API ----------
 
-// Encode a standalone Gleam value to an ETF binary. Used by the
-// public `libero.wire.encode` function. Unlike `encode_call`, there
-// is no envelope - the result is the raw ETF encoding of a single
-// value. Intended for non-RPC paths like passing state into a
-// Lustre SPA via init flags.
+/**
+ * Encode a standalone Gleam value to an ETF binary. Used by the
+ * public `libero.wire.encode` function. Unlike `encode_call`, there
+ * is no envelope — the result is the raw ETF encoding of a single
+ * value. Intended for non-RPC paths like passing state into a
+ * Lustre SPA via init flags.
+ * @param {any} value
+ * @returns {BitArray}
+ */
 export function encode_value(value) {
   const encoder = new ETFEncoder();
   encoder.writeUint8(131); // ETF version byte
@@ -642,18 +740,25 @@ export function encode_value(value) {
   return new BitArray(new Uint8Array(encoder.result()));
 }
 
-// Decode a standalone Gleam value from an ETF binary. Used by the
-// public `libero.wire.decode` function. Symmetric with `encode_value`
-// above - decodes a single value, not a call envelope. Custom type
-// reconstruction is handled by the typed decoder (rpc_decoders_ffi.mjs).
+/**
+ * Decode a standalone Gleam value from an ETF binary. Symmetric with
+ * `encode_value`. Custom type reconstruction is handled by the typed
+ * decoder (rpc_decoders_ffi.mjs).
+ * @param {DecoderInput} buffer
+ * @returns {any}
+ */
 export function decode_value(buffer) {
   const decoder = new ETFDecoder(buffer);
   return decoder.decode();
 }
 
-// Raw variant of decode_value: atoms stay as strings and tagged tuples
-// stay as plain JS arrays. Used internally when the typed decoder
-// (decode_msg_from_server) will re-interpret the result.
+/**
+ * Raw variant of `decode_value`: atoms stay as strings and tagged
+ * tuples stay as plain JS arrays. Used internally when the typed
+ * decoder (decode_msg_from_server) will re-interpret the result.
+ * @param {DecoderInput} buffer
+ * @returns {any}
+ */
 export function decode_value_raw(buffer) {
   const decoder = new ETFDecoder(buffer, true);
   return decoder.decode();
@@ -662,6 +767,7 @@ export function decode_value_raw(buffer) {
 // Gleam's wire.DecodeError(message) custom type.
 // Must extend CustomType so Gleam pattern matching works.
 class WireDecodeError extends CustomType {
+  /** @param {string} message */
   constructor(message) {
     super();
     this.message = message;
@@ -669,15 +775,19 @@ class WireDecodeError extends CustomType {
   }
 }
 
-// Safe variant of decode_value that returns a Result instead of throwing.
-// Used by the public `libero.wire.decode_safe` function.
+/**
+ * Safe variant of `decode_value` that returns a Result instead of
+ * throwing. Used by the public `libero.wire.decode_safe` function.
+ * @param {DecoderInput} buffer
+ * @returns {any} Ok(value) or Error(WireDecodeError)
+ */
 export function decode_safe(buffer) {
   try {
     const decoder = new ETFDecoder(buffer);
     const value = decoder.decode();
     return new Ok(value);
   } catch (e) {
-    const msg = e && e.message ? e.message : String(e);
+    const msg = e && /** @type {any} */ (e).message ? /** @type {any} */ (e).message : String(e);
     return new ResultError(new WireDecodeError(msg));
   }
 }
@@ -845,10 +955,16 @@ function ensureSocket(url) {
   });
 }
 
-// Send a message and queue a callback for the server's response.
-// Responses are matched to sends in FIFO order. Each request has a
-// 30-second timeout - if no response arrives, the callback receives
-// an InternalError so the UI doesn't hang indefinitely.
+/**
+ * Send a message and queue a callback for the server's response.
+ * Responses are matched to sends in FIFO order. Each request has a
+ * 30-second timeout — if no response arrives, the callback receives
+ * an InternalError so the UI doesn't hang indefinitely.
+ * @param {string} url WebSocket URL (typically from rpc_config)
+ * @param {string} module shared module path (e.g. "shared/messages")
+ * @param {any} msg the typed MsgFromClient value to encode and send
+ * @param {(result: any) => void} callback invoked with the decoded Result
+ */
 export function send(url, module, msg, callback) {
   ensureSocket(url);
   const payload = encode_call(module, msg);
@@ -873,18 +989,27 @@ export function send(url, module, msg, callback) {
   }
 }
 
-// Register a push handler for a specific module. When the server
-// sends a push frame tagged with this module path, the callback
-// is invoked with the decoded value.
+/**
+ * Register a push handler for a specific module. When the server
+ * sends a push frame tagged with this module path, the callback is
+ * invoked with the decoded value.
+ * @param {string} module shared module path
+ * @param {(value: any) => void} callback
+ */
 export function registerPushHandler(module, callback) {
   pushHandlers.set(module, callback);
 }
 
-// Encode a call envelope: {module_name, msg} as ETF binary.
-// Symmetric with the server-side wire.encode_call.
-// Returns a raw ArrayBuffer (not a Gleam BitArray) because this is only
-// called internally by send(), which passes it directly to WebSocket.send().
-// Compare with encode_value() which returns a BitArray for Gleam callers.
+/**
+ * Encode a call envelope: `{module_name, msg}` as ETF binary.
+ * Symmetric with the server-side `wire.encode_call`. Returns a raw
+ * ArrayBuffer (not a Gleam BitArray) because this is only called
+ * internally by `send()`, which passes it directly to `WebSocket.send()`.
+ * Compare with `encode_value()` which returns a BitArray for Gleam callers.
+ * @param {string} module
+ * @param {any} msg
+ * @returns {ArrayBuffer}
+ */
 export function encode_call(module, msg) {
   const encoder = new ETFEncoder();
   encoder.writeUint8(131); // ETF version byte
