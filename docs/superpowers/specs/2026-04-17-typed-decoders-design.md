@@ -296,7 +296,7 @@ Existing `todos` and `todos-hydration` examples exercise the full pipeline (clie
 3. Wire the new decoder path into `wire.coerce` (keep the old registry path behind a feature-flag temporarily so tests can run side-by-side if needed).
 4. Update the todos and todos-hydration examples. Verify round-trip.
 5. Land the collision regression test fixture + test.
-6. Delete the global registry from `rpc_ffi.mjs` and the old `write_register_*` codegen. Update README and LLM_USERS.md.
+6. Delete the global registry from `rpc_ffi.mjs` and the old `write_register_*` codegen. Update README and llms.txt.
 
 Consumer migration (v3): regenerate by running `bin/dev` (triggers libero codegen). No application code changes.
 

@@ -40,7 +40,7 @@
 - `examples/todos/*` generated files — regenerate under new codegen.
 - `examples/todos-hydration/*` generated files — regenerate under new codegen.
 - `README.md` — document the new decoder surface.
-- `LLM_USERS.md` — update client-side decoder section.
+- `llms.txt` — update client-side decoder section.
 
 ### Deleted
 
@@ -1372,24 +1372,24 @@ git commit -m "Remove global constructor registry"
 
 ## Task 11: Documentation
 
-**Goal:** Keep README and LLM_USERS.md in sync with the new decoder surface.
+**Goal:** Keep README and llms.txt in sync with the new decoder surface.
 
 **Files:**
 - Modify: `README.md`
-- Modify: `LLM_USERS.md`
+- Modify: `llms.txt`
 
 - [ ] **Step 11.1: Update README**
 
 Find the section describing the client-side RPC flow. Replace mentions of "constructor registry" or "registerConstructor" with "typed decoders". Add a short example showing a generated decoder.
 
-- [ ] **Step 11.2: Update LLM_USERS.md**
+- [ ] **Step 11.2: Update llms.txt**
 
 Same update — any reference to the registry moves to the typed decoder shape. Include a one-paragraph explanation of why (collision avoidance) for future readers.
 
 - [ ] **Step 11.3: Commit**
 
 ```bash
-git add README.md LLM_USERS.md
+git add README.md llms.txt
 git commit -m "Document typed decoder surface in README and LLM_USERS"
 ```
 

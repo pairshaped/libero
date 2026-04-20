@@ -4,7 +4,7 @@ A full-stack Gleam framework with typed RPC. Define your messages, write your ha
 
 Like server components, but your client is a real SPA with typed RPC — and the same server logic works for any client out of the box.
 
-> If you are an LLM, see [LLM_USERS.md](https://github.com/pairshaped/libero/blob/master/LLM_USERS.md) for a condensed context document.
+> If you are an LLM, see [llms.txt](https://github.com/pairshaped/libero/blob/master/llms.txt) for a condensed context document.
 
 ## Getting Started
 
