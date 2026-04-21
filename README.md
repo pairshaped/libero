@@ -237,7 +237,7 @@ Libero is a good fit when:
 ## Examples
 
 - [`examples/todos`](examples/todos) -- Basic Lustre SPA with CRUD operations and WebSocket RPC
-- [`examples/counter`](examples/counter) -- SSR + hydration with client-side routing, shared views across Erlang and JavaScript
+- [`examples/ssr_hydration`](examples/ssr_hydration) -- SSR + hydration with shared views across Erlang and JavaScript
 
 ## Prior Art & Credits
 

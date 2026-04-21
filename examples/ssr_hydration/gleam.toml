@@ -1,4 +1,4 @@
-name = "counter"
+name = "ssr_hydration"
 version = "0.1.0"
 target = "erlang"
 
