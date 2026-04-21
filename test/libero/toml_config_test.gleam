@@ -2,11 +2,12 @@
 
 import gleam/list
 import gleam/option.{Some}
+import gleam/string
 import libero/config.{WsPathOnly}
 import libero/toml_config.{type ClientConfig, ClientConfig, TomlConfig}
 
 pub fn parse_minimal_toml_test() {
-  let toml = "name = \"myapp\"\n\n[libero]\nport = 3000\n"
+  let toml = "name = \"myapp\"\n\n[tools.libero]\nport = 3000\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 3000 = cfg.port
@@ -15,7 +16,7 @@ pub fn parse_minimal_toml_test() {
 }
 
 pub fn parse_uses_shared_plus_server_defaults_test() {
-  // No libero overrides -> defaults assume shared + server + clients layout
+  // No tools.libero overrides -> defaults assume shared + server + clients layout
   let toml = "name = \"myapp\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "src" = cfg.server_src_dir
@@ -28,7 +29,7 @@ pub fn parse_uses_shared_plus_server_defaults_test() {
 
 pub fn parse_with_clients_test() {
   let toml =
-    "name = \"myapp\"\n\n[libero.server]\nrest = true\n\n[libero.clients.web]\ntarget = \"javascript\"\n\n[libero.clients.cli]\ntarget = \"erlang\"\n"
+    "name = \"myapp\"\n\n[tools.libero.server]\nrest = true\n\n[tools.libero.clients.web]\ntarget = \"javascript\"\n\n[tools.libero.clients.cli]\ntarget = \"erlang\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 8080 = cfg.port
@@ -44,7 +45,7 @@ pub fn parse_with_clients_test() {
     })
 }
 
-pub fn parse_no_libero_section_test() {
+pub fn parse_no_tools_libero_section_test() {
   let toml = "name = \"myapp\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
@@ -54,9 +55,16 @@ pub fn parse_no_libero_section_test() {
 }
 
 pub fn parse_missing_name_test() {
-  let toml = "[libero]\nport = 9090\n"
+  let toml = "[tools.libero]\nport = 9090\n"
   let assert Error(msg) = toml_config.parse(toml)
   let assert "missing required field: name" = msg
+}
+
+pub fn parse_rejects_legacy_libero_section_test() {
+  let toml = "name = \"myapp\"\n\n[libero]\nport = 3000\n"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True =
+    string.contains(msg, "must be under [tools.libero]")
 }
 
 pub fn to_codegen_config_javascript_client_test() {

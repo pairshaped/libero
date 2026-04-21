@@ -10,7 +10,7 @@ import simplifile
 ///
 /// Creates `<path>/clients/<name>/src/` and writes a starter app file only
 /// when the src directory contains no files yet. Generates a `gleam.toml`
-/// for the client package if missing. Appends the `[libero.clients.<name>]`
+/// for the client package if missing. Appends the `[tools.libero.clients.<name>]`
 /// section to the root `gleam.toml` only when that section is absent.
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn add_client(
@@ -44,7 +44,7 @@ pub fn add_client(
     _ -> Ok(Nil)
   })
 
-  // Append [libero.clients.<name>] to root gleam.toml if missing
+  // Append [tools.libero.clients.<name>] to root gleam.toml if missing
   use toml_content <- map_err(simplifile.read(path <> "/gleam.toml"))
   let already_declared = case toml_config.parse(toml_content) {
     Ok(cfg) -> list.any(cfg.clients, fn(c) { c.name == name })
@@ -55,7 +55,11 @@ pub fn add_client(
     True -> Ok(Nil)
     False -> {
       let addition =
-        "\n[libero.clients." <> name <> "]\ntarget = \"" <> target <> "\"\n"
+        "\n[tools.libero.clients."
+        <> name
+        <> "]\ntarget = \""
+        <> target
+        <> "\"\n"
       use _ <- map_err(simplifile.append(path <> "/gleam.toml", addition))
       Ok(Nil)
     }

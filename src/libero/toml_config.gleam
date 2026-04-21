@@ -1,6 +1,6 @@
-//// TOML configuration parser for Libero v4.
+//// TOML configuration parser for Libero.
 ////
-//// Reads the `[libero]` section from gleam.toml.
+//// Reads the `[tools.libero]` section from gleam.toml.
 
 import gleam/dict
 import gleam/list
@@ -63,17 +63,30 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     |> result.map_error(fn(_) { "missing required field: name" }),
   )
 
-  let port = tom.get_int(parsed, ["libero", "port"]) |> result.unwrap(8080)
+  // Reject legacy [libero] config (must be [tools.libero] since v4.1.1)
+  use _ <- result.try(case tom.get_table(parsed, ["libero"]) {
+    Ok(_) ->
+      Error(
+        "Found [libero] section in gleam.toml. "
+        <> "Since v4.1.1, libero config must be under [tools.libero]. "
+        <> "Rename [libero] to [tools.libero] and [libero.clients.*] to [tools.libero.clients.*].",
+      )
+    Error(_) -> Ok(Nil)
+  })
+
+  let port =
+    tom.get_int(parsed, ["tools", "libero", "port"]) |> result.unwrap(8080)
 
   let rest =
-    tom.get_bool(parsed, ["libero", "server", "rest"]) |> result.unwrap(False)
+    tom.get_bool(parsed, ["tools", "libero", "server", "rest"])
+    |> result.unwrap(False)
 
   let server_src_dir =
-    tom.get_string(parsed, ["libero", "server", "src_dir"])
+    tom.get_string(parsed, ["tools", "libero", "server", "src_dir"])
     |> result.unwrap("src")
 
   let server_generated_dir =
-    tom.get_string(parsed, ["libero", "server", "generated_dir"])
+    tom.get_string(parsed, ["tools", "libero", "server", "generated_dir"])
     |> result.unwrap("src/server/generated")
 
   let default_atoms =
@@ -81,19 +94,19 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     <> string.replace(name, each: "-", with: "_")
     <> "@generated@rpc_atoms.erl"
   let server_atoms_path =
-    tom.get_string(parsed, ["libero", "server", "atoms_path"])
+    tom.get_string(parsed, ["tools", "libero", "server", "atoms_path"])
     |> result.unwrap(default_atoms)
 
   let shared_src_dir =
-    tom.get_string(parsed, ["libero", "shared", "src_dir"])
+    tom.get_string(parsed, ["tools", "libero", "shared", "src_dir"])
     |> result.unwrap("shared/src/shared")
 
   let shared_state_module =
-    tom.get_string(parsed, ["libero", "shared_state_module"])
+    tom.get_string(parsed, ["tools", "libero", "shared_state_module"])
     |> result.unwrap("server/shared_state")
 
   let app_error_module =
-    tom.get_string(parsed, ["libero", "app_error_module"])
+    tom.get_string(parsed, ["tools", "libero", "app_error_module"])
     |> result.unwrap("server/app_error")
 
   use clients <- result.try(parse_clients(parsed))
@@ -166,7 +179,7 @@ pub fn to_codegen_config(
 fn parse_clients(
   parsed: dict.Dict(String, tom.Toml),
 ) -> Result(List(ClientConfig), String) {
-  case tom.get_table(parsed, ["libero", "clients"]) {
+  case tom.get_table(parsed, ["tools", "libero", "clients"]) {
     Error(_) -> Ok([])
     Ok(clients_dict) -> {
       let names = dict.keys(clients_dict)

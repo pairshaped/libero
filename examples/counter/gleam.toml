@@ -14,8 +14,8 @@ libero = { path = "../../" }
 [dev-dependencies]
 gleeunit = "~> 1.0"
 
-[libero]
+[tools.libero]
 port = 8080
 
-[libero.clients.web]
+[tools.libero.clients.web]
 target = "javascript"

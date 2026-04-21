@@ -21,7 +21,7 @@ gleam run
 
 ```
 my_app/
-  gleam.toml                         # server package + [libero] config
+  gleam.toml                         # server package + [tools.libero] config
   src/
     server/
       handler.gleam                  # your business logic
@@ -43,7 +43,7 @@ my_app/
     my_app_test.gleam                # handler test
 ```
 
-The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[libero]` config that declares clients and settings. `src/server/` is where your handlers and business logic live.
+The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. `src/server/` is where your handlers and business logic live.
 
 `shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package — the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
 
@@ -115,7 +115,7 @@ ToggleTodo(id) ->
 
 ## Configuration
 
-All config lives in `gleam.toml` under the `[libero]` section:
+All config lives in `gleam.toml` under the `[tools.libero]` section:
 
 ```toml
 name = "my_app"
@@ -131,13 +131,13 @@ lustre = "~> 5.6"
 shared = { path = "shared" }
 libero = { path = "../libero" }
 
-[libero]
+[tools.libero]
 port = 8080
 
-[libero.clients.web]
+[tools.libero.clients.web]
 target = "javascript"
 
-[libero.clients.cli]
+[tools.libero.clients.cli]
 target = "erlang"
 ```
 

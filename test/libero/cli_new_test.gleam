@@ -15,7 +15,7 @@ pub fn scaffold_project_test() {
   let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
   let assert True = string.contains(gleam_toml, "name = \"test_scaffold\"")
   let assert True = string.contains(gleam_toml, "target = \"erlang\"")
-  let assert True = string.contains(gleam_toml, "[libero]")
+  let assert True = string.contains(gleam_toml, "[tools.libero]")
   let assert True = string.contains(gleam_toml, "shared = { path = \"shared\"")
 
   let assert Ok(True) = simplifile.is_file(dir <> "/shared/gleam.toml")

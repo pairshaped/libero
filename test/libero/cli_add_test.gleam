@@ -3,7 +3,7 @@ import libero/cli/add as cli_add
 import simplifile
 
 fn gleam_toml() -> String {
-  "name = \"myapp\"\nversion = \"0.1.0\"\n\n[libero]\nport = 8080\n"
+  "name = \"myapp\"\nversion = \"0.1.0\"\n\n[tools.libero]\nport = 8080\n"
 }
 
 pub fn add_javascript_client_test() {
@@ -26,7 +26,7 @@ pub fn add_javascript_client_test() {
 
   // Check root gleam.toml updated
   let assert Ok(toml) = simplifile.read(dir <> "/gleam.toml")
-  let assert True = string.contains(toml, "[libero.clients.web]")
+  let assert True = string.contains(toml, "[tools.libero.clients.web]")
   let assert True = string.contains(toml, "target = \"javascript\"")
 
   let _ = simplifile.delete(dir)
@@ -47,7 +47,7 @@ pub fn add_erlang_client_test() {
   let assert Ok(True) = simplifile.is_file(dir <> "/clients/cli/gleam.toml")
 
   let assert Ok(toml) = simplifile.read(dir <> "/gleam.toml")
-  let assert True = string.contains(toml, "[libero.clients.cli]")
+  let assert True = string.contains(toml, "[tools.libero.clients.cli]")
 
   let _ = simplifile.delete(dir)
   Nil

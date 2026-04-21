@@ -4,7 +4,7 @@
 //// files give a new project a minimal skeleton to build from.
 
 /// Returns gleam.toml content for a new project (the server package).
-/// Libero config lives under the [libero] section.
+/// Libero config lives under the [tools.libero] section.
 pub fn gleam_toml(name name: String) -> String {
   "name = \"" <> name <> "\"
 version = \"0.1.0\"
@@ -22,7 +22,7 @@ libero = \"~> 4.0\"
 [dev-dependencies]
 gleeunit = \"~> 1.0\"
 
-[libero]
+[tools.libero]
 port = 8080
 "
 }

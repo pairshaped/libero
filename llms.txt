@@ -6,7 +6,7 @@ Libero is a full-stack Gleam framework with typed RPC. Define message types, wri
 
 ```
 my_app/
-  gleam.toml                       # server package (erlang) + [libero] config
+  gleam.toml                       # server package (erlang) + [tools.libero] config
   src/
     server/
       handler.gleam                # update_from_client function
@@ -28,7 +28,7 @@ my_app/
     my_app_test.gleam
 ```
 
-The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[libero]` config that declares clients and settings. Gleam compiles to a single target per package, so `shared/` and `clients/` are separate nested packages (each with their own `gleam.toml`). `shared/` has no target, so it compiles to both Erlang and JavaScript — this lets both the server and JS clients import the same message types without the client pulling in Erlang-only dependencies.
+The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. Gleam compiles to a single target per package, so `shared/` and `clients/` are separate nested packages (each with their own `gleam.toml`). `shared/` has no target, so it compiles to both Erlang and JavaScript — this lets both the server and JS clients import the same message types without the client pulling in Erlang-only dependencies.
 
 ```
 root (server)     → shared, libero, mist     [target: erlang]
@@ -53,7 +53,7 @@ gleam run -m libero -- build                          # gen + build server + all
 
 ## Configuration
 
-Libero config lives in `gleam.toml` under `[libero]`:
+Libero config lives in `gleam.toml` under `[tools.libero]`:
 
 ```toml
 name = "my_app"
@@ -69,10 +69,10 @@ lustre = "~> 5.6"
 shared = { path = "shared" }
 libero = { path = "../libero" }
 
-[libero]
+[tools.libero]
 port = 8080
 
-[libero.clients.web]
+[tools.libero.clients.web]
 target = "javascript"
 ```
 
@@ -329,4 +329,4 @@ Helpers: `to_remote`, `to_result`, `map`, `map_error`, `unwrap`, `to_option`, `i
 - `lustre` -- Gleam UI framework (client, compiles to JS)
 - `mist` -- HTTP/WebSocket server (server, runs on BEAM)
 - `glance` -- Gleam parser (used by codegen to scan modules)
-- `tom` -- TOML parser (reads `[libero]` config from gleam.toml)
+- `tom` -- TOML parser (reads `[tools.libero]` config from gleam.toml)
