@@ -68,45 +68,49 @@ fn handle_server_response(
   model: Model,
   raw: dynamic.Dynamic,
 ) -> #(Model, Effect(Msg)) {
-  let response: MsgFromServer = wire.coerce(raw)
-  case response {
-    TodoCreated(Ok(item)) -> #(
-      Model(..model, todos: list.append(model.todos, [item])),
-      effect.none(),
-    )
-    TodoCreated(Error(_)) -> #(
-      Model(..model, error: "Failed to create todo"),
-      effect.none(),
-    )
-    TodoToggled(Ok(toggled)) -> #(
-      Model(
-        ..model,
-        todos: list.map(model.todos, fn(t) {
-          case t.id == toggled.id {
-            True -> toggled
-            False -> t
-          }
-        }),
-      ),
-      effect.none(),
-    )
-    TodoToggled(Error(_)) -> #(
-      Model(..model, error: "Todo not found"),
-      effect.none(),
-    )
-    TodoDeleted(Ok(id)) -> #(
-      Model(..model, todos: list.filter(model.todos, fn(t) { t.id != id })),
-      effect.none(),
-    )
-    TodoDeleted(Error(_)) -> #(
-      Model(..model, error: "Todo not found"),
-      effect.none(),
-    )
-    TodosLoaded(Ok(todos)) -> #(Model(..model, todos:), effect.none())
-    TodosLoaded(Error(_)) -> #(
-      Model(..model, error: "Failed to load todos"),
-      effect.none(),
-    )
+  let result: Result(MsgFromServer, _) = wire.coerce(raw)
+  case result {
+    Error(_) -> #(Model(..model, error: "Server error"), effect.none())
+    Ok(response) ->
+      case response {
+        TodoCreated(Ok(item)) -> #(
+          Model(..model, todos: list.append(model.todos, [item])),
+          effect.none(),
+        )
+        TodoCreated(Error(_)) -> #(
+          Model(..model, error: "Failed to create todo"),
+          effect.none(),
+        )
+        TodoToggled(Ok(toggled)) -> #(
+          Model(
+            ..model,
+            todos: list.map(model.todos, fn(t) {
+              case t.id == toggled.id {
+                True -> toggled
+                False -> t
+              }
+            }),
+          ),
+          effect.none(),
+        )
+        TodoToggled(Error(_)) -> #(
+          Model(..model, error: "Todo not found"),
+          effect.none(),
+        )
+        TodoDeleted(Ok(id)) -> #(
+          Model(..model, todos: list.filter(model.todos, fn(t) { t.id != id })),
+          effect.none(),
+        )
+        TodoDeleted(Error(_)) -> #(
+          Model(..model, error: "Todo not found"),
+          effect.none(),
+        )
+        TodosLoaded(Ok(todos)) -> #(Model(..model, todos:), effect.none())
+        TodosLoaded(Error(_)) -> #(
+          Model(..model, error: "Failed to load todos"),
+          effect.none(),
+        )
+      }
   }
 }
 
