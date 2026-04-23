@@ -63,8 +63,7 @@ pub fn parse_missing_name_test() {
 pub fn parse_rejects_legacy_libero_section_test() {
   let toml = "name = \"myapp\"\n\n[libero]\nport = 3000\n"
   let assert Error(msg) = toml_config.parse(toml)
-  let assert True =
-    string.contains(msg, "must be under [tools.libero]")
+  let assert True = string.contains(msg, "must be under [tools.libero]")
 }
 
 pub fn to_codegen_config_javascript_client_test() {

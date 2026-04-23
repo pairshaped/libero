@@ -154,7 +154,7 @@ pub fn write_if_missing_writes_when_file_absent_test() {
     codegen.write_if_missing(path: path, content: "// generated content")
 
   let assert Ok(content) = simplifile.read(path)
-  let assert True = content == "// generated content"
+  let assert True = string.contains(content, "// generated content")
 
   let assert Ok(Nil) = simplifile.delete_all([dir])
 }

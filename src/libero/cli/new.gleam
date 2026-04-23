@@ -7,6 +7,7 @@ import gleam/string
 import libero/cli.{type Database}
 import libero/cli/templates
 import libero/cli/templates/db as db_templates
+import libero/format
 import simplifile
 
 /// Scaffold a new project under `path`.
@@ -113,19 +114,22 @@ fn scaffold_files(
     path <> "/gleam.toml",
     templates.gleam_toml(name:, db_deps:, extra_toml:),
   ))
-  use _ <- map_err(simplifile.write(
-    server_dir <> "/handler.gleam",
-    templates.starter_handler(),
+  use _ <- map_err(write_formatted(
+    path: server_dir <> "/handler.gleam",
+    content: templates.starter_handler(),
   ))
   use _ <- map_err(
-    simplifile.write(server_dir <> "/shared_state.gleam", case database {
-      None -> templates.starter_shared_state()
-      Some(db) -> db_templates.shared_state(db)
-    }),
+    write_formatted(
+      path: server_dir <> "/shared_state.gleam",
+      content: case database {
+        None -> templates.starter_shared_state()
+        Some(db) -> db_templates.shared_state(db)
+      },
+    ),
   )
-  use _ <- map_err(simplifile.write(
-    server_dir <> "/app_error.gleam",
-    templates.starter_app_error(),
+  use _ <- map_err(write_formatted(
+    path: server_dir <> "/app_error.gleam",
+    content: templates.starter_app_error(),
   ))
 
   // Write database files when --database is set
@@ -134,9 +138,9 @@ fn scaffold_files(
       case database {
         None -> next(Nil)
         Some(db) -> {
-          use _ <- map_err(simplifile.write(
-            server_dir <> "/db.gleam",
-            db_templates.db_module(db),
+          use _ <- map_err(write_formatted(
+            path: server_dir <> "/db.gleam",
+            content: db_templates.db_module(db),
           ))
           use _ <- map_err(simplifile.create_directory_all(server_dir <> "/sql"))
           next(Nil)
@@ -152,16 +156,16 @@ fn scaffold_files(
     path <> "/shared/gleam.toml",
     templates.shared_gleam_toml(),
   ))
-  use _ <- map_err(simplifile.write(
-    shared_dir <> "/messages.gleam",
-    templates.starter_messages(),
+  use _ <- map_err(write_formatted(
+    path: shared_dir <> "/messages.gleam",
+    content: templates.starter_messages(),
   ))
 
   let test_dir = path <> "/test"
   use _ <- map_err(simplifile.create_directory_all(test_dir))
-  use _ <- map_err(simplifile.write(
-    test_dir <> "/" <> name <> "_test.gleam",
-    templates.starter_test(),
+  use _ <- map_err(write_formatted(
+    path: test_dir <> "/" <> name <> "_test.gleam",
+    content: templates.starter_test(),
   ))
 
   // README
@@ -170,6 +174,18 @@ fn scaffold_files(
     templates.starter_readme(name:, db_section: db_readme),
   ))
   Ok(Nil)
+}
+
+/// Write a file, running `gleam format` on .gleam files first.
+fn write_formatted(
+  path path: String,
+  content content: String,
+) -> Result(Nil, simplifile.FileError) {
+  let formatted = case string.ends_with(path, ".gleam") {
+    True -> format.format_gleam(content)
+    False -> content
+  }
+  simplifile.write(path, formatted)
 }
 
 // nolint: stringly_typed_error

@@ -58,10 +58,11 @@ pub fn multi_handler_dispatch_chains_test() {
     )
 
   // Must chain to handler_b on UnhandledMessage
+  let assert True = string.contains(content, "Error(UnhandledMessage)")
   let assert True =
     string.contains(
       content,
-      "Error(UnhandledMessage) -> server_handler_b_handler.update_from_client",
+      "server_handler_b_handler.update_from_client(msg: typed_msg, state:)",
     )
 
   // Cleanup

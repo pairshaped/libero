@@ -2,7 +2,9 @@
 
 import gleam/list
 import gleam/result
+import gleam/string
 import libero/cli/templates
+import libero/format
 import libero/toml_config
 import simplifile
 
@@ -39,7 +41,7 @@ pub fn add_client(
         "javascript" -> #("app.gleam", templates.starter_spa(name:))
         _ -> #("main.gleam", templates.starter_cli())
       }
-      simplifile.write(client_src <> "/" <> filename, content)
+      write_formatted(path: client_src <> "/" <> filename, content:)
     }
     _ -> Ok(Nil)
   })
@@ -95,6 +97,17 @@ fn write_if_missing(
         Error(err) -> Error(simplifile.describe_error(err))
       }
   }
+}
+
+fn write_formatted(
+  path path: String,
+  content content: String,
+) -> Result(Nil, simplifile.FileError) {
+  let formatted = case string.ends_with(path, ".gleam") {
+    True -> format.format_gleam(content)
+    False -> content
+  }
+  simplifile.write(path, formatted)
 }
 
 // nolint: stringly_typed_error
