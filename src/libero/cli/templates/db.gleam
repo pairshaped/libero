@@ -62,7 +62,7 @@ query_function = \"server/db.query\"
 pub fn shared_state(database: Database) -> String {
   case database {
     Postgres ->
-      "import gleam/pog
+      "import pog
 import server/db
 
 /// Shared state passed to every handler call.
@@ -102,7 +102,7 @@ pub fn new() -> SharedState {
 pub fn db_module(database: Database) -> String {
   case database {
     Postgres ->
-      "import gleam/pog
+      "import pog
 
 /// Connect to PostgreSQL using pog's default config.
 ///
@@ -128,7 +128,7 @@ pub fn connect() -> pog.Connection {
       "import gleam/dynamic/decode
 import gleam/int
 import gleam/list
-import gleam/logging
+import logging
 import sqlight
 
 /// Connect to the SQLite database at the default path.
@@ -172,26 +172,16 @@ pub fn query(
   with arguments: List(sqlight.Value),
   expecting decoder: decode.Decoder(a),
 ) -> Result(List(a), sqlight.Error) {
-  logging.log(logging.Debug, \"sql: \" <> sql <> args_to_string(arguments))
-  sqlight.query(sql, db, arguments, decoder)
-}
-
-fn args_to_string(args: List(sqlight.Value)) -> String {
-  case args {
-    [] -> \"\"
-    _ ->
-      \" [\"
-      <> list.index_map(args, fn(arg, i) {
-        \"$\" <> int.to_string(i + 1) <> \"=\" <> sqlight.value_to_string(arg)
-      })
-      |> list.intersperse(\", \")
-      |> string_join
-      <> \"]\"
+  let result = sqlight.query(sql, db, arguments, decoder)
+  case result {
+    Ok(rows) ->
+      logging.log(
+        logging.Debug,
+        sql <> \" (\" <> int.to_string(list.length(rows)) <> \" rows)\",
+      )
+    Error(_) -> logging.log(logging.Warning, \"Query failed: \" <> sql)
   }
-}
-
-fn string_join(parts: List(String)) -> String {
-  list.fold(parts, \"\", fn(acc, part) { acc <> part })
+  result
 }
 "
   }
