@@ -1,11 +1,12 @@
 //// `libero new` — scaffold a new Libero project at the given path.
 
 import gleam/list
-import gleam/option.{type Option}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import libero/cli.{type Database}
 import libero/cli/templates
+import libero/cli/templates/db as db_templates
 import simplifile
 
 /// Scaffold a new project under `path`.
@@ -93,27 +94,55 @@ fn scaffold_files(
   name name: String,
   path path: String,
   server_dir server_dir: String,
-  database _database: Option(Database),
+  database database: Option(Database),
 ) -> Result(Nil, String) {
+  // Compute database-specific template values
+  let #(db_deps, extra_toml, db_readme) = case database {
+    None -> #("", "", "")
+    Some(db) -> #(
+      db_templates.deps(db),
+      db_templates.extra_toml(db),
+      db_templates.readme_section(db),
+    )
+  }
+
   use _ <- map_err(simplifile.create_directory_all(server_dir))
 
   // Root (server) package
   use _ <- map_err(simplifile.write(
     path <> "/gleam.toml",
-    templates.gleam_toml(name:, db_deps: "", extra_toml: ""),
+    templates.gleam_toml(name:, db_deps:, extra_toml:),
   ))
   use _ <- map_err(simplifile.write(
     server_dir <> "/handler.gleam",
     templates.starter_handler(),
   ))
-  use _ <- map_err(simplifile.write(
-    server_dir <> "/shared_state.gleam",
-    templates.starter_shared_state(),
-  ))
+  use _ <- map_err(
+    simplifile.write(server_dir <> "/shared_state.gleam", case database {
+      None -> templates.starter_shared_state()
+      Some(db) -> db_templates.shared_state(db)
+    }),
+  )
   use _ <- map_err(simplifile.write(
     server_dir <> "/app_error.gleam",
     templates.starter_app_error(),
   ))
+
+  // Write database files when --database is set
+  use _ <-
+    fn(next) {
+      case database {
+        None -> next(Nil)
+        Some(db) -> {
+          use _ <- map_err(simplifile.write(
+            server_dir <> "/db.gleam",
+            db_templates.db_module(db),
+          ))
+          use _ <- map_err(simplifile.create_directory_all(server_dir <> "/sql"))
+          next(Nil)
+        }
+      }
+    }
 
   // Shared package - messages live here so JS clients can import them
   // without pulling in Erlang-only server dependencies.
@@ -133,6 +162,12 @@ fn scaffold_files(
   use _ <- map_err(simplifile.write(
     test_dir <> "/" <> name <> "_test.gleam",
     templates.starter_test(),
+  ))
+
+  // README
+  use _ <- map_err(simplifile.write(
+    path <> "/README.md",
+    templates.starter_readme(name:, db_section: db_readme),
   ))
   Ok(Nil)
 }
