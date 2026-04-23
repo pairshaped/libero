@@ -1,5 +1,5 @@
 name = "libero"
-version = "4.2.1"
+version = "4.2.2"
 description = "Typed Gleam RPC for Lustre SPAs without REST, JSON codecs, or hand-written dispatch tables"
 licences = ["MIT"]
 repository = { type = "github", user = "pairshaped", repo = "libero" }
