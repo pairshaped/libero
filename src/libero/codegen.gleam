@@ -1,3 +1,4 @@
+import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/list
@@ -213,6 +214,36 @@ fn message_alias(module_path: String) -> String {
   string.replace(module_path, "/", "_") <> "_msg"
 }
 
+// ---------- Module segment collision check ----------
+
+/// Detect modules whose last path segment would collide in generated output.
+/// E.g. `shared/admin/messages` and `shared/user/messages` both produce
+/// `messages.gleam`, and the second silently overwrites the first.
+/// Returns a list of warnings printed to stderr (does not fail the build).
+pub fn check_segment_collisions(
+  message_modules message_modules: List(MessageModule),
+) -> Nil {
+  let segments =
+    list.fold(message_modules, dict.new(), fn(acc, m) {
+      let segment = scanner.last_module_segment(module_path: m.module_path)
+      let existing = dict.get(acc, segment) |> result.unwrap([])
+      dict.insert(acc, segment, [m.module_path, ..existing])
+    })
+  dict.each(segments, fn(segment, paths) {
+    case paths {
+      [_, _, ..] ->
+        io.println_error(
+          "warning: modules "
+          <> string.join(list.reverse(paths), ", ")
+          <> " share the output filename \""
+          <> segment
+          <> ".gleam\" — the last one written wins",
+        )
+      _ -> Nil
+    }
+  })
+}
+
 // ---------- Client send function generator ----------
 
 /// Generate per-module send function files under `client_generated/`.
@@ -263,12 +294,9 @@ pub fn update_from_server(
 "
       let output = client_generated <> "/" <> segment <> ".gleam"
       ensure_parent_dir(path: output)
-      case simplifile.write(output, content) {
-        Ok(_) -> {
-          io.println("  wrote " <> output)
-          errs
-        }
-        Error(cause) -> [CannotWriteFile(path: output, cause: cause), ..errs]
+      case write_file(path: output, content: content) {
+        Ok(_) -> errs
+        Error(err) -> [err, ..errs]
       }
     })
 
@@ -315,12 +343,9 @@ pub fn send_to_clients(
 "
       let output = server_generated <> "/" <> segment <> ".gleam"
       ensure_parent_dir(path: output)
-      case simplifile.write(output, content) {
-        Ok(_) -> {
-          io.println("  wrote " <> output)
-          errs
-        }
-        Error(cause) -> [CannotWriteFile(path: output, cause: cause), ..errs]
+      case write_file(path: output, content: content) {
+        Ok(_) -> errs
+        Error(err) -> [err, ..errs]
       }
     })
 

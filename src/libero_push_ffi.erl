@@ -6,7 +6,8 @@
 ensure_started() ->
     case pg:start(?SCOPE) of
         {ok, _Pid} -> nil;
-        {error, {already_started, _Pid}} -> nil
+        {error, {already_started, _Pid}} -> nil;
+        {error, Reason} -> error({libero_push_start_failed, Reason})
     end.
 
 pg_join(Topic) ->

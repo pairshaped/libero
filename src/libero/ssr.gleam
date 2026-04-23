@@ -10,6 +10,7 @@ import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/option.{type Option}
 import gleam/result
+import gleam/string
 import libero/error.{type PanicInfo}
 import libero/wire
 
@@ -83,13 +84,21 @@ pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
     Error(_) -> Error(BadFlags)
     Ok(encoded) ->
       bit_array.base64_decode(encoded)
-      |> result.map(wire.decode)
       |> result.replace_error(BadFlags)
+      |> result.try(fn(bytes) {
+        wire.decode_safe(bytes)
+        |> result.replace_error(BadFlags)
+      })
   }
 }
 
 /// Generate a complete HTML document with a pre-rendered body,
 /// embedded flags, and a client module import.
+///
+/// The `title` is HTML-escaped automatically. The `body` is inserted
+/// as raw HTML (assumed to be pre-rendered Lustre output). The
+/// `client_module` is a JS import path controlled by the developer,
+/// not user input — it is not escaped.
 pub fn document(
   title title: String,
   body body: String,
@@ -97,7 +106,7 @@ pub fn document(
   client_module client_module: String,
 ) -> String {
   "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>"
-  <> title
+  <> escape_html(title)
   <> "</title>\n</head>\n<body>\n  <div id=\"app\">"
   <> body
   <> "</div>\n  <script>window.__LIBERO_FLAGS__ = \""
@@ -105,4 +114,14 @@ pub fn document(
   <> "\";</script>\n  <script type=\"module\">\n    import { main } from \""
   <> client_module
   <> "\";\n    main();\n  </script>\n</body>\n</html>"
+}
+
+/// Escape HTML special characters to prevent XSS in text content.
+fn escape_html(text: String) -> String {
+  text
+  |> string.replace("&", "&amp;")
+  |> string.replace("<", "&lt;")
+  |> string.replace(">", "&gt;")
+  |> string.replace("\"", "&quot;")
+  |> string.replace("'", "&#39;")
 }

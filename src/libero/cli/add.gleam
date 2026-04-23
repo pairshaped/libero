@@ -20,6 +20,7 @@ pub fn add_client(
   name name: String,
   target target: String,
 ) -> Result(Nil, String) {
+  use _ <- validate_target(target)
   let client_dir = path <> "/clients/" <> name
   let client_src = client_dir <> "/src"
 
@@ -65,6 +66,20 @@ pub fn add_client(
       use _ <- map_err(simplifile.append(path <> "/gleam.toml", addition))
       Ok(Nil)
     }
+  }
+}
+
+// nolint: stringly_typed_error
+fn validate_target(
+  target: String,
+  next: fn(Nil) -> Result(Nil, String),
+) -> Result(Nil, String) {
+  case target {
+    "javascript" | "erlang" -> next(Nil)
+    _ ->
+      Error(
+        "target must be \"javascript\" or \"erlang\", got: \"" <> target <> "\"",
+      )
   }
 }
 

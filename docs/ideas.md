@@ -1,22 +1,12 @@
 # Ideas
 
-## `libero new --database sqlite`
+## ~~`libero new --database sqlite`~~ ✓ Implemented
 
-Scaffold marmot integration when creating a new project. The flag adds:
+Shipped in v4.2. `--database pg` and `--database sqlite` are supported.
+See `cli.gleam` and `cli/templates/db.gleam`.
 
-- `marmot` as a dev dependency in the server's `gleam.toml`
-- A `[marmot]` config section pointing at a starter SQLite database
-- A starter `sql/` directory with an example query
-- A handler that demonstrates calling the marmot-generated module from
-  `update_from_client`
+## Future ideas
 
-Marmot is the implementation detail behind the flag. The developer just
-declares intent ("I want a database") and gets type-safe SQLite wired up
-end-to-end: SQL file -> marmot codegen -> handler -> RPC -> Lustre view.
-
-### Future: `--database postgres`
-
-Squirrel could fill this role for Postgres. Currently blocked by Squirrel's
-output layout (generates `sql.gleam` as a sibling of the `sql/` directory
-with no configurable output path), which doesn't fit cleanly into libero's
-project structure. Revisit if Squirrel adds an `output` config option.
+- Type alias walk-through in walker (currently skips aliases silently)
+- Request IDs in wire protocol for robust response matching under panics
+- Reconnection strategy for push handlers (currently consumer responsibility)

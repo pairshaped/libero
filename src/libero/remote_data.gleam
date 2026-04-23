@@ -146,6 +146,8 @@ pub fn to_result(
   case to_remote(raw: raw, format_domain: format_domain) {
     Success(payload) -> Ok(payload)
     Failure(err) -> Error(err)
+    // Unreachable: to_remote only returns Success or Failure, never
+    // NotAsked or Loading. This arm exists for exhaustiveness.
     NotAsked | Loading ->
       Error(FrameworkFailure(
         message: "Unexpected response state: to_result called on a non-response",

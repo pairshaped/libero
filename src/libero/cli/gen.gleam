@@ -100,6 +100,9 @@ fn run_with_clients(
     }),
   )
 
+  // 6b. Warn about module name collisions in generated output
+  codegen.check_segment_collisions(message_modules:)
+
   // 7. Walk types
   use discovered <- result.try(
     walker.walk_message_registry_types(

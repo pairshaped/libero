@@ -226,10 +226,13 @@ fn process_type_ast(
   ast ast: glance.Module,
   state state: WalkerState,
 ) -> Result(List(DiscoveredType), List(GenError)) {
-  // Check type alias - skip silently.
-  // TODO: type aliases that wrap custom types are not walked transitively.
-  // If a custom type is only reachable through an alias, it will be missed.
-  // Fix by resolving the alias target and walking through it.
+  // Known limitation: type aliases that wrap custom types are not walked
+  // transitively. If a custom type is only reachable through an alias,
+  // its atom won't be pre-registered and the typed decoder won't be emitted,
+  // causing a silent decode failure at runtime. This is tracked and should
+  // be fixed by resolving the alias target and walking through it.
+  // For now, consumers must reference the underlying custom type directly
+  // in their MsgFromClient/MsgFromServer fields.
   let is_alias =
     list.any(ast.type_aliases, fn(d) { d.definition.name == type_name })
   use <- bool.lazy_guard(when: is_alias, return: fn() { do_walk(state) })

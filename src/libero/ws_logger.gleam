@@ -14,9 +14,9 @@ pub type Logger {
   )
 }
 
-/// Default logger that prints everything to stdout via `io.println`.
-/// Suitable for examples and local development; replace with a real
-/// structured logger in production code.
+/// Default logger that prints debug messages to stdout and
+/// warning/error messages to stderr. Suitable for examples and local
+/// development; replace with a real structured logger in production.
 pub fn default_logger() -> Logger {
   Logger(
     debug: fn(msg) { io.println("[debug] " <> msg) },

@@ -16,7 +16,11 @@ pub fn main() -> Nil {
     cli.New(name:, database:) -> {
       case cli_new.scaffold(path: name, database:) {
         Ok(Nil) -> io.println("Created " <> name <> ". Happy hacking!")
-        Error(reason) -> io.println_error("error: " <> reason)
+        Error(reason) -> {
+          io.println_error("error: " <> reason)
+          let _halt = halt(1)
+          Nil
+        }
       }
       Nil
     }
@@ -24,7 +28,11 @@ pub fn main() -> Nil {
       case cli_add.add_client(project_path: ".", name:, target:) {
         Ok(Nil) ->
           io.println("Added client " <> name <> " (target: " <> target <> ")")
-        Error(reason) -> io.println_error("error: " <> reason)
+        Error(reason) -> {
+          io.println_error("error: " <> reason)
+          let _halt = halt(1)
+          Nil
+        }
       }
       Nil
     }

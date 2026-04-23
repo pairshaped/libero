@@ -51,6 +51,14 @@ pub fn encode(value: a) -> BitArray
 /// is automatic because atoms are pre-registered by the generated
 /// `rpc_atoms` module.
 ///
+/// **Warning: type safety is the caller's responsibility.** The return
+/// type `a` is unwitnessed — the function returns whatever the ETF
+/// binary deserializes to, cast to the caller's expected type. A
+/// version skew between client and server will produce silent data
+/// corruption, not a runtime error. This is an intentional tradeoff
+/// for ergonomics in controlled deployments where both sides are
+/// built from the same source.
+///
 /// **Panics on malformed input.** In a typical libero deployment
 /// both sides are controlled, so this is a sharp-edge check rather
 /// than a user-facing error. For untrusted input, use `decode_safe`
@@ -133,6 +141,10 @@ pub fn tag_push(module module: String, msg msg: a) -> BitArray {
 /// Used by generated server dispatch code to coerce the decoded
 /// MsgFromClient value to its typed form. Safe when client and server are
 /// built from the same source (the generator guarantees the types match).
+///
+/// **Warning: unwitnessed cast.** Same safety model as `decode` —
+/// type correctness depends on both sides being built from the same
+/// source. A mismatch produces silent data corruption.
 @external(erlang, "libero_ffi", "identity")
 @external(javascript, "./rpc_ffi.mjs", "identity")
 pub fn coerce(value: dynamic.Dynamic) -> a {

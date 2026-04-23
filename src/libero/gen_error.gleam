@@ -8,7 +8,6 @@ pub type GenError {
   CannotReadFile(path: String, cause: simplifile.FileError)
   CannotWriteFile(path: String, cause: simplifile.FileError)
   ParseFailed(path: String, cause: glance.Error)
-  EmptyModulePath(path: String)
   UnresolvedTypeModule(module_path: String, type_name: String)
   TypeNotFound(module_path: String, type_name: String)
   MissingHandler(message_module: String, expected: String)
@@ -34,8 +33,6 @@ pub fn print_error(err: GenError) -> Nil {
       "cannot write file: " <> path <> " (" <> format_file_error(cause) <> ")"
     ParseFailed(path, _cause) ->
       path <> ": failed to parse as Gleam source (glance.module error)"
-    EmptyModulePath(path) ->
-      path <> ": could not derive module segments (path produced empty list)"
     UnresolvedTypeModule(module_path, type_name) ->
       "type `"
       <> type_name

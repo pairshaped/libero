@@ -3,6 +3,10 @@
 //// Each function returns a file's content as a String. The generated
 //// files give a new project a minimal skeleton to build from.
 
+/// Libero version constraint used in generated gleam.toml files.
+/// Update this constant when bumping the libero version.
+const libero_version = "~> 4.2"
+
 /// Returns gleam.toml content for a new project (the server package).
 /// Libero config lives under the [tools.libero] section.
 /// `db_deps` is inserted after the existing deps (e.g. pog, sqlight lines).
@@ -23,7 +27,7 @@ gleam_http = \"~> 4.0\"
 mist = \"~> 6.0\"
 lustre = \"~> 5.6\"
 shared = { path = \"shared\" }
-libero = \"~> 4.2\"
+libero = \"" <> libero_version <> "\"
 " <> db_deps <> "
 [dev-dependencies]
 gleeunit = \"~> 1.0\"
@@ -44,7 +48,7 @@ version = \"0.1.0\"
 
 [dependencies]
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
-libero = \"~> 4.2\"
+libero = \"" <> libero_version <> "\"
 
 [dev-dependencies]
 gleeunit = \"~> 1.0\"
@@ -133,8 +137,7 @@ pub fn ping_test() {
 
 /// Returns a starter Lustre SPA app module with a working RPC example.
 pub fn starter_spa(name name: String) -> String {
-  "import gleam/dynamic
-import generated/messages as rpc
+  "import generated/messages as rpc
 import libero/remote_data.{type RemoteData}
 import lustre
 import lustre/element.{type Element}
@@ -225,7 +228,7 @@ target = \"" <> target <> "\"
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
 shared = { path = \"../../shared\" }
 " <> root_package <> " = { path = \"../../\" }
-libero = \"~> 4.2\"
+libero = \"" <> libero_version <> "\"
 " <> case target {
     "javascript" -> "lustre = \"~> 5.6\"\n"
     _ -> ""

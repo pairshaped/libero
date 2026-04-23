@@ -310,11 +310,15 @@ class ETFDecoder {
     // Erlang's hard limit is 255 codepoints (not bytes). UTF-8 codepoints
     // are 1-4 bytes, so a byte length under 256 can still produce <= 255
     // codepoints — but ATOM_UTF8_EXT (uint16 length) can exceed this.
-    if (Array.from(name).length >= 256) {
-      throw makeError(
-        "ETF decode: atom name exceeds 255 codepoints",
-        ERROR_ATOM_TOO_LONG,
-      );
+    let codepointCount = 0;
+    for (const _ of name) {
+      codepointCount++;
+      if (codepointCount >= 256) {
+        throw makeError(
+          "ETF decode: atom name exceeds 255 codepoints",
+          ERROR_ATOM_TOO_LONG,
+        );
+      }
     }
     // Special atoms
     if (name === "true") return true;
@@ -536,7 +540,12 @@ class ETFEncoder {
       return;
     }
 
-    // Gleam BitArray (has rawBuffer: Uint8Array)
+    // Gleam BitArray (has rawBuffer: Uint8Array).
+    // Uses BINARY_EXT (tag 109) for all BitArrays. Sub-byte-aligned
+    // BitArrays (bitSize % 8 != 0) should technically use BIT_BINARY_EXT
+    // (tag 77), but Gleam's stdlib BitArray is always byte-aligned in
+    // practice. The decoder handles BIT_BINARY_EXT correctly for
+    // interop with Erlang values that use it.
     if (value && value.rawBuffer instanceof Uint8Array) {
       this.writeUint8(109); // BINARY_EXT
       this.writeUint32(value.rawBuffer.length);
@@ -689,6 +698,10 @@ class ETFEncoder {
  * so runtime encoding and codegen-time atom registration agree.
  * Handles consecutive uppercase: "XMLParser" → "xml_parser",
  * "HTTPSConnection" → "https_connection".
+ *
+ * Digits are treated as lowercase — no underscore is inserted before
+ * a digit run. This matches Gleam's compiler behavior and the Erlang
+ * side (walker.to_snake_case). Verified by snake_case_test.gleam.
  * @param {string} name
  * @returns {string}
  */
@@ -805,6 +818,15 @@ export function decode_safe(buffer) {
 //
 // Responses use FIFO matching — no request IDs needed because the
 // server processes requests sequentially over a single WebSocket.
+// This is a deliberate simplification: libero targets single-SPA
+// deployments with one WebSocket connection. Apps that need multiple
+// independent connections should use separate WebSocket clients.
+//
+// Reconnection is the consumer's responsibility — call send() again
+// after a close and the socket will be re-established. Push messages
+// arriving between close and reconnect are lost by design; consumers
+// needing durable push should implement reconnect-with-replay at the
+// application layer.
 
 let ws = null;
 let pendingSends = [];    // [{payload, callback, timer}]

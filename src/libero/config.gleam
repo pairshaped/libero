@@ -140,6 +140,9 @@ pub fn build_config(
 }
 
 /// Extract a `--name=value` flag from the argument list.
+/// Only supports `=` syntax (not `--name value` with a space).
+/// This is intentional — libero's internal flags all use `=` form
+/// and the CLI router handles positional args separately.
 pub fn find_flag(
   args args: List(String),
   name name: String,
