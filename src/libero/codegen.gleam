@@ -5,6 +5,7 @@ import gleam/result
 import gleam/set
 import gleam/string
 import libero/config.{type Config, WsFullUrl, WsPathOnly}
+import libero/format
 import libero/gen_error.{type GenError, CannotWriteFile}
 import libero/scanner.{type MessageModule}
 import libero/walker.{type DiscoveredType, type DiscoveredVariant}
@@ -1155,11 +1156,16 @@ pub fn write_if_missing(
 // ---------- File utilities ----------
 
 /// Write content to a file, logging the path on success.
+/// Gleam files are run through `gleam format` before writing.
 fn write_file(
   path path: String,
   content content: String,
 ) -> Result(Nil, GenError) {
-  case simplifile.write(path, content) {
+  let formatted = case string.ends_with(path, ".gleam") {
+    True -> format.format_gleam(content)
+    False -> content
+  }
+  case simplifile.write(path, formatted) {
     Ok(_) -> {
       io.println("  wrote " <> path)
       Ok(Nil)

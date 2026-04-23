@@ -13,8 +13,8 @@ import libero/cli/new as cli_new
 pub fn main() -> Nil {
   let Nil = trap_signals()
   case cli.parse_command() {
-    cli.New(name:) -> {
-      case cli_new.scaffold(name:, path: name) {
+    cli.New(name:, database:) -> {
+      case cli_new.scaffold(name:, path: name, database:) {
         Ok(Nil) -> io.println("Created " <> name <> ". Happy hacking!")
         Error(reason) -> io.println_error("error: " <> reason)
       }
@@ -54,7 +54,7 @@ pub fn main() -> Nil {
       io.println("Usage: gleam run -m libero -- <command>")
       io.println("")
       io.println("Commands:")
-      io.println("  new <name>                    Create a new project")
+      io.println("  new <name> [--database pg|sqlite]  Create a new project")
       io.println("  add <name> --target <target>  Add a client")
       io.println("  gen                           Regenerate stubs")
       io.println(

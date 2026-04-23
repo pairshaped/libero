@@ -147,14 +147,16 @@ target = "erlang"
 gleam run -m libero -- <command>
 
 Commands:
-  new <name>                    Create a new project
+  new <name> [--database pg|sqlite]  Create a new project
   add <name> --target <target>  Add a client
   gen                           Regenerate stubs
   build                         Gen + build server + all clients
 ```
 
-### `libero new <name>`
-Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton messages), `test/` (handler test), and `gleam.toml`.
+### `libero new <name> [--database pg|sqlite]`
+Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton messages), `test/` (handler test), `README.md`, and `gleam.toml`.
+
+Pass `--database pg` to include [pog](https://hexdocs.pm/pog/) and [squirrel](https://hexdocs.pm/squirrel/) for type-safe Postgres queries. Pass `--database sqlite` to include [sqlight](https://hexdocs.pm/sqlight/) and [marmot](https://hexdocs.pm/marmot/) for type-safe SQLite queries. Both options add a `src/server/db.gleam` connection module and a `src/server/sql/` directory for query files.
 
 ### `libero add <name> --target <target>`
 Adds a client. Creates `clients/<name>/` with its own `gleam.toml` (generated once, never overwritten) and a starter app.
