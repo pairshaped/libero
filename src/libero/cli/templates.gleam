@@ -17,7 +17,7 @@ gleam_http = \"~> 4.0\"
 mist = \"~> 6.0\"
 lustre = \"~> 5.6\"
 shared = { path = \"shared\" }
-libero = \"~> 4.0\"
+libero = \"~> 4.1\"
 
 [dev-dependencies]
 gleeunit = \"~> 1.0\"
@@ -38,7 +38,7 @@ version = \"0.1.0\"
 
 [dependencies]
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
-libero = \"~> 4.0\"
+libero = \"~> 4.1\"
 
 [dev-dependencies]
 gleeunit = \"~> 1.0\"
@@ -156,7 +156,7 @@ target = \"" <> target <> "\"
 gleam_stdlib = \">= 0.69.0 and < 1.0.0\"
 shared = { path = \"../../shared\" }
 " <> root_package <> " = { path = \"../../\" }
-libero = \"~> 4.0\"
+libero = \"~> 4.1\"
 " <> case target {
     "javascript" -> "lustre = \"~> 5.6\"\n"
     _ -> ""

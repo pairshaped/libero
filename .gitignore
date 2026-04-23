@@ -5,3 +5,4 @@ erl_crash.dump
 .beans.yml
 test/tmp/
 tmp/
+examples/**/manifest.toml
