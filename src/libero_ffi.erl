@@ -62,10 +62,11 @@ peel_msg_wrapper(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
     element(2, Tuple);
 peel_msg_wrapper(Atom) when is_atom(Atom) ->
     nil;
-%% Fallback: pass through unchanged. This clause handles values that
-%% are not MsgFromServer variants (e.g. raw Ok/Error tuples passed
-%% through the dispatch pipeline). The codegen is the enforcement
-%% point for correct wrapper shapes — see scanner.validate_msg_from_server_fields.
+%% Fallback (BY DESIGN): pass through unchanged. This clause handles values
+%% that are not MsgFromServer variants (e.g. raw Ok/Error tuples passed
+%% through the dispatch pipeline). The codegen is the enforcement point
+%% for correct wrapper shapes — see scanner.validate_msg_from_server_fields.
+%% A defensive crash here would break legitimate pass-through paths.
 peel_msg_wrapper(Other) ->
     Other.
 

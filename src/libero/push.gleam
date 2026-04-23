@@ -30,6 +30,12 @@ pub fn unregister(client_id client_id: String) -> Nil {
 /// Subscribe the calling process to a topic for broadcast pushes.
 /// The process will receive `{libero_push, BitArray}` messages
 /// when `send_to_clients` is called for this topic.
+///
+/// Note: topics starting with `__client:` are reserved for internal
+/// targeted push routing. Using them directly in `join` would receive
+/// messages intended for specific clients. This is not validated at
+/// runtime (by design) because the API is server-side only and topic
+/// names are controlled by the developer, not external input.
 pub fn join(topic topic: String) -> Nil {
   pg_join(topic)
 }

@@ -190,37 +190,52 @@ class ETFDecoder {
     return this.decodeTerm();
   }
 
+  ensureAvailable(n) {
+    if (this.offset + n > this.bytes.byteLength) {
+      throw makeError(
+        `ETF decode: need ${n} bytes at offset ${this.offset}, only ${this.bytes.byteLength - this.offset} available`,
+        "ETF_TRUNCATED",
+      );
+    }
+  }
+
   readUint8() {
+    this.ensureAvailable(1);
     const v = this.view.getUint8(this.offset);
     this.offset += 1;
     return v;
   }
 
   readUint16() {
+    this.ensureAvailable(2);
     const v = this.view.getUint16(this.offset);
     this.offset += 2;
     return v;
   }
 
   readUint32() {
+    this.ensureAvailable(4);
     const v = this.view.getUint32(this.offset);
     this.offset += 4;
     return v;
   }
 
   readInt32() {
+    this.ensureAvailable(4);
     const v = this.view.getInt32(this.offset);
     this.offset += 4;
     return v;
   }
 
   readFloat64() {
+    this.ensureAvailable(8);
     const v = this.view.getFloat64(this.offset);
     this.offset += 8;
     return v;
   }
 
   readBytes(n) {
+    this.ensureAvailable(n);
     const slice = this.bytes.slice(this.offset, this.offset + n);
     this.offset += n;
     return slice;
@@ -429,7 +444,7 @@ const textEncoder = new TextEncoder();
 class ETFEncoder {
   constructor() {
     // Start with 256 bytes, grow as needed.
-    this.buffer = new ArrayBuffer(256);
+    this.buffer = new ArrayBuffer(1024);
     this.view = new DataView(this.buffer);
     this.bytes = new Uint8Array(this.buffer);
     this.offset = 0;
@@ -552,9 +567,21 @@ class ETFEncoder {
     // practice. The decoder handles BIT_BINARY_EXT correctly for
     // interop with Erlang values that use it.
     if (value && value.rawBuffer instanceof Uint8Array) {
-      this.writeUint8(109); // BINARY_EXT
-      this.writeUint32(value.rawBuffer.length);
-      this.writeBytes(value.rawBuffer);
+      if (value.bitSize !== undefined && value.bitSize % 8 !== 0) {
+        // Sub-byte-aligned: use BIT_BINARY_EXT (tag 77) to preserve
+        // trailing bit count. Without this, the Erlang side would
+        // receive a byte-aligned binary, losing the trailing bits.
+        const byteLen = value.rawBuffer.length;
+        const bitsInLastByte = value.bitSize % 8;
+        this.writeUint8(77); // BIT_BINARY_EXT
+        this.writeUint32(byteLen);
+        this.writeUint8(bitsInLastByte);
+        this.writeBytes(value.rawBuffer);
+      } else {
+        this.writeUint8(109); // BINARY_EXT
+        this.writeUint32(value.rawBuffer.length);
+        this.writeBytes(value.rawBuffer);
+      }
       return;
     }
 
@@ -1013,6 +1040,9 @@ export function send(url, module, msg, callback) {
   // eliminate this entirely (see docs/request_ids.md). For v4, we close
   // the WebSocket after a timeout to force a clean reconnection, resetting
   // the FIFO state.
+  // BY DESIGN for v4 — the race window between timeout and close is
+  // accepted; in practice, the 30s timeout means the server is likely
+  // down and no late response will arrive.
   const timer = setTimeout(() => {
     // Remove from whichever queue this entry is in
     const pendingIdx = pendingSends.findIndex(e => e.callback === callback);

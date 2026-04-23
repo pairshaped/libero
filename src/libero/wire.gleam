@@ -59,6 +59,9 @@ pub fn encode(value: a) -> BitArray
 /// for ergonomics in controlled deployments where both sides are
 /// built from the same source.
 ///
+/// This is by design for v4 — adding a wire schema hash to detect
+/// version skew is planned for v5 (see docs/request_ids.md).
+///
 /// **Panics on malformed input.** In a typical libero deployment
 /// both sides are controlled, so this is a sharp-edge check rather
 /// than a user-facing error. For untrusted input, use `decode_safe`
@@ -145,6 +148,10 @@ pub fn tag_push(module module: String, msg msg: a) -> BitArray {
 /// **Warning: unwitnessed cast.** Same safety model as `decode` —
 /// type correctness depends on both sides being built from the same
 /// source. A mismatch produces silent data corruption.
+///
+/// This is by design — the generated code is the enforcement point.
+/// Making this internal would break the generated dispatch modules
+/// which live in consumer packages and need pub access.
 @external(erlang, "libero_ffi", "identity")
 @external(javascript, "./rpc_ffi.mjs", "identity")
 pub fn coerce(value: dynamic.Dynamic) -> a {

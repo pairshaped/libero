@@ -4,6 +4,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import libero/cli/templates
+import libero/cli/validation
 import libero/format
 import libero/toml_config
 import simplifile
@@ -20,7 +21,9 @@ pub fn add_client(
   name name: String,
   target target: String,
 ) -> Result(Nil, String) {
-  use _ <- validate_name(name)
+  use _ <- result.try(
+    validation.validate_name(name, "client", "gleam run -m libero -- add my_client --target javascript"),
+  )
   use _ <- validate_target(target)
   let client_dir = path <> "/clients/" <> name
   let client_src = client_dir <> "/src"
@@ -68,66 +71,6 @@ pub fn add_client(
       Ok(Nil)
     }
   }
-}
-
-// nolint: stringly_typed_error
-fn validate_name(
-  name: String,
-  next: fn(Nil) -> Result(Nil, String),
-) -> Result(Nil, String) {
-  case string.to_graphemes(name) {
-    [] ->
-      Error(
-        "error: Invalid client name
-  \u{2502}
-  \u{2502} Client name cannot be empty
-  \u{2502}
-  hint: gleam run -m libero -- add my_client --target javascript",
-      )
-    [first, ..rest] ->
-      case is_lowercase_letter(first) {
-        False ->
-          Error(
-            "error: Invalid client name: `"
-            <> name
-            <> "`
-  \u{2502}
-  \u{2502} Must start with a lowercase letter (a-z)
-  \u{2502}
-  hint: Try `"
-            <> string.lowercase(name)
-            <> "` instead",
-          )
-        True ->
-          case
-            list.all(rest, fn(ch) {
-              is_lowercase_letter(ch) || is_digit(ch) || ch == "_"
-            })
-          {
-            False ->
-              Error(
-                "error: Invalid client name: `"
-                <> name
-                <> "`
-  \u{2502}
-  \u{2502} Must contain only lowercase letters, digits, and underscores",
-              )
-            True -> next(Nil)
-          }
-      }
-  }
-}
-
-const lowercase_letters = "abcdefghijklmnopqrstuvwxyz"
-
-const digits = "0123456789"
-
-fn is_lowercase_letter(ch: String) -> Bool {
-  string.contains(lowercase_letters, ch)
-}
-
-fn is_digit(ch: String) -> Bool {
-  string.contains(digits, ch)
 }
 
 // nolint: stringly_typed_error

@@ -98,7 +98,9 @@ pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
 /// The `title` is HTML-escaped automatically. The `body` is inserted
 /// as raw HTML (assumed to be pre-rendered Lustre output). The
 /// `client_module` is a JS import path controlled by the developer,
-/// not user input — it is not escaped. The `flags` value is encoded
+/// not user input — it is not escaped (by design). If you derive this
+/// value from external input, you must validate it yourself.
+/// The `flags` value is encoded
 /// internally via `encode_flags`, producing a base64 string that is
 /// safe to embed in a JS string literal.
 pub fn document(

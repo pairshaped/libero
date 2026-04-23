@@ -17,6 +17,7 @@ pub type GenError {
     field_count: Int,
   )
   NoMessageModules(shared_path: String)
+  TypeAliasNotSupported(module_path: String, type_name: String)
 }
 
 pub fn print_error(err: GenError) -> Nil {
@@ -151,6 +152,19 @@ pub fn to_string(err: GenError) -> String {
       <> "/messages.gleam
         pub type MsgFromClient { Ping }
         pub type MsgFromServer { Pong }"
+
+    TypeAliasNotSupported(module_path, type_name) ->
+      "error: Type alias not supported
+  \u{250c}\u{2500} "
+      <> module_path
+      <> "
+  \u{2502}
+  \u{2502} \""
+      <> type_name
+      <> "\" is a type alias. Libero cannot walk type aliases
+  \u{2502} transitively \u{2014} their underlying type won't be registered for decoding.
+  \u{2502}
+  hint: Reference the underlying custom type directly in your message fields"
   }
 }
 

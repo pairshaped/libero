@@ -85,7 +85,7 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
       message_modules: modules,
       module_files: module_files,
     )
-  let config =
+  let assert Ok(config) =
     config.build_config(
       ws_mode: config.WsFullUrl(url: "ws://localhost:8080/ws"),
       namespace: option.None,

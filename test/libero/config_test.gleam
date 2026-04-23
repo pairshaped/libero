@@ -4,7 +4,7 @@ import gleam/option.{None, Some}
 import libero/config.{WsPathOnly}
 
 pub fn build_config_no_namespace_paths_test() {
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsPathOnly(path: "/ws"),
       namespace: None,
@@ -24,7 +24,7 @@ pub fn build_config_no_namespace_paths_test() {
 }
 
 pub fn build_config_with_namespace_paths_test() {
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsPathOnly(path: "/ws/admin"),
       namespace: Some("admin"),
@@ -44,7 +44,7 @@ pub fn build_config_with_namespace_paths_test() {
 }
 
 pub fn build_config_custom_client_root_test() {
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsPathOnly(path: "/ws"),
       namespace: None,
@@ -59,7 +59,7 @@ pub fn build_config_custom_client_root_test() {
 }
 
 pub fn build_config_no_shared_or_server_test() {
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsPathOnly(path: "/ws"),
       namespace: None,

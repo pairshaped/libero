@@ -7,6 +7,7 @@ import gleam/string
 import libero/cli.{type Database}
 import libero/cli/templates
 import libero/cli/templates/db as db_templates
+import libero/cli/validation
 import libero/format
 import simplifile
 
@@ -27,7 +28,7 @@ pub fn scaffold(
     |> list.last
     |> result.unwrap(path)
 
-  case validate_name(name) {
+  case validation.validate_name(name, "project", "gleam run -m libero -- new my_app") {
     Error(msg) -> Error(msg)
     Ok(Nil) -> scaffold_validated(name:, path:, database:)
   }
@@ -55,63 +56,6 @@ fn scaffold_validated(
       scaffold_files(name:, path:, server_dir:, database:)
     }
   }
-}
-
-// nolint: stringly_typed_error
-fn validate_name(name: String) -> Result(Nil, String) {
-  case string.to_graphemes(name) {
-    [] ->
-      Error(
-        "error: Invalid project name
-  \u{2502}
-  \u{2502} Project name cannot be empty
-  \u{2502}
-  hint: gleam run -m libero -- new my_app",
-      )
-    [first, ..rest] ->
-      case is_lowercase_letter(first) {
-        False ->
-          Error(
-            "error: Invalid project name: `"
-            <> name
-            <> "`
-  \u{2502}
-  \u{2502} Must start with a lowercase letter (a-z)
-  \u{2502}
-  hint: Try `"
-            <> string.lowercase(name)
-            <> "` instead",
-          )
-        True ->
-          case
-            list.all(rest, fn(ch) {
-              is_lowercase_letter(ch) || is_digit(ch) || ch == "_"
-            })
-          {
-            False ->
-              Error(
-                "error: Invalid project name: `"
-                <> name
-                <> "`
-  \u{2502}
-  \u{2502} Must contain only lowercase letters, digits, and underscores",
-              )
-            True -> Ok(Nil)
-          }
-      }
-  }
-}
-
-const lowercase_letters = "abcdefghijklmnopqrstuvwxyz"
-
-const digits = "0123456789"
-
-fn is_lowercase_letter(ch: String) -> Bool {
-  string.contains(lowercase_letters, ch)
-}
-
-fn is_digit(ch: String) -> Bool {
-  string.contains(digits, ch)
 }
 
 // nolint: stringly_typed_error

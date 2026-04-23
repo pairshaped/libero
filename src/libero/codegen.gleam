@@ -12,6 +12,16 @@ import libero/scanner.{type MessageModule}
 import libero/walker.{type DiscoveredType, type DiscoveredVariant}
 import simplifile
 
+// SAFETY NOTE: Module paths interpolated into generated code come from
+// the scanner, which derives them from filesystem directory names under
+// the shared_src root. The scanner's walk_directory filters out non-Gleam
+// files and skips symlinks/generated dirs (scanner.gleam lines 265-285).
+// Gleam's module naming convention (lowercase + underscores) means these
+// paths cannot contain quotes, backslashes, or other injection-relevant
+// characters. If the scanner is ever extended to accept paths from
+// external input, add explicit validation (e.g. reject paths not matching
+// ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$).
+
 // ---------- Server dispatch generator ----------
 
 /// Generate the server dispatch module at `server_generated/dispatch.gleam`.
@@ -590,6 +600,8 @@ fn emit_decoder_imports(
       case set.contains(seen, t.module_path) {
         True -> acc
         False -> #(
+          // O(n) append preserves discovery order for stable import output.
+          // Acceptable: n is the number of unique modules (typically < 20).
           list.append(paths_acc, [t.module_path]),
           set.insert(seen, t.module_path),
         )

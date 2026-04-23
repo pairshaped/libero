@@ -1,7 +1,6 @@
 import glance
 import gleam/bool
 import gleam/dict.{type Dict}
-import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -10,7 +9,8 @@ import gleam/string
 import simplifile
 
 import libero/gen_error.{
-  type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
+  type GenError, CannotReadFile, ParseFailed, TypeAliasNotSupported, TypeNotFound,
+  UnresolvedTypeModule,
 }
 import libero/scanner.{type MessageModule}
 
@@ -239,15 +239,12 @@ fn process_type_ast(
   use <- bool.lazy_guard(
     when: is_alias,
     return: fn() {
-      io.println_error(
-        "warning: type alias \""
-        <> type_name
-        <> "\" in "
-        <> module_path
-        <> " is not walked transitively. "
-        <> "If it wraps a custom type used in messages, reference the underlying type directly.",
+      do_walk(
+        WalkerState(..state, errors: [
+          TypeAliasNotSupported(module_path:, type_name:),
+          ..state.errors
+        ]),
       )
-      do_walk(state)
     },
   )
   // Find the custom type definition
@@ -307,8 +304,8 @@ fn process_type_ast(
       do_walk(
         WalkerState(
           ..state,
-          queue: list.append(state.queue, new_queue_items),
-          discovered: list.append(state.discovered, [discovered_type]),
+          queue: list.append(new_queue_items, state.queue),
+          discovered: [discovered_type, ..state.discovered],
         ),
       )
     }
@@ -535,6 +532,11 @@ fn field_type_of(
               resolver: resolver,
               current_module: current_module,
             )
+          // Falls back to current_module for types defined in the same
+          // module (no module qualifier in the source). This is correct —
+          // unqualified type references are local by definition. If the
+          // type truly doesn't exist, it will be caught as TypeNotFound
+          // when the BFS visits this module_path + type_name pair.
           let mp = result.unwrap(resolved_module, current_module)
           let original_name =
             result.unwrap(dict.get(resolver.original_names, name), name)

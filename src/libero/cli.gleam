@@ -57,7 +57,24 @@ pub fn parse_args(args: List(String)) -> Command {
       Unknown
     }
     ["new", name, ..] -> New(name:, database: None)
-    ["add", name, "--target", target, ..] -> Add(name:, target:)
+    ["add", name, "--target", target, ..] ->
+      case target {
+        "javascript" | "erlang" -> Add(name:, target:)
+        _ -> {
+          io.println_error(
+            "error: Invalid target: `"
+            <> target
+            <> "`
+  \u{2502}
+  \u{2502} --target must be \"javascript\" or \"erlang\"
+  \u{2502}
+  hint: gleam run -m libero -- add "
+            <> name
+            <> " --target javascript",
+          )
+          Unknown
+        }
+      }
     ["add", _name, ..] -> {
       io.println_error(
         "error: Missing --target flag
@@ -70,6 +87,16 @@ pub fn parse_args(args: List(String)) -> Command {
     }
     ["gen", ..] -> Gen
     ["build", ..] -> Build
+    ["new"] -> {
+      io.println_error(
+        "error: Missing project name
+  \u{2502}
+  \u{2502} The new command requires a project name
+  \u{2502}
+  hint: gleam run -m libero -- new my_app",
+      )
+      Unknown
+    }
     _ -> Unknown
   }
 }

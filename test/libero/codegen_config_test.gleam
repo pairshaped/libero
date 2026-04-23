@@ -8,7 +8,7 @@ import simplifile
 
 pub fn write_config_full_url_test() {
   let output_dir = "build/.test_config_full_url"
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsFullUrl(url: "wss://example.com/ws"),
       namespace: None,
@@ -43,7 +43,7 @@ pub fn write_config_full_url_test() {
 
 pub fn write_config_path_only_test() {
   let output_dir = "build/.test_config_path_only"
-  let cfg =
+  let assert Ok(cfg) =
     config.build_config(
       ws_mode: WsPathOnly(path: "/ws/admin"),
       namespace: None,

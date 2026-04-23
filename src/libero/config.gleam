@@ -58,7 +58,8 @@ pub fn build_config(
   client_root client_root: String,
   shared_root shared_root: Result(String, Nil),
   server_root server_root: Result(String, Nil),
-) -> Config {
+) -> Result(Config, String) {
+  use namespace <- result.try(validate_namespace(namespace))
   // In the final JS bundle, decoder files land at:
   //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_decoders_ffi.mjs
   // So from the ffi file's directory, the bundle root is:
@@ -121,7 +122,7 @@ pub fn build_config(
   }
   let decoders_prelude_import_path =
     register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
-  Config(
+  Ok(Config(
     ws_mode: ws_mode,
     namespace: namespace,
     client_root: client_root,
@@ -136,7 +137,50 @@ pub fn build_config(
     server_src: server_src,
     server_generated: server_generated,
     client_generated: client_generated,
-  )
+  ))
+}
+
+/// Validate that a namespace (if present) contains only lowercase letters,
+/// digits, and underscores, and starts with a letter.
+/// Returns the namespace unchanged on success, or a formatted error string.
+fn validate_namespace(
+  namespace: Option(String),
+) -> Result(Option(String), String) {
+  case namespace {
+    None -> Ok(None)
+    Some(ns) -> {
+      let graphemes = string.to_graphemes(ns)
+      let is_valid = case graphemes {
+        [] -> False
+        [first, ..rest] ->
+          is_lowercase_letter(first)
+          && list.all(rest, fn(ch) {
+            is_lowercase_letter(ch) || is_digit(ch) || ch == "_"
+          })
+      }
+      case is_valid {
+        True -> Ok(Some(ns))
+        False ->
+          Error(
+            "error: Invalid namespace: `"
+            <> ns
+            <> "`
+  \u{2502}
+  \u{2502} Namespace must contain only lowercase letters, digits, and underscores
+  \u{2502}
+  hint: gleam run -m libero -- gen --namespace=my_ns",
+          )
+      }
+    }
+  }
+}
+
+fn is_lowercase_letter(ch: String) -> Bool {
+  string.contains("abcdefghijklmnopqrstuvwxyz", ch)
+}
+
+fn is_digit(ch: String) -> Bool {
+  string.contains("0123456789", ch)
 }
 
 /// Extract a `--name=value` flag from the argument list.
