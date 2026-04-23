@@ -33,15 +33,11 @@ pub fn parse_args(args: List(String)) -> Command {
       case parse_database(db) {
         Ok(database) -> New(name:, database: Some(database))
         Error(Nil) -> {
-          io.println_error(
-            "error: Invalid database: `"
-            <> db
-            <> "`
+          io.println_error("error: Invalid database: `" <> db <> "`
   \u{2502}
   \u{2502} --database must be \"pg\" or \"sqlite\"
   \u{2502}
-  hint: gleam run -m libero -- new my_app --database pg",
-          )
+  hint: gleam run -m libero -- new my_app --database pg")
           Unknown
         }
       }
@@ -61,17 +57,11 @@ pub fn parse_args(args: List(String)) -> Command {
       case target {
         "javascript" | "erlang" -> Add(name:, target:)
         _ -> {
-          io.println_error(
-            "error: Invalid target: `"
-            <> target
-            <> "`
+          io.println_error("error: Invalid target: `" <> target <> "`
   \u{2502}
   \u{2502} --target must be \"javascript\" or \"erlang\"
   \u{2502}
-  hint: gleam run -m libero -- add "
-            <> name
-            <> " --target javascript",
-          )
+  hint: gleam run -m libero -- add " <> name <> " --target javascript")
           Unknown
         }
       }

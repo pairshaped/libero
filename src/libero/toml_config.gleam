@@ -100,15 +100,10 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     tom.get_int(parsed, ["tools", "libero", "port"]) |> result.unwrap(8080)
   use port <- result.try(case raw_port >= 1 && raw_port <= 65_535 {
     True -> Ok(raw_port)
-    False ->
-      Error(
-        "error: Invalid port number
+    False -> Error("error: Invalid port number
   \u{250c}\u{2500} gleam.toml
   \u{2502}
-  \u{2502} port = "
-        <> int.to_string(raw_port)
-        <> " is out of range (must be 1\u{2013}65535)",
-      )
+  \u{2502} port = " <> int.to_string(raw_port) <> " is out of range (must be 1\u{2013}65535)")
   })
 
   let rest =
@@ -169,18 +164,12 @@ pub fn to_codegen_config(
 ) -> Result(Config, String) {
   use client <- result.try(
     list.find(toml_cfg.clients, fn(c) { c.name == client_name })
-    |> result.map_error(fn(_) {
-      "error: Client not found
+    |> result.map_error(fn(_) { "error: Client not found
   \u{250c}\u{2500} gleam.toml
   \u{2502}
-  \u{2502} No client named `"
-      <> client_name
-      <> "` in [tools.libero.clients]
+  \u{2502} No client named `" <> client_name <> "` in [tools.libero.clients]
   \u{2502}
-  hint: Add it with: gleam run -m libero -- add "
-      <> client_name
-      <> " --target javascript"
-    }),
+  hint: Add it with: gleam run -m libero -- add " <> client_name <> " --target javascript" }),
   )
   let app = toml_cfg.name
   let client_generated = "clients/" <> client.name <> "/src/generated"
@@ -231,27 +220,19 @@ fn parse_clients(
       list.try_map(names, fn(name) {
         use client_table <- result.try(
           tom.get_table(clients_dict, [name])
-          |> result.map_error(fn(_) {
-            "error: Invalid client config
+          |> result.map_error(fn(_) { "error: Invalid client config
   \u{250c}\u{2500} gleam.toml
   \u{2502}
-  \u{2502} [tools.libero.clients."
-            <> name
-            <> "] is not a valid table"
-          }),
+  \u{2502} [tools.libero.clients." <> name <> "] is not a valid table" }),
         )
         use target <- result.try(
           tom.get_string(client_table, ["target"])
-          |> result.map_error(fn(_) {
-            "error: Missing target
+          |> result.map_error(fn(_) { "error: Missing target
   \u{250c}\u{2500} gleam.toml
   \u{2502}
-  \u{2502} [tools.libero.clients."
-            <> name
-            <> "] is missing the `target` field
+  \u{2502} [tools.libero.clients." <> name <> "] is missing the `target` field
   \u{2502}
-  hint: Add: target = \"javascript\""
-          }),
+  hint: Add: target = \"javascript\"" }),
         )
         Ok(ClientConfig(name: name, target: target))
       })

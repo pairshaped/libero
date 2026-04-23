@@ -78,8 +78,9 @@ pub fn alias_field_resolves_to_correct_field_type_test() {
   let assert Ok(got_priority) =
     list.find(variants, fn(v) { v.variant_name == "GotPriority" })
   // The field should be a UserType pointing to shared/item.Priority
-  let assert [walker.UserType(module_path: "shared/item", type_name: "Priority", args: [])] =
-    got_priority.fields
+  let assert [
+    walker.UserType(module_path: "shared/item", type_name: "Priority", args: []),
+  ] = got_priority.fields
 }
 
 /// The GotItems variant should have a ListOf(UserType) field.
@@ -95,6 +96,11 @@ pub fn alias_container_field_resolves_correctly_test() {
   let assert Ok(got_items) =
     list.find(variants, fn(v) { v.variant_name == "GotItems" })
   // The field should be ListOf(UserType(shared/item, Item))
-  let assert [walker.ListOf(walker.UserType(module_path: "shared/item", type_name: "Item", args: []))] =
-    got_items.fields
+  let assert [
+    walker.ListOf(walker.UserType(
+      module_path: "shared/item",
+      type_name: "Item",
+      args: [],
+    )),
+  ] = got_items.fields
 }

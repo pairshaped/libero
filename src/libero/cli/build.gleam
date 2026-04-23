@@ -47,17 +47,12 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
           let code = gleam_build(client_dir)
           case code {
             0 -> Ok(Nil)
-            _ ->
-              Error(
-                "error: Client build failed
-  \u{250c}\u{2500} clients/"
-                <> client.name
-                <> "/
+            _ -> Error("error: Client build failed
+  \u{250c}\u{2500} clients/" <> client.name <> "/
   \u{2502}
   \u{2502} `gleam build` exited with an error
   \u{2502}
-  hint: Check the compiler output above for details",
-              )
+  hint: Check the compiler output above for details")
           }
         }
         _ -> {
@@ -97,12 +92,8 @@ fn try_read(
 ) -> Result(Nil, String) {
   case simplifile.read(path) {
     Ok(content) -> next(content)
-    Error(_) ->
-      Error(
-        "error: Cannot read file
-  \u{250c}\u{2500} "
-        <> path,
-      )
+    Error(_) -> Error("error: Cannot read file
+  \u{250c}\u{2500} " <> path)
   }
 }
 

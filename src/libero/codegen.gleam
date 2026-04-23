@@ -256,16 +256,11 @@ pub fn check_segment_collisions(
     })
   case collisions {
     [] -> Ok(Nil)
-    _ ->
-      Error(
-        "error: Module name collision
+    _ -> Error("error: Module name collision
   \u{2502}
-  \u{2502} "
-        <> string.join(list.reverse(collisions), "\n  \u{2502} ")
-        <> "
+  \u{2502} " <> string.join(list.reverse(collisions), "\n  \u{2502} ") <> "
   \u{2502}
-  hint: Rename one of the modules so they produce different output filenames",
-      )
+  hint: Rename one of the modules so they produce different output filenames")
   }
 }
 

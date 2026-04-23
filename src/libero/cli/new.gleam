@@ -28,7 +28,13 @@ pub fn scaffold(
     |> list.last
     |> result.unwrap(path)
 
-  case validation.validate_name(name:, kind: "project", hint: "gleam run -m libero -- new my_app") {
+  case
+    validation.validate_name(
+      name:,
+      kind: "project",
+      hint: "gleam run -m libero -- new my_app",
+    )
+  {
     Error(msg) -> Error(msg)
     Ok(Nil) -> scaffold_validated(name:, path:, database:)
   }
@@ -42,15 +48,10 @@ fn scaffold_validated(
 ) -> Result(Nil, String) {
   // Abort if the project already exists
   case simplifile.is_file(path <> "/gleam.toml") {
-    Ok(True) ->
-      Error(
-        "error: Project already exists
-  \u{250c}\u{2500} "
-        <> path
-        <> "/gleam.toml
+    Ok(True) -> Error("error: Project already exists
+  \u{250c}\u{2500} " <> path <> "/gleam.toml
   \u{2502}
-  \u{2502} A gleam.toml already exists at this path",
-      )
+  \u{2502} A gleam.toml already exists at this path")
     _ -> {
       let server_dir = path <> "/src/server"
       scaffold_files(name:, path:, server_dir:, database:)
@@ -110,7 +111,9 @@ fn scaffold_files(
             path: server_dir <> "/db.gleam",
             content: db_templates.db_module(db),
           ))
-          use _ <- helpers.map_err(simplifile.create_directory_all(server_dir <> "/sql"))
+          use _ <- helpers.map_err(simplifile.create_directory_all(
+            server_dir <> "/sql",
+          ))
           next(Nil)
         }
       }
@@ -143,4 +146,3 @@ fn scaffold_files(
   ))
   Ok(Nil)
 }
-

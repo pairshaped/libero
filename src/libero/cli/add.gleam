@@ -20,9 +20,11 @@ pub fn add_client(
   name name: String,
   target target: String,
 ) -> Result(Nil, String) {
-  use _ <- result.try(
-    validation.validate_name(name:, kind: "client", hint: "gleam run -m libero -- add my_client --target javascript"),
-  )
+  use _ <- result.try(validation.validate_name(
+    name:,
+    kind: "client",
+    hint: "gleam run -m libero -- add my_client --target javascript",
+  ))
   use _ <- validate_target(target)
   let client_dir = path <> "/clients/" <> name
   let client_src = client_dir <> "/src"
@@ -66,7 +68,10 @@ pub fn add_client(
         <> "]\ntarget = \""
         <> target
         <> "\"\n"
-      use _ <- helpers.map_err(simplifile.append(path <> "/gleam.toml", addition))
+      use _ <- helpers.map_err(simplifile.append(
+        path <> "/gleam.toml",
+        addition,
+      ))
       Ok(Nil)
     }
   }
@@ -79,16 +84,11 @@ fn validate_target(
 ) -> Result(Nil, String) {
   case target {
     "javascript" | "erlang" -> next(Nil)
-    _ ->
-      Error(
-        "error: Invalid target: `"
-        <> target
-        <> "`
+    _ -> Error("error: Invalid target: `" <> target <> "`
   \u{2502}
   \u{2502} Target must be \"javascript\" or \"erlang\"
   \u{2502}
-  hint: gleam run -m libero -- add <name> --target javascript",
-      )
+  hint: gleam run -m libero -- add <name> --target javascript")
   }
 }
 
@@ -122,4 +122,3 @@ fn write_if_missing(
       }
   }
 }
-

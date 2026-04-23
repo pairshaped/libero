@@ -58,8 +58,7 @@ pub fn call(
         <<_tag, etf:bytes>> -> {
           // dispatch encodes Ok(MsgFromServer_variant) or Error(RpcError).
           // wire.decode_safe returns a Result instead of panicking.
-          let decoded: Result(Result(response, _), _) =
-            wire.decode_safe(etf)
+          let decoded: Result(Result(response, _), _) = wire.decode_safe(etf)
           case decoded {
             Ok(Ok(response)) -> Ok(expect(response))
             Ok(Error(_)) | Error(_) -> Error(BadResponse)

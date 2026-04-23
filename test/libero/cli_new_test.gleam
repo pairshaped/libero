@@ -9,8 +9,7 @@ pub fn scaffold_project_test() {
   let dir = "build/.test_cli_new/test_scaffold"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) =
-    cli_new.scaffold(path: dir, database: None)
+  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: None)
 
   let assert Ok(True) = simplifile.is_file(dir <> "/gleam.toml")
   let assert Ok(True) = simplifile.is_directory(dir <> "/src/server")
@@ -48,8 +47,7 @@ pub fn scaffold_pg_test() {
   let dir = "build/.test_cli_new/test_pg"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) =
-    cli_new.scaffold(path: dir, database: Some(cli.Postgres))
+  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: Some(cli.Postgres))
 
   let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
   let assert True = string.contains(gleam_toml, "pog")
@@ -107,8 +105,7 @@ pub fn scaffold_sqlite_test() {
   let dir = "build/.test_cli_new/test_sqlite"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) =
-    cli_new.scaffold(path: dir, database: Some(cli.Sqlite))
+  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: Some(cli.Sqlite))
 
   let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
   let assert True = string.contains(gleam_toml, "sqlight")

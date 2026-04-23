@@ -6,6 +6,21 @@ import libero/cli/validation
 
 // ---------- Types ----------
 
+/// Errors from config construction (invalid namespace, etc.).
+pub type ConfigError {
+  InvalidNamespace(namespace: String)
+}
+
+/// Format a ConfigError as a user-facing error message.
+pub fn describe_error(error: ConfigError) -> String {
+  let InvalidNamespace(namespace: ns) = error
+  "error: Invalid namespace: `" <> ns <> "`
+  \u{2502}
+  \u{2502} Namespace must contain only lowercase letters, digits, and underscores
+  \u{2502}
+  hint: gleam run -m libero -- gen --namespace=my_ns"
+}
+
 /// How the generated client resolves its WebSocket URL.
 pub type WsMode {
   /// Hardcoded full URL (from --ws-url). Single-host deployments.
@@ -59,7 +74,7 @@ pub fn build_config(
   client_root client_root: String,
   shared_root shared_root: Result(String, Nil),
   server_root server_root: Result(String, Nil),
-) -> Result(Config, String) {
+) -> Result(Config, ConfigError) {
   use namespace <- result.try(validate_namespace(namespace))
   // In the final JS bundle, decoder files land at:
   //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_decoders_ffi.mjs
@@ -146,7 +161,7 @@ pub fn build_config(
 /// Returns the namespace unchanged on success, or a formatted error string.
 fn validate_namespace(
   namespace: Option(String),
-) -> Result(Option(String), String) {
+) -> Result(Option(String), ConfigError) {
   case namespace {
     None -> Ok(None)
     Some(ns) -> {
@@ -163,16 +178,7 @@ fn validate_namespace(
       }
       case is_valid {
         True -> Ok(Some(ns))
-        False ->
-          Error(
-            "error: Invalid namespace: `"
-            <> ns
-            <> "`
-  \u{2502}
-  \u{2502} Namespace must contain only lowercase letters, digits, and underscores
-  \u{2502}
-  hint: gleam run -m libero -- gen --namespace=my_ns",
-          )
+        False -> Error(InvalidNamespace(namespace: ns))
       }
     }
   }

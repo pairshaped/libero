@@ -30,67 +30,35 @@ pub fn validate_name(
   hint hint: String,
 ) -> Result(Nil, String) {
   case string.to_graphemes(name) {
-    [] ->
-      Error(
-        "error: Invalid "
-        <> kind
-        <> " name
+    [] -> Error("error: Invalid " <> kind <> " name
   \u{2502}
-  \u{2502} "
-        <> kind_cap(kind)
-        <> " name cannot be empty
+  \u{2502} " <> kind_cap(kind) <> " name cannot be empty
   \u{2502}
-  hint: "
-        <> hint,
-      )
+  hint: " <> hint)
     [first, ..rest] ->
       case is_lowercase_letter(first) {
-        False ->
-          Error(
-            "error: Invalid "
-            <> kind
-            <> " name: `"
-            <> name
-            <> "`
+        False -> Error("error: Invalid " <> kind <> " name: `" <> name <> "`
   \u{2502}
   \u{2502} Must start with a lowercase letter (a-z)
   \u{2502}
-  hint: Try `"
-            <> string.lowercase(name)
-            <> "` instead",
-          )
+  hint: Try `" <> string.lowercase(name) <> "` instead")
         True ->
           case
             list.all(rest, fn(ch) {
               is_lowercase_letter(ch) || is_digit(ch) || ch == "_"
             })
           {
-            False ->
-              Error(
-                "error: Invalid "
-                <> kind
-                <> " name: `"
-                <> name
-                <> "`
+            False -> Error("error: Invalid " <> kind <> " name: `" <> name <> "`
   \u{2502}
-  \u{2502} Must contain only lowercase letters, digits, and underscores",
-              )
+  \u{2502} Must contain only lowercase letters, digits, and underscores")
             True ->
               case list.contains(reserved_words, name) {
                 True ->
-                  Error(
-                    "error: Invalid "
-                    <> kind
-                    <> " name: `"
-                    <> name
-                    <> "`
+                  Error("error: Invalid " <> kind <> " name: `" <> name <> "`
   \u{2502}
-  \u{2502} `"
-                    <> name
-                    <> "` is a Gleam reserved word
+  \u{2502} `" <> name <> "` is a Gleam reserved word
   \u{2502}
-  hint: Choose a different name",
-                  )
+  hint: Choose a different name")
                 False -> Ok(Nil)
               }
           }

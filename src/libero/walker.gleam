@@ -9,8 +9,7 @@ import gleam/string
 import simplifile
 
 import libero/gen_error.{
-  type GenError, CannotReadFile, ParseFailed, TypeNotFound,
-  UnresolvedTypeModule,
+  type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
 }
 import libero/scanner.{type MessageModule}
 
@@ -245,9 +244,7 @@ fn process_type_ast(
           && !is_skipped_module(ref_module)
           && !is_primitive_type(ref_type)
         })
-      do_walk(
-        WalkerState(..state, queue: list.append(new_refs, state.queue)),
-      )
+      do_walk(WalkerState(..state, queue: list.append(new_refs, state.queue)))
     }
     // Not an alias — find the custom type definition
     Error(Nil) ->
@@ -379,7 +376,11 @@ fn collect_variant_field_refs(
 ) -> List(#(String, String)) {
   let field_refs =
     list.flat_map(variant.fields, fn(field) {
-      collect_type_refs(t: variant_field_type(field), resolver:, current_module:)
+      collect_type_refs(
+        t: variant_field_type(field),
+        resolver:,
+        current_module:,
+      )
     })
   list.filter(field_refs, fn(ref) {
     let #(ref_module, ref_type) = ref
@@ -507,7 +508,8 @@ fn field_type_of(
         // Option (unqualified or qualified as option.Option)
         option.None, "Option", [inner]
         | option.Some("option"), "Option", [inner]
-        -> OptionOf(field_type_of(t: inner, resolver:, aliases:, current_module:))
+        ->
+          OptionOf(field_type_of(t: inner, resolver:, aliases:, current_module:))
         // Result (unqualified or qualified as result.Result)
         option.None, "Result", [ok, err]
         | option.Some("result"), "Result", [ok, err]

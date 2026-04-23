@@ -34,8 +34,10 @@ pub fn internal_error_roundtrips_through_wire_test() {
   let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
   let decoded: Result(String, RpcError(Never)) =
     wire.decode(unsafe_coerce(rebuilt))
-  let assert Error(InternalError(trace_id: "abc123", message: "Something went wrong, please try again.")) =
-    decoded
+  let assert Error(InternalError(
+    trace_id: "abc123",
+    message: "Something went wrong, please try again.",
+  )) = decoded
 }
 
 @external(erlang, "libero_ffi", "encode")

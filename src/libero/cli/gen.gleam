@@ -24,16 +24,12 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Read gleam.toml
   use toml_content <- result.try(
     simplifile.read(project_path <> "/gleam.toml")
-    |> result.map_error(fn(err) {
-      "error: Cannot read gleam.toml
+    |> result.map_error(fn(err) { "error: Cannot read gleam.toml
   \u{250c}\u{2500} gleam.toml
   \u{2502}
-  \u{2502} "
-      <> simplifile.describe_error(err)
-      <> "
+  \u{2502} " <> simplifile.describe_error(err) <> "
   \u{2502}
-  hint: Run this command from your project root directory"
-    }),
+  hint: Run this command from your project root directory" }),
   )
 
   // 2. Parse it
@@ -132,7 +128,7 @@ fn run_with_clients(
         message_modules:,
         discovered:,
       )
-    })
+    }),
   )
 
   // 9. Generate server main entry point
