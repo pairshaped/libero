@@ -6,7 +6,7 @@ The server pre-renders the page HTML with real data so the browser displays cont
 
 ## What's in here
 
-- `src/counter.gleam` - server entry point with per-route SSR rendering
+- `src/ssr_hydration.gleam` - server entry point with per-route SSR rendering
 - `src/server/handler.gleam` - handles Increment, Decrement, and GetCounter messages
 - `src/ets_store.gleam` - simple ETS-backed integer storage
 - `shared/src/shared/messages.gleam` - message types shared between server and client
