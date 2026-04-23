@@ -123,7 +123,6 @@ fn run_with_clients(
         discovered:,
       )
     })
-    |> result.map_error(fn(msg) { msg }),
   )
 
   // 9. Generate server main entry point

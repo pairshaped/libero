@@ -67,10 +67,9 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   use _ <- result.try(case tom.get_table(parsed, ["libero"]) {
     Ok(_) ->
       Error(
-        "Found [libero] section in gleam.toml. "
-        <> "Since v4.1.1, libero config must be under [tools.libero]. "
-        <> "Rename [libero] to [tools.libero] and [libero.clients.*] to [tools.libero.clients.*].",
+        "Found [libero] section in gleam.toml. Since v4.1.1, libero config must be under [tools.libero]. Rename [libero] to [tools.libero] and [libero.clients.*] to [tools.libero.clients.*].",
       )
+    // nolint: thrown_away_error -- tom error means no legacy section, which is fine
     Error(_) -> Ok(Nil)
   })
 
@@ -182,7 +181,7 @@ fn parse_clients(
   case tom.get_table(parsed, ["tools", "libero", "clients"]) {
     Error(_) -> Ok([])
     Ok(clients_dict) -> {
-      let names = dict.keys(clients_dict)
+      let names = dict.keys(clients_dict) |> list.sort(string.compare)
       list.try_map(names, fn(name) {
         use client_table <- result.try(
           tom.get_table(clients_dict, [name])

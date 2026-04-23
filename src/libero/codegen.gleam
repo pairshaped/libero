@@ -785,10 +785,10 @@ fn field_decoder_call_depth(
 /// Emit the `decode_msg_from_server` entry point function.
 /// Delegates to the per-type decoder to avoid duplicating the switch body.
 /// If no MsgFromServer type is found in the discovered list, returns "".
+// nolint: thrown_away_error -- absence means no decoder needed
 fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
   case list.find(discovered, fn(t) { t.type_name == "MsgFromServer" }) {
     Error(_) -> ""
-    // nolint: thrown_away_error -- absence means no decoder needed
     Ok(t) -> {
       let fn_name = decoder_fn_name(t.module_path, t.type_name)
       "export function decode_msg_from_server(term) {\n"
@@ -995,7 +995,8 @@ pub fn write_main(
         list.map(js_client_names, fn(name) {
           "        _, [\"" <> name <> "\", ..path] ->
           serve_file(
-            \"clients/" <> name <> "/build/dev/javascript/\" <> string.join(path, \"/\"),
+            \"clients/" <> name <> "/build/dev/javascript/\"
+            <> string.join(list.filter(path, fn(s) { s != \"..\" && s != \"\" }), \"/\"),
           )"
         })
         |> string.join("\n")

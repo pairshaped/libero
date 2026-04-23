@@ -19,7 +19,6 @@ import simplifile
 /// project compiles and runs out of the box.
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn scaffold(
-  name _name: String,
   path path: String,
   database database: Option(Database),
 ) -> Result(Nil, String) {

@@ -10,12 +10,12 @@ import simplifile
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Run gen
-  use _ <- try(gen.run(project_path:))
+  use _ <- try_ok(gen.run(project_path:))
 
   // 2. Build server (root package)
   io.println("libero: building server...")
   let exit_code = gleam_build(project_path)
-  use _ <- try(case exit_code {
+  use _ <- try_ok(case exit_code {
     0 -> Ok(Nil)
     _ -> Error("server build failed")
   })
@@ -47,7 +47,7 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
         }
       }
     })
-  use _ <- try(case client_results {
+  use _ <- try_ok(case client_results {
     Ok(_) -> Ok(Nil)
     Error(msg) -> Error(msg)
   })
@@ -57,7 +57,7 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
 }
 
 // nolint: stringly_typed_error
-fn try(
+fn try_ok(
   result: Result(Nil, String),
   next: fn(Nil) -> Result(Nil, String),
 ) -> Result(Nil, String) {

@@ -14,7 +14,7 @@ pub fn main() -> Nil {
   let Nil = trap_signals()
   case cli.parse_command() {
     cli.New(name:, database:) -> {
-      case cli_new.scaffold(name:, path: name, database:) {
+      case cli_new.scaffold(path: name, database:) {
         Ok(Nil) -> io.println("Created " <> name <> ". Happy hacking!")
         Error(reason) -> io.println_error("error: " <> reason)
       }

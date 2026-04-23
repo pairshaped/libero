@@ -50,8 +50,8 @@ pub fn add_client(
   use toml_content <- map_err(simplifile.read(path <> "/gleam.toml"))
   let already_declared = case toml_config.parse(toml_content) {
     Ok(cfg) -> list.any(cfg.clients, fn(c) { c.name == name })
-    Error(_) -> False
     // nolint: thrown_away_error -- unparseable toml treated as "not declared"
+    Error(_) -> False
   }
   case already_declared {
     True -> Ok(Nil)
