@@ -60,13 +60,17 @@ pub fn starter_messages() -> String {
   "/// Define your message types here.
 /// Libero scans for MsgFromClient and MsgFromServer to generate
 /// dispatch and client stubs.
+///
+/// Each MsgFromServer variant should have exactly one field.
+/// Wrap it in Result(payload, error) so the client can use
+/// remote_data.to_remote to handle responses.
 
 pub type MsgFromClient {
   Ping
 }
 
 pub type MsgFromServer {
-  Pong(String)
+  Pong(Result(String, Nil))
 }
 "
 }
@@ -82,7 +86,7 @@ pub fn update_from_client(
   state state: SharedState,
 ) -> Result(#(MsgFromServer, SharedState), AppError) {
   case msg {
-    Ping -> Ok(#(Pong(\"pong\"), state))
+    Ping -> Ok(#(Pong(Ok(\"pong\")), state))
   }
 }
 "
@@ -121,29 +125,88 @@ pub fn main() {
 
 pub fn ping_test() {
   let state = shared_state.new()
-  let assert Ok(#(Pong(\"pong\"), _)) =
+  let assert Ok(#(Pong(Ok(\"pong\")), _)) =
     handler.update_from_client(msg: Ping, state:)
 }
 "
 }
 
-/// Returns a starter Lustre SPA app module.
+/// Returns a starter Lustre SPA app module with a working RPC example.
 pub fn starter_spa(name name: String) -> String {
-  "import lustre
-import lustre/element
+  "import gleam/dynamic
+import generated/messages as rpc
+import libero/remote_data.{type RemoteData}
+import lustre
+import lustre/element.{type Element}
 import lustre/element/html
+import lustre/effect.{type Effect}
+import lustre/event
+import shared/messages.{Ping, Pong}
 
-pub fn main() {
-  let app = lustre.element(view())
-  let assert Ok(_) = lustre.start(app, \"#app\", Nil)
-  Nil
+// -- Model --
+
+pub type Model {
+  Model(response: RemoteData(String, remote_data.RpcFailure))
 }
 
-fn view() -> element.Element(msg) {
+// -- Messages --
+
+pub type Msg {
+  UserClickedPing
+  GotPong(RemoteData(String, remote_data.RpcFailure))
+}
+
+// -- Init --
+
+fn init(_flags) -> #(Model, Effect(Msg)) {
+  #(Model(response: remote_data.NotAsked), effect.none())
+}
+
+// -- Update --
+
+fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
+  case msg {
+    UserClickedPing -> #(
+      Model(response: remote_data.Loading),
+      send_ping(),
+    )
+    GotPong(rd) -> #(Model(response: rd), effect.none())
+  }
+}
+
+fn send_ping() -> Effect(Msg) {
+  // rpc.send_to_server sends a typed message to the server over WebSocket.
+  // The on_response callback receives the raw wire response. Use
+  // remote_data.to_remote to unwrap it into a RemoteData value that
+  // handles both RPC errors and domain errors.
+  rpc.send_to_server(msg: Ping, on_response: fn(raw) {
+    GotPong(remote_data.to_remote(raw:, format_domain: fn(_) { \"error\" }))
+  })
+}
+
+// -- View --
+
+fn view(model: Model) -> Element(Msg) {
   html.div([], [
     html.h1([], [html.text(\"" <> name <> "\")]),
-    html.p([], [html.text(\"Edit this file to get started.\")]),
+    html.button([event.on_click(UserClickedPing)], [html.text(\"Ping\")]),
+    html.p([], [html.text(
+      case model.response {
+        remote_data.NotAsked -> \"Click the button to ping the server.\"
+        remote_data.Loading -> \"Loading...\"
+        remote_data.Success(msg) -> \"Server says: \" <> msg
+        remote_data.Failure(err) -> \"Error: \" <> err.message
+      },
+    )]),
   ])
+}
+
+// -- Main --
+
+pub fn main() {
+  let app = lustre.application(init, update, view)
+  let assert Ok(_) = lustre.start(app, \"#app\", Nil)
+  Nil
 }
 "
 }
