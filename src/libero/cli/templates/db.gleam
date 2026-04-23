@@ -102,26 +102,30 @@ pub fn new() -> SharedState {
 pub fn db_module(database: Database) -> String {
   case database {
     Postgres ->
-      "import pog
+      "import gleam/erlang/process
+import pog
 
-/// Connect to PostgreSQL using pog's default config.
+/// Start a PostgreSQL connection pool using pog.
 ///
-/// pog manages a connection pool for you, so calling this once at startup
-/// is enough. Handlers share the pool through SharedState.
+/// pog manages a pool of connections for you, so calling this once at
+/// startup is enough. Handlers share the pool through SharedState.
 ///
-/// By default pog connects to localhost:5432 with the \"postgres\" user.
-/// To connect somewhere else, set the DATABASE_URL environment variable
-/// or change the config below:
+/// By default pog connects to localhost:5432 with the \"postgres\" user
+/// and database \"postgres\". To change this, modify the config below:
 ///
-///   pog.default_config()
+///   pog.default_config(pool_name)
 ///   |> pog.host(\"db.example.com\")
 ///   |> pog.database(\"my_app\")
+///   |> pog.password(option.Some(\"secret\"))
 ///   |> pog.pool_size(10)
-///   |> pog.connect
+///   |> pog.start
 ///
 pub fn connect() -> pog.Connection {
-  pog.default_config()
-  |> pog.connect
+  let pool_name = process.new_name(prefix: \"db_pool\")
+  let assert Ok(started) =
+    pog.default_config(pool_name:)
+    |> pog.start
+  started.data
 }
 "
     Sqlite ->
