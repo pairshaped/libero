@@ -1,7 +1,7 @@
 import generated/messages as rpc
 import gleam/dynamic
 import gleam/list
-import libero/wire
+import libero/remote_data.{type RemoteData}
 import lustre
 import lustre/attribute
 import lustre/effect.{type Effect}
@@ -9,8 +9,8 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import shared/messages.{
-  type MsgFromServer, type Todo, Create, Delete, LoadAll, TodoCreated,
-  TodoDeleted, TodoParams, TodoToggled, TodosLoaded, Toggle,
+  type MsgFromServer, type Todo, type TodoError, Create, Delete, LoadAll,
+  TodoCreated, TodoDeleted, TodoParams, TodoToggled, TodosLoaded, Toggle,
 }
 
 // --- Model ---
@@ -68,7 +68,25 @@ fn handle_server_response(
   model: Model,
   raw: dynamic.Dynamic,
 ) -> #(Model, Effect(Msg)) {
-  let response: MsgFromServer = wire.coerce(raw)
+  // The wire sends Result(MsgFromServer, RpcError), not bare MsgFromServer.
+  // remote_data.to_remote unwraps the Result and converts it to RemoteData,
+  // which handles both RPC-level errors and domain errors cleanly.
+  let rd: RemoteData(MsgFromServer, _) =
+    remote_data.to_remote(raw:, format_domain: format_error)
+  case rd {
+    remote_data.Success(response) -> handle_success(model, response)
+    remote_data.Failure(err) -> #(
+      Model(..model, error: err.message),
+      effect.none(),
+    )
+    _ -> #(model, effect.none())
+  }
+}
+
+fn handle_success(
+  model: Model,
+  response: MsgFromServer,
+) -> #(Model, Effect(Msg)) {
   case response {
     TodoCreated(Ok(item)) -> #(
       Model(..model, todos: list.append(model.todos, [item])),
@@ -107,6 +125,13 @@ fn handle_server_response(
       Model(..model, error: "Failed to load todos"),
       effect.none(),
     )
+  }
+}
+
+fn format_error(err: TodoError) -> String {
+  case err {
+    messages.NotFound -> "Not found"
+    messages.TitleRequired -> "Title is required"
   }
 }
 
