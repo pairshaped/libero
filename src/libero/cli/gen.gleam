@@ -295,12 +295,38 @@ fn run_endpoint_client_codegen(
     }),
   )
 
-  // RPC config
+  // WebSocket handler (server-side, convention-independent)
+  use _ <- result.try(
+    codegen.write_websocket(
+      server_generated: config.server_generated,
+      shared_state_module: toml_cfg.shared_state_module,
+    )
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_websocket failed"
+    }),
+  )
+
+  // Client-side (convention-independent)
   use _ <- result.try(
     codegen.write_config(config:)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
-      "write_rpc_config failed"
+      "write_config failed"
+    }),
+  )
+  use _ <- result.try(
+    codegen.write_decoders_gleam(config:)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_decoders_gleam failed"
+    }),
+  )
+  use _ <- result.try(
+    codegen.write_ssr_flags(client_generated: config.client_generated)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_ssr_flags failed"
     }),
   )
 
