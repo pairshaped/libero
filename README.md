@@ -87,15 +87,14 @@ Export `update_from_client` in any module under `src/`. Libero discovers it by s
 
 import shared/messages.{type MsgFromClient, type MsgFromServer}
 import server/shared_state.{type SharedState}
-import server/app_error.{type AppError}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(MsgFromServer, SharedState), AppError) {
+) -> #(MsgFromServer, SharedState) {
   case msg {
-    messages.LoadAll -> Ok(#(TodosLoaded(Ok(all())), state))
-    messages.Create(params:) -> Ok(#(TodoCreated(Ok(insert(params.title))), state))
+    messages.LoadAll -> #(TodosLoaded(Ok(all())), state)
+    messages.Create(params:) -> #(TodoCreated(Ok(insert(params.title))), state)
     // ...
   }
 }

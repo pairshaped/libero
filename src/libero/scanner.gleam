@@ -360,8 +360,7 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 /// Validate that the server package follows the conventions required for
 /// code generation:
 /// 1. `server/shared_state.gleam` exists
-/// 2. `server/app_error.gleam` exists
-/// 3. For each message module with `has_msg_from_client`, a server module
+/// 2. For each message module with `has_msg_from_client`, a server module
 ///    exports `pub fn update_from_client` with the correct msg type
 ///
 /// Returns `Ok(#(updated_modules, errors))` where updated_modules have
@@ -371,20 +370,12 @@ pub fn validate_conventions(
   message_modules message_modules: List(MessageModule),
   server_src server_src: String,
   shared_state_path shared_state_path: String,
-  app_error_path app_error_path: String,
 ) -> Result(List(MessageModule), List(GenError)) {
   let shared_state_errors = case
     simplifile.is_file(shared_state_path) |> result.unwrap(or: False)
   {
     True -> []
     False -> scaffold_shared_state(shared_state_path)
-  }
-
-  let app_error_errors = case
-    simplifile.is_file(app_error_path) |> result.unwrap(or: False)
-  {
-    True -> []
-    False -> scaffold_app_error(app_error_path)
   }
 
   // Scan server source for handler modules
@@ -445,7 +436,6 @@ pub fn validate_conventions(
   let all_errors =
     list.flatten([
       shared_state_errors,
-      app_error_errors,
       scan_errors,
       list.reverse(handler_errors),
     ])
@@ -471,26 +461,6 @@ pub type SharedState {
 
 pub fn new() -> SharedState {
   SharedState
-}
-"
-  case simplifile.write(path, content) {
-    Ok(Nil) -> {
-      io.println("  scaffolded " <> path)
-      []
-    }
-    Error(cause) -> [CannotWriteFile(path:, cause:)]
-  }
-}
-
-/// Scaffold a default app_error.gleam if missing.
-fn scaffold_app_error(path: String) -> List(GenError) {
-  let content =
-    "/// Replace this with your application's error type.
-/// Handlers return Result(#(MsgFromServer, SharedState), AppError),
-/// and AppError values are sent to the client as typed errors.
-
-pub type AppError {
-  AppError(String)
 }
 "
   case simplifile.write(path, content) {

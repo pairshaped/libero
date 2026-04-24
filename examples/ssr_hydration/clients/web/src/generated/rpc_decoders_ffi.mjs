@@ -15,17 +15,17 @@ setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
 setDictFromList(dictFromList);
 
-export function decode_shared_messages_msg_from_server(term) {
-  return new _m_shared_messages.CounterUpdated(
-    decode_result_of((t0) => decode_int(t0), (t0) => decode_nil(t0), term[1])
-  );
-}
-
 export function decode_shared_messages_msg_from_client(term) {
   if (term === "increment") return new _m_shared_messages.Increment();
   if (term === "decrement") return new _m_shared_messages.Decrement();
   if (term === "get_counter") return new _m_shared_messages.GetCounter();
   throw new DecodeError("unknown variant: " + String(term));
+}
+
+export function decode_shared_messages_msg_from_server(term) {
+  return new _m_shared_messages.CounterUpdated(
+    decode_result_of((t1) => decode_int(t1), (t2) => decode_nil(t2), term[1])
+  );
 }
 
 export function decode_msg_from_server(term) {

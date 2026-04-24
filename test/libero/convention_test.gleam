@@ -36,7 +36,6 @@ pub fn validate_todos_example_passes_test() {
       message_modules: modules,
       server_src: "examples/todos/src",
       shared_state_path: "examples/todos/src/server/shared_state.gleam",
-      app_error_path: "examples/todos/src/server/app_error.gleam",
     )
   // Handler should be discovered
   let assert [m] = updated_modules
@@ -63,40 +62,11 @@ pub fn scaffold_shared_state_when_missing_test() {
       message_modules: modules,
       server_src: dir,
       shared_state_path: server_dir <> "/shared_state.gleam",
-      app_error_path: server_dir <> "/app_error.gleam",
     )
   // shared_state.gleam should have been scaffolded
   let assert Ok(content) = simplifile.read(server_dir <> "/shared_state.gleam")
   let assert True = string.contains(content, "pub type SharedState")
   let assert True = string.contains(content, "pub fn new()")
-
-  // Cleanup
-  let assert Ok(Nil) = simplifile.delete_all([dir])
-}
-
-pub fn scaffold_app_error_when_missing_test() {
-  let dir = "build/.test_scaffold"
-  let server_dir = dir <> "/server"
-  let _ = simplifile.create_directory_all(server_dir)
-  let modules = [
-    scanner.MessageModule(
-      module_path: "shared/messages",
-      file_path: "/tmp/todos.gleam",
-      has_msg_from_client: True,
-      has_msg_from_server: True,
-      handlers: [],
-    ),
-  ]
-  let assert Error(_errors) =
-    scanner.validate_conventions(
-      message_modules: modules,
-      server_src: dir,
-      shared_state_path: server_dir <> "/shared_state.gleam",
-      app_error_path: server_dir <> "/app_error.gleam",
-    )
-  // app_error.gleam should have been scaffolded
-  let assert Ok(content) = simplifile.read(server_dir <> "/app_error.gleam")
-  let assert True = string.contains(content, "pub type AppError")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([dir])
@@ -117,7 +87,6 @@ pub fn validate_missing_handler_test() {
       message_modules: modules,
       server_src: "/tmp/nonexistent_server_src",
       shared_state_path: "/tmp/nonexistent_server_src/server/shared_state.gleam",
-      app_error_path: "/tmp/nonexistent_server_src/server/app_error.gleam",
     )
   let assert True =
     list.any(errors, fn(e) {

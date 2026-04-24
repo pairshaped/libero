@@ -87,17 +87,7 @@ pub fn write_dispatch(
           // Build per-handler variant pattern arms
           let variant_arms =
             list.map(all_handlers, fn(handler) {
-              let alias = handler_alias(handler.module_path)
-              let patterns =
-                list.map(handler.handled_variants, fn(v) {
-                  msg_alias <> "." <> v <> "(..)"
-                })
-              let pattern_str = string.join(patterns, " | ")
-              "        "
-              <> pattern_str
-              <> " ->\n          dispatch(state, request_id, fn() { "
-              <> alias
-              <> ".update_from_client(msg: typed_msg, state:) })"
+              variant_arm(handler:, msg_alias:)
             })
 
           let typed_msg_line =
@@ -207,6 +197,22 @@ fn safe_encode(
   let output = server_generated <> "/dispatch.gleam"
   ensure_parent_dir(path: output)
   write_file(path: output, content: content)
+}
+
+/// Build a case arm that routes specific MsgFromClient variants to a handler.
+fn variant_arm(
+  handler handler: scanner.HandlerInfo,
+  msg_alias msg_alias: String,
+) -> String {
+  let alias = handler_alias(handler.module_path)
+  let patterns =
+    list.map(handler.handled_variants, fn(v) { msg_alias <> "." <> v <> "(..)" })
+  let pattern_str = string.join(patterns, " | ")
+  "        "
+  <> pattern_str
+  <> " ->\n          dispatch(state, request_id, fn() { "
+  <> alias
+  <> ".update_from_client(msg: typed_msg, state:) })"
 }
 
 /// Convert a module path to a safe Gleam import alias.

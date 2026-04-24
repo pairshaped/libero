@@ -42,9 +42,6 @@ pub type TomlConfig {
     /// Gleam module path to the SharedState type used by libero dispatch.
     /// Default: "server/shared_state".
     shared_state_module: String,
-    /// Gleam module path to the AppError type used by libero dispatch.
-    /// Default: "server/app_error".
-    app_error_module: String,
   )
 }
 
@@ -134,10 +131,6 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     tom.get_string(parsed, ["tools", "libero", "shared_state_module"])
     |> result.unwrap("server/shared_state")
 
-  let app_error_module =
-    tom.get_string(parsed, ["tools", "libero", "app_error_module"])
-    |> result.unwrap("server/app_error")
-
   use clients <- result.try(parse_clients(parsed))
 
   Ok(TomlConfig(
@@ -150,7 +143,6 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     server_atoms_path: server_atoms_path,
     shared_src_dir: shared_src_dir,
     shared_state_module: shared_state_module,
-    app_error_module: app_error_module,
   ))
 }
 

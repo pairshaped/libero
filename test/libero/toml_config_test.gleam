@@ -23,7 +23,6 @@ pub fn parse_uses_shared_plus_server_defaults_test() {
   let assert "src/server/generated" = cfg.server_generated_dir
   let assert "shared/src/shared" = cfg.shared_src_dir
   let assert "server/shared_state" = cfg.shared_state_module
-  let assert "server/app_error" = cfg.app_error_module
   let assert "src/myapp@generated@rpc_atoms.erl" = cfg.server_atoms_path
 }
 
@@ -80,7 +79,6 @@ pub fn to_codegen_config_javascript_client_test() {
       server_atoms_path: "src/my_app@generated@rpc_atoms.erl",
       shared_src_dir: "shared/src/shared",
       shared_state_module: "server/shared_state",
-      app_error_module: "server/app_error",
     )
   let assert Ok(cfg) =
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
@@ -102,7 +100,6 @@ pub fn to_codegen_config_missing_client_test() {
       server_atoms_path: "src/my_app@generated@rpc_atoms.erl",
       shared_src_dir: "shared/src/shared",
       shared_state_module: "server/shared_state",
-      app_error_module: "server/app_error",
     )
   let assert Error(msg) =
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")

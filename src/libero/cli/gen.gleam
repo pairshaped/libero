@@ -72,21 +72,16 @@ fn run_with_clients(
 
   // 5. Validate conventions
   //
-  // shared_state_module and app_error_module are Gleam module paths
-  // (e.g., "server/shared_state"). The file they resolve to depends on
-  // which package owns them - derive the file path from the module path
-  // by using the server_src dir as the package root.
+  // shared_state_module is a Gleam module path (e.g., "server/shared_state").
+  // Derive the file path from the module path using the server_src dir as root.
   let shared_state_path =
     server_src <> "/" <> toml_cfg.shared_state_module <> ".gleam"
-  let app_error_path =
-    server_src <> "/" <> toml_cfg.app_error_module <> ".gleam"
 
   use message_modules <- result.try(
     scanner.validate_conventions(
       message_modules: message_modules,
       server_src: server_src,
       shared_state_path: shared_state_path,
-      app_error_path: app_error_path,
     )
     |> result.map_error(fn(errors) {
       list.each(errors, gen_error.print_error)

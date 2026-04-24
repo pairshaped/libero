@@ -11,7 +11,7 @@ my_app/
     server/
       handler.gleam                # update_from_client function
       shared_state.gleam           # server state type
-      app_error.gleam              # error type
+      app_error.gleam              # (optional) domain error types
       generated/                   # dispatch, websocket, push (auto-generated)
     my_app.gleam                   # server entry point (auto-generated)
   shared/
@@ -119,23 +119,21 @@ Handlers export `update_from_client` with this signature:
 
 import shared/messages.{type MsgFromClient, type MsgFromServer}
 import server/shared_state.{type SharedState}
-import server/app_error.{type AppError}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(MsgFromServer, SharedState), AppError) {
+) -> #(MsgFromServer, SharedState) {
   case msg {
-    messages.LoadAll -> Ok(#(TodosLoaded(Ok(all())), state))
-    messages.Create(params:) -> Ok(#(TodoCreated(Ok(insert(params.title))), state))
+    messages.LoadAll -> #(TodosLoaded(Ok(all())), state)
+    messages.Create(params:) -> #(TodoCreated(Ok(insert(params.title))), state)
     // ...
   }
 }
 ```
 
-- Domain errors go inside the `MsgFromServer` field: `Ok(#(TodoCreated(Error(NotFound)), state))`.
-- App-level errors go in the outer Result: `Error(AppError("db connection lost"))`.
-- Multiple handlers per module supported. Return `Error(UnhandledMessage)` to pass to the next handler.
+- Domain errors go inside the `MsgFromServer` field: `#(TodoCreated(Error(NotFound)), state)`.
+- Multiple handlers per module supported. Dispatch routes each MsgFromClient variant to the correct handler automatically.
 - `SharedState` is typically a unit type. Actual state lives in ETS or a database.
 
 ## Client Usage (Lustre)
@@ -312,14 +310,13 @@ The server entry point (`src/<app>.gleam`) is generated once and never overwritt
 - Call envelope: `{module_path, request_id, MsgFromClient_value}` (3-tuple with monotonic request ID).
 - Response frame: `<<0x00, request_id:32-big, etf_bytes>>`. Responses matched by ID, not FIFO.
 - Push frame: `<<0x01, etf_bytes>>` (no request ID, server-initiated).
-- Response payload: `Result(MsgFromServer_variant, RpcError(AppError))`.
+- Response payload: `Result(MsgFromServer_variant, RpcError)`.
 
 ## Error Model
 
-Three tiers:
+Two tiers:
 1. **Domain errors** -- inside `MsgFromServer` field: `Result(payload, DomainError)`. User-facing.
-2. **App errors** -- handler returns `Error(AppError(...))`. Wire envelope: `Error(AppError(value))`.
-3. **Framework errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`.
+2. **Framework errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`.
 
 ## RemoteData
 
