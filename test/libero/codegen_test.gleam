@@ -39,8 +39,8 @@ pub fn dispatch_contains_state_threading_test() {
   // Must use alias in dispatch call
   let assert True =
     string.contains(content, "core_handler_handler.update_from_client")
-  // Must thread state to dispatch
-  let assert True = string.contains(content, "dispatch(state, fn()")
+  // Must thread state and request_id to dispatch
+  let assert True = string.contains(content, "dispatch(state, request_id, fn()")
   // Must have atoms external
   let assert True =
     string.contains(content, "server@generated@libero@rpc_atoms")

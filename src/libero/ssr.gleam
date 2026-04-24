@@ -49,13 +49,13 @@ pub fn call(
   msg msg: msg,
   expect expect: fn(response) -> payload,
 ) -> Result(payload, SsrError) {
-  let data = wire.encode_call(module:, msg:)
+  let data = wire.encode_call(module:, request_id: 0, msg:)
   let #(response_bytes, maybe_panic, _state) = handle(state, data)
   case maybe_panic {
     option.Some(_) -> Error(DispatchError)
     option.None ->
       case response_bytes {
-        <<_tag, etf:bytes>> -> {
+        <<_tag, _request_id:32, etf:bytes>> -> {
           // dispatch encodes Ok(MsgFromServer_variant) or Error(RpcError).
           // wire.decode_safe returns a Result instead of panicking.
           let decoded: Result(Result(response, _), _) = wire.decode_safe(etf)

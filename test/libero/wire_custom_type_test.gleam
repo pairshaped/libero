@@ -51,8 +51,8 @@ pub type Profile {
 // ============================================================================
 
 fn roundtrip(value: a) -> Dynamic {
-  let envelope = ffi_encode(coerce(#("shared/test", coerce(value))))
-  let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
+  let envelope = ffi_encode(coerce(#("shared/test", 0, coerce(value))))
+  let assert Ok(#("shared/test", _request_id, rebuilt)) = wire.decode_call(envelope)
   rebuilt
 }
 

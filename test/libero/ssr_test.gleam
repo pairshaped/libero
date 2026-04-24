@@ -35,7 +35,8 @@ pub fn call_with_expect_extracts_payload_test() {
   let handler = fn(_state: Nil, data: BitArray) {
     // Decode the call, ignore the module/msg, return a canned response
     let _ = data
-    let response = wire.tag_response(wire.encode(Ok("pong")))
+    let response =
+      wire.tag_response(request_id: 0, data: wire.encode(Ok("pong")))
     #(response, None, Nil)
   }
   let result =
@@ -52,7 +53,8 @@ pub fn call_with_expect_extracts_payload_test() {
 pub fn call_expect_transforms_response_test() {
   let handler = fn(_state: Nil, data: BitArray) {
     let _ = data
-    let response = wire.tag_response(wire.encode(Ok("hello")))
+    let response =
+      wire.tag_response(request_id: 0, data: wire.encode(Ok("hello")))
     #(response, None, Nil)
   }
   let result =
@@ -69,7 +71,11 @@ pub fn call_expect_transforms_response_test() {
 pub fn call_returns_bad_response_on_error_response_test() {
   let handler = fn(_state: Nil, data: BitArray) {
     let _ = data
-    let response = wire.tag_response(wire.encode(Error("something went wrong")))
+    let response =
+      wire.tag_response(
+        request_id: 0,
+        data: wire.encode(Error("something went wrong")),
+      )
     #(response, None, Nil)
   }
   let result: Result(String, ssr.SsrError) =
