@@ -173,6 +173,9 @@ fn load_all() -> Effect(Msg) {
 Key patterns:
 - `rpc.send_to_server()` returns a Lustre `Effect`. Wire encoding handled internally.
 - `remote_data.from_response(raw, format_error)` converts wire response to `RpcData`.
+- Store `RpcData` in your model. Assign load responses directly: `GotTodos(rd) -> Model(..model, todos: rd)`.
+- Use `remote_data.map` to update loaded data: `remote_data.map(data: model.todos, transform: fn(todos) { ... })`.
+- Pattern match all states in the view: `Success`, `Loading`, `Failure`, `NotAsked`.
 - `wire.coerce(raw)` casts `Dynamic` to a typed value (safe when built from same types).
 - Push messages arrive via `rpc.update_from_server()` subscription.
 

@@ -103,14 +103,55 @@ pub fn update_from_client(
 
 ## Client Usage
 
-The generated stubs let clients send typed messages:
+The generated stubs let clients send typed messages. Use `RpcData` (libero's equivalent of Elm's `WebData`) to track loading state in your model:
 
 ```gleam
-// In a Lustre SPA:
 import generated/messages as rpc
+import libero/remote_data.{type RpcData, Failure, Loading, Success}
 
-ToggleTodo(id) ->
-  #(model, rpc.send_to_server(msg: Toggle(id:), on_response: GotResponse))
+pub type Model {
+  Model(todos: RpcData(List(Todo)), input: String)
+}
+
+pub type Msg {
+  GotTodos(RpcData(List(Todo)))
+  GotCreated(RpcData(Todo))
+  UserToggled(id: Int)
+  // ...
+}
+
+fn init(_flags) -> #(Model, Effect(Msg)) {
+  #(Model(todos: Loading, input: ""), load_all())
+}
+
+fn load_all() -> Effect(Msg) {
+  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
+    GotTodos(remote_data.from_response(raw:, format_domain: format_error))
+  })
+}
+```
+
+In the update function, store load responses directly and use `remote_data.map` to update loaded data:
+
+```gleam
+GotTodos(rd) -> #(Model(..model, todos: rd), effect.none())
+GotCreated(Success(item)) -> #(
+  Model(..model, todos: remote_data.map(data: model.todos, transform: fn(todos) {
+    list.append(todos, [item])
+  })),
+  effect.none(),
+)
+```
+
+In the view, pattern match on all states:
+
+```gleam
+case model.todos {
+  Loading -> html.text("Loading...")
+  Failure(err) -> html.text(err.message)
+  Success(todos) -> view_todo_list(todos)
+  _ -> element.none()
+}
 ```
 
 ## Configuration
