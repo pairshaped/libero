@@ -1,24 +1,22 @@
 import generated/messages as rpc
 import gleam/list
-import libero/remote_data.{type RpcData, Failure, Loading, NotAsked, Success}
+import libero/remote_data.{type RemoteData, Failure, Loading, NotAsked, Success}
 import lustre
 import lustre/attribute
 import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
-import shared/messages.{
-  type Todo, type TodoError, Create, Delete, LoadAll, TodoParams, Toggle,
-}
+import shared/messages.{type Todo, type TodoError, TodoParams}
 
 // --- Model ---
 
 pub type Model {
-  Model(todos: RpcData(List(Todo)), input: String)
+  Model(todos: RemoteData(List(Todo), TodoError), input: String)
 }
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(todos: Loading, input: ""), load_all())
+  #(Model(todos: Loading, input: ""), rpc.get_todos(on_response: GotTodos))
 }
 
 // --- Messages ---
@@ -28,10 +26,10 @@ pub type Msg {
   UserSubmitted
   UserToggled(id: Int)
   UserDeleted(id: Int)
-  GotTodos(RpcData(List(Todo)))
-  GotCreated(RpcData(Todo))
-  GotToggled(RpcData(Todo))
-  GotDeleted(RpcData(Int))
+  GotTodos(RemoteData(List(Todo), TodoError))
+  GotCreated(RemoteData(Todo, TodoError))
+  GotToggled(RemoteData(Todo, TodoError))
+  GotDeleted(RemoteData(Int, TodoError))
 }
 
 // --- Update ---
@@ -44,29 +42,11 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         "" -> #(model, effect.none())
         title -> #(
           Model(..model, input: ""),
-          rpc.send_to_server(
-            msg: Create(params: TodoParams(title:)),
-            on_response: fn(raw) {
-              GotCreated(remote_data.from_response(
-                raw:,
-                format_domain: format_error,
-              ))
-            },
-          ),
+          rpc.create_todo(params: TodoParams(title:), on_response: GotCreated),
         )
       }
-    UserToggled(id:) -> #(
-      model,
-      rpc.send_to_server(msg: Toggle(id:), on_response: fn(raw) {
-        GotToggled(remote_data.from_response(raw:, format_domain: format_error))
-      }),
-    )
-    UserDeleted(id:) -> #(
-      model,
-      rpc.send_to_server(msg: Delete(id:), on_response: fn(raw) {
-        GotDeleted(remote_data.from_response(raw:, format_domain: format_error))
-      }),
-    )
+    UserToggled(id:) -> #(model, rpc.toggle_todo(id:, on_response: GotToggled))
+    UserDeleted(id:) -> #(model, rpc.delete_todo(id:, on_response: GotDeleted))
     GotTodos(rd) -> #(Model(..model, todos: rd), effect.none())
     GotCreated(Success(item)) -> #(
       Model(
@@ -104,19 +84,6 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn format_error(err: TodoError) -> String {
-  case err {
-    messages.NotFound -> "Not found"
-    messages.TitleRequired -> "Title is required"
-  }
-}
-
-fn load_all() -> Effect(Msg) {
-  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
-    GotTodos(remote_data.from_response(raw:, format_domain: format_error))
-  })
-}
-
 // --- View ---
 
 fn view(model: Model) -> Element(Msg) {
@@ -135,11 +102,20 @@ fn view(model: Model) -> Element(Msg) {
         NotAsked -> html.text("")
         Loading -> html.p([], [html.text("Loading...")])
         Failure(err) ->
-          html.p([attribute.style("color", "red")], [html.text(err.message)])
+          html.p([attribute.style("color", "red")], [
+            html.text(format_error(err)),
+          ])
         Success(todos) -> view_todo_list(todos)
       },
     ],
   )
+}
+
+fn format_error(err: TodoError) -> String {
+  case err {
+    messages.NotFound -> "Not found"
+    messages.TitleRequired -> "Title is required"
+  }
 }
 
 fn view_form(model: Model) -> Element(Msg) {

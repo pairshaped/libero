@@ -6,8 +6,16 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
-import server/handler as server_handler_handler
+import server/handler
 import server/shared_state.{type SharedState}
+import shared/messages
+
+pub type ClientMsg {
+  GetTodos
+  CreateTodo(params: messages.TodoParams)
+  ToggleTodo(id: Int)
+  DeleteTodo(id: Int)
+}
 
 @external(erlang, "todos@generated@rpc_atoms", "ensure")
 pub fn ensure_atoms() -> Nil
@@ -17,10 +25,21 @@ pub fn handle(
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case wire.decode_call(data) {
-    Ok(#("shared/messages", request_id, msg)) ->
-      dispatch(state, request_id, fn() {
-        server_handler_handler.update_from_client(msg: wire.coerce(msg), state:)
-      })
+    Ok(#("shared/messages", request_id, msg)) -> {
+      let typed_msg: ClientMsg = wire.coerce(msg)
+      case typed_msg {
+        GetTodos ->
+          dispatch(state, request_id, fn() { handler.get_todos(state:) })
+        CreateTodo(params:) ->
+          dispatch(state, request_id, fn() {
+            handler.create_todo(params:, state:)
+          })
+        ToggleTodo(id:) ->
+          dispatch(state, request_id, fn() { handler.toggle_todo(id:, state:) })
+        DeleteTodo(id:) ->
+          dispatch(state, request_id, fn() { handler.delete_todo(id:, state:) })
+      }
+    }
     Ok(#(name, _request_id, _)) -> #(
       wire.tag_response(
         request_id: 0,
@@ -69,10 +88,6 @@ fn dispatch(
   }
 }
 
-/// Run an encoder thunk under try_call protection. If encoding panics
-/// (e.g. a response value contains an unencodable term), return an
-/// InternalError response with the panic reason so the websocket handler
-/// can log it and stay alive.
 fn safe_encode(
   encoder: fn() -> BitArray,
   state: SharedState,

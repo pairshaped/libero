@@ -2,10 +2,7 @@ import gleam/list
 import gleeunit
 import server/handler
 import server/shared_state
-import shared/messages.{
-  Create, Delete, LoadAll, Todo, TodoCreated, TodoDeleted, TodoParams,
-  TodoToggled, TodosLoaded, Toggle,
-}
+import shared/messages.{Todo, TodoParams}
 
 pub fn main() {
   gleeunit.main()
@@ -17,77 +14,52 @@ fn fresh_state() -> shared_state.SharedState {
 
 pub fn create_with_empty_title_returns_error_test() {
   let state = fresh_state()
-  let assert #(TodoCreated(Error(messages.TitleRequired)), _) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "")),
-      state:,
-    )
+  let assert #(Error(messages.TitleRequired), _) =
+    handler.create_todo(params: TodoParams(title: ""), state:)
 }
 
 pub fn create_returns_todo_with_id_test() {
   let state = fresh_state()
-  let assert #(
-    TodoCreated(Ok(Todo(id: _, title: "Buy milk", completed: False))),
-    _,
-  ) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "Buy milk")),
-      state:,
-    )
+  let assert #(Ok(Todo(id: _, title: "Buy milk", completed: False)), _) =
+    handler.create_todo(params: TodoParams(title: "Buy milk"), state:)
 }
 
-pub fn load_all_returns_created_todos_test() {
+pub fn get_todos_returns_created_todos_test() {
   let state = fresh_state()
-  let assert #(TodoCreated(Ok(_)), state) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "First")),
-      state:,
-    )
-  let assert #(TodoCreated(Ok(_)), state) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "Second")),
-      state:,
-    )
-  let assert #(TodosLoaded(Ok(todos)), _) =
-    handler.update_from_client(msg: LoadAll, state:)
+  let assert #(Ok(_), state) =
+    handler.create_todo(params: TodoParams(title: "First"), state:)
+  let assert #(Ok(_), state) =
+    handler.create_todo(params: TodoParams(title: "Second"), state:)
+  let assert #(Ok(todos), _) = handler.get_todos(state:)
   let assert 2 = list.length(todos)
 }
 
 pub fn toggle_flips_completed_test() {
   let state = fresh_state()
-  let assert #(TodoCreated(Ok(item)), state) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "Toggle me")),
-      state:,
-    )
+  let assert #(Ok(item), state) =
+    handler.create_todo(params: TodoParams(title: "Toggle me"), state:)
   let assert False = item.completed
-  let assert #(TodoToggled(Ok(toggled)), _) =
-    handler.update_from_client(msg: Toggle(id: item.id), state:)
+  let assert #(Ok(toggled), _) = handler.toggle_todo(id: item.id, state:)
   let assert True = toggled.completed
 }
 
 pub fn toggle_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(TodoToggled(Error(messages.NotFound)), _) =
-    handler.update_from_client(msg: Toggle(id: 9999), state:)
+  let assert #(Error(messages.NotFound), _) =
+    handler.toggle_todo(id: 9999, state:)
 }
 
 pub fn delete_removes_todo_test() {
   let state = fresh_state()
-  let assert #(TodoCreated(Ok(item)), state) =
-    handler.update_from_client(
-      msg: Create(params: TodoParams(title: "Delete me")),
-      state:,
-    )
-  let assert #(TodoDeleted(Ok(_)), state) =
-    handler.update_from_client(msg: Delete(id: item.id), state:)
-  let assert #(TodosLoaded(Ok(todos)), _) =
-    handler.update_from_client(msg: LoadAll, state:)
+  let assert #(Ok(item), state) =
+    handler.create_todo(params: TodoParams(title: "Delete me"), state:)
+  let assert #(Ok(_), state) = handler.delete_todo(id: item.id, state:)
+  let assert #(Ok(todos), _) = handler.get_todos(state:)
   let assert 0 = list.length(todos)
 }
 
 pub fn delete_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(TodoDeleted(Error(messages.NotFound)), _) =
-    handler.update_from_client(msg: Delete(id: 9999), state:)
+  let assert #(Error(messages.NotFound), _) =
+    handler.delete_todo(id: 9999, state:)
 }
