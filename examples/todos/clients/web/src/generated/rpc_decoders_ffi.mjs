@@ -15,42 +15,6 @@ setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
 setDictFromList(dictFromList);
 
-export function decode_shared_messages_todo(term) {
-  return new _m_shared_messages.Todo(
-    decode_int(term[1]),
-    decode_string(term[2]),
-    decode_bool(term[3])
-  );
-}
-
-export function decode_shared_messages_todo_error(term) {
-  if (term === "not_found") return new _m_shared_messages.NotFound();
-  if (term === "title_required") return new _m_shared_messages.TitleRequired();
-  throw new DecodeError("unknown variant: " + String(term));
-}
-
-export function decode_shared_messages_todo_params(term) {
-  return new _m_shared_messages.TodoParams(
-    decode_string(term[1])
-  );
-}
-
-export function decode_shared_messages_msg_from_server(term) {
-  const tag = Array.isArray(term) ? term[0] : term;
-  switch (tag) {
-    case "todo_created":
-      return new _m_shared_messages.TodoCreated(decode_result_of((t0) => decode_shared_messages_todo(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
-    case "todo_toggled":
-      return new _m_shared_messages.TodoToggled(decode_result_of((t0) => decode_shared_messages_todo(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
-    case "todo_deleted":
-      return new _m_shared_messages.TodoDeleted(decode_result_of((t0) => decode_int(t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
-    case "todos_loaded":
-      return new _m_shared_messages.TodosLoaded(decode_result_of((t0) => decode_list_of((t1) => decode_shared_messages_todo(t1), t0), (t0) => decode_shared_messages_todo_error(t0), term[1]));
-    default:
-      throw new DecodeError("unknown variant: " + String(tag));
-  }
-}
-
 export function decode_shared_messages_msg_from_client(term) {
   const tag = Array.isArray(term) ? term[0] : term;
   switch (tag) {
@@ -65,6 +29,42 @@ export function decode_shared_messages_msg_from_client(term) {
     default:
       throw new DecodeError("unknown variant: " + String(tag));
   }
+}
+
+export function decode_shared_messages_todo_params(term) {
+  return new _m_shared_messages.TodoParams(
+    decode_string(term[1])
+  );
+}
+
+export function decode_shared_messages_msg_from_server(term) {
+  const tag = Array.isArray(term) ? term[0] : term;
+  switch (tag) {
+    case "todo_created":
+      return new _m_shared_messages.TodoCreated(decode_result_of((t1) => decode_shared_messages_todo(t1), (t2) => decode_shared_messages_todo_error(t2), term[1]));
+    case "todo_toggled":
+      return new _m_shared_messages.TodoToggled(decode_result_of((t1) => decode_shared_messages_todo(t1), (t2) => decode_shared_messages_todo_error(t2), term[1]));
+    case "todo_deleted":
+      return new _m_shared_messages.TodoDeleted(decode_result_of((t1) => decode_int(t1), (t2) => decode_shared_messages_todo_error(t2), term[1]));
+    case "todos_loaded":
+      return new _m_shared_messages.TodosLoaded(decode_result_of((t1) => decode_list_of((t2) => decode_shared_messages_todo(t2), t1), (t2) => decode_shared_messages_todo_error(t2), term[1]));
+    default:
+      throw new DecodeError("unknown variant: " + String(tag));
+  }
+}
+
+export function decode_shared_messages_todo_error(term) {
+  if (term === "not_found") return new _m_shared_messages.NotFound();
+  if (term === "title_required") return new _m_shared_messages.TitleRequired();
+  throw new DecodeError("unknown variant: " + String(term));
+}
+
+export function decode_shared_messages_todo(term) {
+  return new _m_shared_messages.Todo(
+    decode_int(term[1]),
+    decode_string(term[2]),
+    decode_bool(term[3])
+  );
 }
 
 export function decode_msg_from_server(term) {

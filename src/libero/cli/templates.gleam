@@ -81,16 +81,15 @@ pub type MsgFromServer {
 
 /// Returns a skeleton handler module.
 pub fn starter_handler() -> String {
-  "import server/app_error.{type AppError}
-import server/shared_state.{type SharedState}
+  "import server/shared_state.{type SharedState}
 import shared/messages.{type MsgFromClient, type MsgFromServer, Ping, Pong}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(MsgFromServer, SharedState), AppError) {
+) -> #(MsgFromServer, SharedState) {
   case msg {
-    Ping -> Ok(#(Pong(Ok(\"pong\")), state))
+    Ping -> #(Pong(Ok(\"pong\")), state)
   }
 }
 "
@@ -108,14 +107,6 @@ pub fn new() -> SharedState {
 "
 }
 
-/// Returns a skeleton AppError module.
-pub fn starter_app_error() -> String {
-  "pub type AppError {
-  AppError(reason: String)
-}
-"
-}
-
 /// Returns a skeleton test that verifies the handler works.
 pub fn starter_test() -> String {
   "import server/handler
@@ -129,7 +120,7 @@ pub fn main() {
 
 pub fn ping_test() {
   let state = shared_state.new()
-  let assert Ok(#(Pong(Ok(\"pong\")), _)) =
+  let assert #(Pong(Ok(\"pong\")), _) =
     handler.update_from_client(msg: Ping, state:)
 }
 "

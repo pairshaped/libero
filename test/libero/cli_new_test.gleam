@@ -31,7 +31,6 @@ pub fn scaffold_project_test() {
   let assert Ok(True) = simplifile.is_file(dir <> "/src/server/handler.gleam")
   let assert Ok(True) =
     simplifile.is_file(dir <> "/src/server/shared_state.gleam")
-  let assert Ok(True) = simplifile.is_file(dir <> "/src/server/app_error.gleam")
   let assert Ok(True) =
     simplifile.is_file(dir <> "/test/test_scaffold_test.gleam")
   let assert Ok(True) = simplifile.is_file(dir <> "/README.md")

@@ -96,11 +96,6 @@ fn scaffold_files(
       },
     ),
   )
-  use _ <- helpers.map_err(helpers.write_formatted(
-    path: server_dir <> "/app_error.gleam",
-    content: templates.starter_app_error(),
-  ))
-
   // Write database files when --database is set
   use _ <-
     fn(next) {

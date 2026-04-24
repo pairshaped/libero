@@ -91,7 +91,7 @@ pub fn to_string(err: GenError) -> String {
         pub fn update_from_client(
           msg msg: MsgFromClient,
           state state: SharedState,
-        ) -> Result(#(MsgFromServer, SharedState), AppError)"
+        ) -> #(MsgFromServer, SharedState)"
 
     NoMessageModules(shared_path) -> "error: No message modules found
   \u{250c}\u{2500} " <> shared_path <> "/

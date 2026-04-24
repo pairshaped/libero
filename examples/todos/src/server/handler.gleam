@@ -1,5 +1,4 @@
 import ets_store
-import server/app_error.{type AppError}
 import server/shared_state.{type SharedState}
 import shared/messages.{
   type MsgFromClient, type MsgFromServer, Create, Delete, LoadAll, NotFound,
@@ -11,35 +10,35 @@ import shared/messages.{
 pub fn update_from_client(
   msg msg: MsgFromClient,
   state state: SharedState,
-) -> Result(#(MsgFromServer, SharedState), AppError) {
+) -> #(MsgFromServer, SharedState) {
   case msg {
     Create(params:) ->
       case params.title {
-        "" -> Ok(#(TodoCreated(Error(TitleRequired)), state))
+        "" -> #(TodoCreated(Error(TitleRequired)), state)
         title -> {
           let id = ets_store.next_id()
           let item = Todo(id:, title:, completed: False)
           ets_store.insert(id, item)
-          Ok(#(TodoCreated(Ok(item)), state))
+          #(TodoCreated(Ok(item)), state)
         }
       }
     Toggle(id:) ->
       case ets_store.lookup(id) {
-        Error(Nil) -> Ok(#(TodoToggled(Error(NotFound)), state))
+        Error(Nil) -> #(TodoToggled(Error(NotFound)), state)
         Ok(item) -> {
           let toggled = Todo(..item, completed: !item.completed)
           ets_store.insert(id, toggled)
-          Ok(#(TodoToggled(Ok(toggled)), state))
+          #(TodoToggled(Ok(toggled)), state)
         }
       }
     Delete(id:) ->
       case ets_store.lookup(id) {
-        Error(Nil) -> Ok(#(TodoDeleted(Error(NotFound)), state))
+        Error(Nil) -> #(TodoDeleted(Error(NotFound)), state)
         Ok(_) -> {
           ets_store.delete(id)
-          Ok(#(TodoDeleted(Ok(id)), state))
+          #(TodoDeleted(Ok(id)), state)
         }
       }
-    LoadAll -> Ok(#(TodosLoaded(Ok(ets_store.all())), state))
+    LoadAll -> #(TodosLoaded(Ok(ets_store.all())), state)
   }
 }
