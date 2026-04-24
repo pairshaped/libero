@@ -61,9 +61,6 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 }
 
 fn decode_counter(raw: Dynamic) -> Int {
-  let rd = remote_data.to_remote(raw:, format_domain: fn(_) { "error" })
-  case rd {
-    remote_data.Success(n) -> n
-    _ -> 0
-  }
+  remote_data.from_response(raw:, format_domain: fn(_) { "error" })
+  |> remote_data.unwrap(default: 0)
 }

@@ -8,7 +8,7 @@
 //// The JS FFI (rpc_ffi.mjs) opens the WebSocket lazily on first call
 //// and caches the connection. Sends issued before the socket is open
 //// are queued and flushed on the open event. Responses are matched
-//// to sends in FIFO order.
+//// to sends by request ID.
 ////
 //// Developers don't usually call this module directly. They import
 //// the per-module stubs the libero generator writes into their

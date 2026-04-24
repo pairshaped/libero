@@ -5,7 +5,7 @@
 //// The view pattern matches directly on the state - impossible to show stale
 //// data while loading or forget to handle errors.
 ////
-//// `to_remote` is the bridge from a libero RPC response (a Dynamic value
+//// `from_response` is the bridge from a libero RPC response (a Dynamic value
 //// shipped from the server) to a `RemoteData` value the page stores in
 //// its model. It collapses three wire outcomes - domain success, domain
 //// failure, framework failure - into the two post-response states
@@ -23,6 +23,12 @@ pub type RemoteData(value, error) {
   Failure(error)
   Success(value)
 }
+
+/// Convenience alias that pins the error type to `RpcFailure`, mirroring
+/// Elm's `WebData a = RemoteData Http.Error a` pattern. Callers write
+/// `RpcData(List(Todo))` instead of `RemoteData(List(Todo), RpcFailure)`.
+pub type RpcData(value) =
+  RemoteData(value, RpcFailure)
 
 /// Error type for formatted RPC failures. Distinguishes domain errors
 /// (formatted by the caller) from framework errors (formatted by libero).
@@ -100,14 +106,12 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
 /// owns and pattern-matches on its specific error type). Framework
 /// errors (internal, unknown function, malformed request, server
 /// AppError) are formatted by libero's default formatter.
-pub fn to_remote(
+pub fn from_response(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
 ) -> RemoteData(payload, RpcFailure) {
   // BY DESIGN: wire.coerce is an unwitnessed cast. Type safety relies on
-  // both sides being built from the same shared/ types. A version-skew
-  // scenario will produce silent corruption — mitigating this with a
-  // wire schema hash is planned for v5. See docs/request_ids.md.
+  // both sides being built from the same shared/ types.
   let outer: Result(Dynamic, RpcError(app)) = wire.coerce(raw)
   case outer {
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))
@@ -133,26 +137,6 @@ pub fn to_remote(
 fn peel_msg_wrapper(wrapper: Dynamic) -> Dynamic {
   let _ = wrapper
   panic as "unreachable"
-}
-
-/// Adapter for action responses that the page wants as a flat `Result`
-/// rather than `RemoteData`. Useful when the response only feeds a flash
-/// message or triggers a redirect - the page never needs to render
-/// `NotAsked`/`Loading` states for the action result itself.
-pub fn to_result(
-  raw raw: Dynamic,
-  format_domain format_domain: fn(domain) -> String,
-) -> Result(payload, RpcFailure) {
-  case to_remote(raw: raw, format_domain: format_domain) {
-    Success(payload) -> Ok(payload)
-    Failure(err) -> Error(err)
-    // Unreachable: to_remote only returns Success or Failure, never
-    // NotAsked or Loading. This arm exists for exhaustiveness.
-    NotAsked | Loading ->
-      Error(FrameworkFailure(
-        message: "Unexpected response state: to_result called on a non-response",
-      ))
-  }
 }
 
 /// Default formatter for framework-level RPC errors.

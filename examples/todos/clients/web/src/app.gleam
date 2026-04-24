@@ -1,7 +1,6 @@
 import generated/messages as rpc
-import gleam/dynamic
 import gleam/list
-import libero/remote_data.{type RemoteData}
+import libero/remote_data.{type RpcData, Failure, Loading, NotAsked, Success}
 import lustre
 import lustre/attribute
 import lustre/effect.{type Effect}
@@ -9,18 +8,17 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import shared/messages.{
-  type MsgFromServer, type Todo, type TodoError, Create, Delete, LoadAll,
-  TodoCreated, TodoDeleted, TodoParams, TodoToggled, TodosLoaded, Toggle,
+  type Todo, type TodoError, Create, Delete, LoadAll, TodoParams, Toggle,
 }
 
 // --- Model ---
 
 pub type Model {
-  Model(todos: List(Todo), input: String, error: String)
+  Model(todos: RpcData(List(Todo)), input: String)
 }
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(todos: [], input: "", error: ""), load_all())
+  #(Model(todos: Loading, input: ""), load_all())
 }
 
 // --- Messages ---
@@ -30,101 +28,79 @@ pub type Msg {
   UserSubmitted
   UserToggled(id: Int)
   UserDeleted(id: Int)
-  ServerResponded(dynamic.Dynamic)
+  GotTodos(RpcData(List(Todo)))
+  GotCreated(RpcData(Todo))
+  GotToggled(RpcData(Todo))
+  GotDeleted(RpcData(Int))
 }
 
 // --- Update ---
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    UserTyped(value:) -> #(
-      Model(..model, input: value, error: ""),
-      effect.none(),
-    )
+    UserTyped(value:) -> #(Model(..model, input: value), effect.none())
     UserSubmitted ->
       case model.input {
-        "" -> #(Model(..model, error: "Title is required"), effect.none())
+        "" -> #(model, effect.none())
         title -> #(
           Model(..model, input: ""),
           rpc.send_to_server(
             msg: Create(params: TodoParams(title:)),
-            on_response: ServerResponded,
+            on_response: fn(raw) {
+              GotCreated(remote_data.from_response(
+                raw:,
+                format_domain: format_error,
+              ))
+            },
           ),
         )
       }
     UserToggled(id:) -> #(
       model,
-      rpc.send_to_server(msg: Toggle(id:), on_response: ServerResponded),
+      rpc.send_to_server(msg: Toggle(id:), on_response: fn(raw) {
+        GotToggled(remote_data.from_response(raw:, format_domain: format_error))
+      }),
     )
     UserDeleted(id:) -> #(
       model,
-      rpc.send_to_server(msg: Delete(id:), on_response: ServerResponded),
+      rpc.send_to_server(msg: Delete(id:), on_response: fn(raw) {
+        GotDeleted(remote_data.from_response(raw:, format_domain: format_error))
+      }),
     )
-    ServerResponded(raw) -> handle_server_response(model, raw)
-  }
-}
-
-fn handle_server_response(
-  model: Model,
-  raw: dynamic.Dynamic,
-) -> #(Model, Effect(Msg)) {
-  // The wire sends Result(MsgFromServer, RpcError), not bare MsgFromServer.
-  // remote_data.to_remote unwraps the Result and converts it to RemoteData,
-  // which handles both RPC-level errors and domain errors cleanly.
-  let rd: RemoteData(MsgFromServer, _) =
-    remote_data.to_remote(raw:, format_domain: format_error)
-  case rd {
-    remote_data.Success(response) -> handle_success(model, response)
-    remote_data.Failure(err) -> #(
-      Model(..model, error: err.message),
-      effect.none(),
-    )
-    _ -> #(model, effect.none())
-  }
-}
-
-fn handle_success(
-  model: Model,
-  response: MsgFromServer,
-) -> #(Model, Effect(Msg)) {
-  case response {
-    TodoCreated(Ok(item)) -> #(
-      Model(..model, todos: list.append(model.todos, [item])),
-      effect.none(),
-    )
-    TodoCreated(Error(_)) -> #(
-      Model(..model, error: "Failed to create todo"),
-      effect.none(),
-    )
-    TodoToggled(Ok(toggled)) -> #(
+    GotTodos(rd) -> #(Model(..model, todos: rd), effect.none())
+    GotCreated(Success(item)) -> #(
       Model(
         ..model,
-        todos: list.map(model.todos, fn(t) {
-          case t.id == toggled.id {
-            True -> toggled
-            False -> t
-          }
+        todos: remote_data.map(data: model.todos, transform: fn(todos) {
+          list.append(todos, [item])
         }),
       ),
       effect.none(),
     )
-    TodoToggled(Error(_)) -> #(
-      Model(..model, error: "Todo not found"),
+    GotToggled(Success(toggled)) -> #(
+      Model(
+        ..model,
+        todos: remote_data.map(data: model.todos, transform: fn(todos) {
+          list.map(todos, fn(t) {
+            case t.id == toggled.id {
+              True -> toggled
+              False -> t
+            }
+          })
+        }),
+      ),
       effect.none(),
     )
-    TodoDeleted(Ok(id)) -> #(
-      Model(..model, todos: list.filter(model.todos, fn(t) { t.id != id })),
+    GotDeleted(Success(id)) -> #(
+      Model(
+        ..model,
+        todos: remote_data.map(data: model.todos, transform: fn(todos) {
+          list.filter(todos, fn(t) { t.id != id })
+        }),
+      ),
       effect.none(),
     )
-    TodoDeleted(Error(_)) -> #(
-      Model(..model, error: "Todo not found"),
-      effect.none(),
-    )
-    TodosLoaded(Ok(todos)) -> #(Model(..model, todos:), effect.none())
-    TodosLoaded(Error(_)) -> #(
-      Model(..model, error: "Failed to load todos"),
-      effect.none(),
-    )
+    _ -> #(model, effect.none())
   }
 }
 
@@ -136,7 +112,9 @@ fn format_error(err: TodoError) -> String {
 }
 
 fn load_all() -> Effect(Msg) {
-  rpc.send_to_server(msg: LoadAll, on_response: ServerResponded)
+  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
+    GotTodos(remote_data.from_response(raw:, format_domain: format_error))
+  })
 }
 
 // --- View ---
@@ -153,11 +131,13 @@ fn view(model: Model) -> Element(Msg) {
     [
       html.h1([], [html.text("Todos")]),
       view_form(model),
-      case model.error {
-        "" -> element.none()
-        err -> html.p([attribute.style("color", "red")], [html.text(err)])
+      case model.todos {
+        NotAsked -> html.text("")
+        Loading -> html.p([], [html.text("Loading...")])
+        Failure(err) ->
+          html.p([attribute.style("color", "red")], [html.text(err.message)])
+        Success(todos) -> view_todo_list(todos)
       },
-      view_todo_list(model.todos),
     ],
   )
 }

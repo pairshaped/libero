@@ -67,7 +67,7 @@ pub fn starter_messages() -> String {
 ///
 /// Each MsgFromServer variant should have exactly one field.
 /// Wrap it in Result(payload, error) so the client can use
-/// remote_data.to_remote to handle responses.
+/// remote_data.from_response to handle responses.
 
 pub type MsgFromClient {
   Ping
@@ -138,31 +138,31 @@ pub fn ping_test() {
 /// Returns a starter Lustre SPA app module with a working RPC example.
 pub fn starter_spa(name name: String) -> String {
   "import generated/messages as rpc
-import libero/remote_data.{type RemoteData}
+import libero/remote_data.{type RpcData, Failure, Loading, NotAsked, Success}
 import lustre
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/effect.{type Effect}
 import lustre/event
-import shared/messages.{Ping, Pong}
+import shared/messages.{Ping}
 
 // -- Model --
 
 pub type Model {
-  Model(response: RemoteData(String, remote_data.RpcFailure))
+  Model(response: RpcData(String))
 }
 
 // -- Messages --
 
 pub type Msg {
   UserClickedPing
-  GotPong(RemoteData(String, remote_data.RpcFailure))
+  GotPong(RpcData(String))
 }
 
 // -- Init --
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(response: remote_data.NotAsked), effect.none())
+  #(Model(response: NotAsked), effect.none())
 }
 
 // -- Update --
@@ -170,7 +170,7 @@ fn init(_flags) -> #(Model, Effect(Msg)) {
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     UserClickedPing -> #(
-      Model(response: remote_data.Loading),
+      Model(response: Loading),
       send_ping(),
     )
     GotPong(rd) -> #(Model(response: rd), effect.none())
@@ -178,12 +178,8 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 }
 
 fn send_ping() -> Effect(Msg) {
-  // rpc.send_to_server sends a typed message to the server over WebSocket.
-  // The on_response callback receives the raw wire response. Use
-  // remote_data.to_remote to unwrap it into a RemoteData value that
-  // handles both RPC errors and domain errors.
   rpc.send_to_server(msg: Ping, on_response: fn(raw) {
-    GotPong(remote_data.to_remote(raw:, format_domain: fn(_) { \"error\" }))
+    GotPong(remote_data.from_response(raw:, format_domain: fn(_) { \"error\" }))
   })
 }
 
@@ -195,10 +191,10 @@ fn view(model: Model) -> Element(Msg) {
     html.button([event.on_click(UserClickedPing)], [html.text(\"Ping\")]),
     html.p([], [html.text(
       case model.response {
-        remote_data.NotAsked -> \"Click the button to ping the server.\"
-        remote_data.Loading -> \"Loading...\"
-        remote_data.Success(msg) -> \"Server says: \" <> msg
-        remote_data.Failure(err) -> \"Error: \" <> err.message
+        NotAsked -> \"Click the button to ping the server.\"
+        Loading -> \"Loading...\"
+        Success(msg) -> \"Server says: \" <> msg
+        Failure(err) -> \"Error: \" <> err.message
       },
     )]),
   ])

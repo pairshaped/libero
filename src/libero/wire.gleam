@@ -60,8 +60,7 @@ pub fn encode(value: a) -> BitArray
 /// for ergonomics in controlled deployments where both sides are
 /// built from the same source.
 ///
-/// This is by design for v4 — adding a wire schema hash to detect
-/// version skew is planned for v5 (see docs/request_ids.md).
+/// This is by design — the generated code is the enforcement point.
 ///
 /// **Panics on malformed input.** In a typical libero deployment
 /// both sides are controlled, so this is a sharp-edge check rather

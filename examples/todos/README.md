@@ -12,7 +12,7 @@ A full CRUD todo list app showing how to build a stateful backend with ETS persi
 
 ## How it works
 
-The client sends typed RPC messages to the server (e.g. `Create(TodoParams(title: "Buy milk"))`). The server handler processes each message, reads/writes ETS, and returns a typed response. The client updates its UI based on the response using `RemoteData` for loading/success/failure states.
+The client sends typed RPC messages to the server (e.g. `Create(TodoParams(title: "Buy milk"))`). The server handler processes each message, reads/writes ETS, and returns a typed response. The client updates its UI based on the response using `RpcData` for loading/success/failure states.
 
 No SSR or shared views in this example. The client builds the entire UI in JavaScript.
 

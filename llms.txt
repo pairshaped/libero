@@ -144,15 +144,15 @@ pub fn update_from_client(
 // clients/web/src/app.gleam
 
 import generated/messages as rpc
-import libero/remote_data.{type RemoteData, type RpcFailure, Loading, Success, Failure}
+import libero/remote_data.{type RpcData, Loading, Success, Failure}
 import libero/wire
 
 pub type Model {
-  Model(items: RemoteData(List(Todo), RpcFailure))
+  Model(items: RpcData(List(Todo)))
 }
 
 pub type Msg {
-  TodosLoadedMsg(RemoteData(List(Todo), RpcFailure))
+  GotTodos(RpcData(List(Todo)))
   GotPush(MsgFromServer)
 }
 
@@ -165,14 +165,14 @@ pub fn init(_flags) -> #(Model, Effect(Msg)) {
 
 fn load_all() -> Effect(Msg) {
   rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
-    TodosLoadedMsg(remote_data.to_remote(raw:, format_domain: format_error))
+    GotTodos(remote_data.from_response(raw:, format_domain: format_error))
   })
 }
 ```
 
 Key patterns:
 - `rpc.send_to_server()` returns a Lustre `Effect`. Wire encoding handled internally.
-- `remote_data.to_remote(raw, format_error)` converts wire response to `RemoteData`.
+- `remote_data.from_response(raw, format_error)` converts wire response to `RpcData`.
 - `wire.coerce(raw)` casts `Dynamic` to a typed value (safe when built from same types).
 - Push messages arrive via `rpc.update_from_server()` subscription.
 
@@ -306,9 +306,10 @@ The server entry point (`src/<app>.gleam`) is generated once and never overwritt
 ## Wire Protocol
 
 - Format: ETF (Erlang External Term Format). Binary, not text.
-- Call envelope: `{module_path, MsgFromClient_value}` (e.g., `{"shared/messages", LoadAll}`).
-- Response: `Result(payload, RpcError(AppError))`. The `MsgFromServer` variant wrapper is stripped.
-- Frame tags: byte `0` = response, byte `1` = push.
+- Call envelope: `{module_path, request_id, MsgFromClient_value}` (3-tuple with monotonic request ID).
+- Response frame: `<<0x00, request_id:32-big, etf_bytes>>`. Responses matched by ID, not FIFO.
+- Push frame: `<<0x01, etf_bytes>>` (no request ID — server-initiated).
+- Response payload: `Result(MsgFromServer_variant, RpcError(AppError))`.
 
 ## Error Model
 
@@ -326,9 +327,12 @@ pub type RemoteData(value, error) {
   Failure(error)
   Success(value)
 }
+
+/// Convenience alias — pins error to RpcFailure (like Elm's WebData).
+pub type RpcData(value) = RemoteData(value, RpcFailure)
 ```
 
-Helpers: `to_remote`, `to_result`, `map`, `map_error`, `unwrap`, `to_option`, `is_success`, `is_loading`.
+Helpers: `from_response`, `map`, `map_error`, `unwrap`, `to_option`, `is_success`, `is_loading`.
 
 ## Key Dependencies
 

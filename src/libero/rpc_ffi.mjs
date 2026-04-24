@@ -849,14 +849,13 @@ export function decode_safe(buffer) {
 // before the socket's open event are queued and flushed once it opens.
 //
 // Server→client frames are tagged with a 1-byte prefix:
-//   0x00 = response (matched to pending callback in FIFO order)
-//   0x01 = push (routed to module-specific push handler)
+//   0x00 = response: <<tag, request_id:32-big, etf_bytes>>
+//   0x01 = push: <<tag, etf_bytes>>
 //
-// Responses use FIFO matching — no request IDs needed because the
-// server processes requests sequentially over a single WebSocket.
-// This is a deliberate simplification: libero targets single-SPA
-// deployments with one WebSocket connection. Apps that need multiple
-// independent connections should use separate WebSocket clients.
+// Responses are matched by request ID (monotonic counter assigned by
+// the client). This allows safe timeout handling without closing the
+// WebSocket — late responses for timed-out requests are harmlessly
+// dropped since their ID has been removed from the callback Map.
 //
 // Reconnection is the consumer's responsibility — call send() again
 // after a close and the socket will be re-established. Push messages
