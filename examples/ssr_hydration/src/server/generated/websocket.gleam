@@ -14,8 +14,8 @@ import gleam/string
 import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
-import server/context.{type HandlerContext}
 import server/generated/dispatch
+import server/handler_context.{type HandlerContext}
 
 pub type ConnState {
   ConnState(state: HandlerContext, topics: List(String), logger: Logger)

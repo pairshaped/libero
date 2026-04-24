@@ -1,6 +1,6 @@
 # Libero
 
-A full-stack Gleam framework with typed RPC. Define your messages, write your handlers, Libero handles everything between your code and the wire.
+A full-stack Gleam framework with typed RPC. Define your handler functions, Libero generates dispatch, client stubs, and server bootstrap from the signatures. No message types to write, no dispatch to maintain.
 
 Like server components, but your client is a real SPA with typed RPC, and the same server logic works for any client out of the box.
 
@@ -24,15 +24,14 @@ my_app/
   gleam.toml                         # server package + [tools.libero] config
   src/
     server/
-      handler.gleam                  # your business logic
-      shared_state.gleam             # server state type
-      app_error.gleam                # error type
-      generated/                     # dispatch, websocket, push (auto-generated)
+      handler.gleam                  # your business logic (RPC endpoints)
+      handler_context.gleam          # server context type
+      generated/                     # dispatch, websocket (auto-generated)
     my_app.gleam                     # server entry point (auto-generated)
   shared/
     gleam.toml                       # target-agnostic package
     src/shared/
-      messages.gleam                 # your message types
+      types.gleam                    # your domain types (shared between server + client)
   clients/
     web/
       gleam.toml                     # client package (auto-generated if missing)
@@ -47,86 +46,97 @@ The root `gleam.toml` is the **server package** (target: erlang). It also holds 
 
 `shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package: the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
 
-`shared/` exists so both sides can import the same message types. It has no target specified, so it compiles to both Erlang and JavaScript. Without it, JS clients would need to depend on the server package and pull in Erlang-only dependencies (mist, ETS, etc.).
+`shared/` exists so both sides can import the same domain types. It has no target specified, so it compiles to both Erlang and JavaScript. Without it, JS clients would need to depend on the server package and pull in Erlang-only dependencies (mist, ETS, etc.).
 
 ```
-root (server)     → shared, libero, mist     [target: erlang]
-clients/web       → shared, libero, lustre   [target: javascript]
+root (server)     -> shared, libero, mist     [target: erlang]
+clients/web       -> shared, libero, lustre   [target: javascript]
 ```
 
-## Messages
+## Handler-as-Contract
 
-Define `MsgFromClient` and `MsgFromServer` in any module under `shared/src/shared/`. Libero scans for these types and generates dispatch + client stubs from them.
+Your handler function signatures ARE the API definition. Libero's scanner detects RPC endpoints by checking four criteria:
 
-```gleam
-// shared/src/shared/messages.gleam
-
-pub type MsgFromClient {
-  Create(params: TodoParams)
-  Toggle(id: Int)
-  Delete(id: Int)
-  LoadAll
-}
-
-pub type MsgFromServer {
-  TodoCreated(Result(Todo, TodoError))
-  TodoToggled(Result(Todo, TodoError))
-  TodoDeleted(Result(Int, TodoError))
-  TodosLoaded(Result(List(Todo), TodoError))
-}
-```
-
-Each `MsgFromServer` variant wraps a single value, typically a `Result(payload, error)`.
-
-## Handlers
-
-Export `update_from_client` in any module under `src/`. Libero discovers it by scanning for the function signature.
+1. **Public function** (not private)
+2. **Last parameter is `HandlerContext`**
+3. **Returns `#(Result(value, error), HandlerContext)`**
+4. **All types in the signature come from `shared/` or are builtins**
 
 ```gleam
 // src/server/handler.gleam
 
-import shared/messages.{type MsgFromClient, type MsgFromServer}
-import server/shared_state.{type SharedState}
+import server/handler_context.{type HandlerContext}
+import shared/types.{type Todo, type TodoParams, type TodoError}
 
-pub fn update_from_client(
-  msg msg: MsgFromClient,
-  state state: SharedState,
-) -> #(MsgFromServer, SharedState) {
-  case msg {
-    messages.LoadAll -> #(TodosLoaded(Ok(all())), state)
-    messages.Create(params:) -> #(TodoCreated(Ok(insert(params.title))), state)
-    // ...
+pub fn get_todos(
+  state state: HandlerContext,
+) -> #(Result(List(Todo), TodoError), HandlerContext) {
+  #(Ok(ets_store.all()), state)
+}
+
+pub fn create_todo(
+  params params: TodoParams,
+  state state: HandlerContext,
+) -> #(Result(Todo, TodoError), HandlerContext) {
+  case params.title {
+    "" -> #(Error(TitleRequired), state)
+    title -> #(Ok(insert(title)), state)
   }
+}
+```
+
+From these signatures, Libero generates:
+- A `ClientMsg` type with variants: `GetTodos`, `CreateTodo(params: TodoParams)`
+- A dispatch module that routes each variant to its handler function
+- Typed client stubs: `rpc.get_todos(on_response: GotTodos)`
+
+The return type `Result(a, e)` maps directly to `RemoteData` on the client:
+- `Ok(value)` becomes `Success(value)`
+- `Error(err)` becomes `Failure(err)` (typed domain error, not a string)
+
+## Shared Types
+
+Define your domain types in `shared/src/shared/`. These are the types used in handler signatures and shared between server and client:
+
+```gleam
+// shared/src/shared/types.gleam
+
+pub type Todo {
+  Todo(id: Int, title: String, completed: Bool)
+}
+
+pub type TodoParams {
+  TodoParams(title: String)
+}
+
+pub type TodoError {
+  NotFound
+  TitleRequired
 }
 ```
 
 ## Client Usage
 
-The generated stubs let clients send typed messages. Use `RpcData` (libero's equivalent of Elm's `WebData`) to track loading state in your model:
+The generated stubs let clients send typed messages. Use `RemoteData` with typed domain errors to track loading state:
 
 ```gleam
 import generated/messages as rpc
-import libero/remote_data.{type RpcData, Failure, Loading, Success}
+import libero/remote_data.{type RemoteData, Failure, Loading, Success}
+import shared/types.{type Todo, type TodoError}
 
 pub type Model {
-  Model(todos: RpcData(List(Todo)), input: String)
+  Model(todos: RemoteData(List(Todo), TodoError), input: String)
 }
 
 pub type Msg {
-  GotTodos(RpcData(List(Todo)))
-  GotCreated(RpcData(Todo))
+  GotTodos(RemoteData(List(Todo), TodoError))
+  GotCreated(RemoteData(Todo, TodoError))
   UserToggled(id: Int)
   // ...
 }
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(todos: Loading, input: ""), load_all())
-}
-
-fn load_all() -> Effect(Msg) {
-  rpc.send_to_server(msg: LoadAll, on_response: fn(raw) {
-    GotTodos(remote_data.from_response(raw:, format_domain: format_error))
-  })
+  #(Model(todos: Loading, input: ""), rpc.get_todos(on_response: GotTodos))
 }
 ```
 
@@ -147,7 +157,7 @@ In the view, pattern match on all states:
 ```gleam
 case model.todos {
   Loading -> html.text("Loading...")
-  Failure(err) -> html.text(err.message)
+  Failure(err) -> format_error(err)
   Success(todos) -> view_todo_list(todos)
   _ -> element.none()
 }
@@ -194,7 +204,7 @@ Commands:
 ```
 
 ### `libero new <name> [--database pg|sqlite]`
-Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton messages), `test/` (handler test), `README.md`, and `gleam.toml`.
+Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton types), `test/` (handler test), `README.md`, and `gleam.toml`.
 
 Pass `--database pg` to include [pog](https://hexdocs.pm/pog/) and [squirrel](https://hexdocs.pm/squirrel/) for type-safe Postgres queries. Pass `--database sqlite` to include [sqlight](https://hexdocs.pm/sqlight/) and [marmot](https://hexdocs.pm/marmot/) for type-safe SQLite queries. Both options add a `src/server/db.gleam` connection module and a `src/server/sql/` directory for query files.
 
@@ -202,7 +212,7 @@ Pass `--database pg` to include [pog](https://hexdocs.pm/pog/) and [squirrel](ht
 Adds a client. Creates `clients/<name>/` with its own `gleam.toml` (generated once, never overwritten) and a starter app.
 
 ### `libero gen`
-Scans `shared/src/shared/` for message types and generates dispatch, stubs, and server entry point. Run after changing message types.
+Scans handler functions and generates dispatch, stubs, and server entry point. Run after changing handler signatures.
 
 ### `libero build`
 Runs `gen`, then builds the server and each client package.
@@ -210,41 +220,27 @@ Runs `gen`, then builds the server and each client package.
 ## What Gets Generated
 
 **Server-side (`src/server/generated/`):**
-- `dispatch.gleam` -- routes incoming messages to handlers
+- `dispatch.gleam` -- `ClientMsg` type + per-function routing to handlers
 - `websocket.gleam` -- Mist WebSocket handler with push support
-- Per-module push wrappers (`send_to_client`, `send_to_clients`)
 
 **Server entry point (`src/<app_name>.gleam`):**
 - Boots Mist with WebSocket, HTTP RPC, and static file serving
 - Serves HTML shell at `/` that loads the first JS client
 
 **Per client (`clients/<name>/src/generated/`):**
-- Typed `send_to_server` and `update_from_server` stubs
+- Typed stubs per handler function (e.g. `rpc.get_todos`, `rpc.create_todo`)
 - WebSocket config and typed decoder registration
 - SSR flag reader (for hydration)
 
 Generation rules:
-- Starter apps and client `gleam.toml` -- generated once, never overwritten
-- Everything in `generated/` -- regenerated every `libero gen` or `libero build`
+- Starter apps and client `gleam.toml`: generated once, never overwritten
+- Everything in `generated/`: regenerated every `libero gen` or `libero build`
 
 ## How It Works
 
 The wire format is [ETF](https://www.erlang.org/doc/apps/erts/erl_ext_dist.html) (Erlang Term Format) over binary WebSocket frames. Gleam types serialize automatically without explicit codecs.
 
-The client sends a typed message over the WebSocket. The server dispatch decodes it, routes by module path, and calls the handler. The response flows back as `Result(payload, RpcError)`.
-
-## Server Push
-
-The server can push messages to connected clients without a prior request. Uses BEAM [pg](https://www.erlang.org/doc/apps/kernel/pg.html) groups -- no external dependencies.
-
-```gleam
-// Server -- push to all subscribers
-import server/generated/messages as messages_push
-messages_push.send_to_clients(topic: "todos", msg: TodosLoaded(Ok(all())))
-
-// Client -- subscribe to pushes (in init)
-rpc.update_from_server(handler: fn(raw) { GotPush(wire.coerce(raw)) })
-```
+The client sends a typed message over the WebSocket. The server dispatch decodes it, routes by function, and calls the handler. The response flows back as `Result(payload, RpcError)`, which the client stub converts to `RemoteData`.
 
 ## Multiple Clients
 
@@ -263,7 +259,7 @@ The same handlers serve all clients. Each client gets typed stubs for its target
 Any BEAM process can call the server over HTTP POST without WebSocket or a Libero dependency:
 
 ```gleam
-let payload = term_to_binary(#("shared/messages", LoadAll))
+let payload = term_to_binary(#("shared/types", GetTodos))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```

@@ -54,7 +54,7 @@ query_function = \"server/db.query\"
   }
 }
 
-/// Returns context.gleam content with a database connection field.
+/// Returns handler_context.gleam content with a database connection field.
 ///
 /// HandlerContext is created once at server startup and passed into every
 /// handler call. Storing the database connection here means handlers

@@ -1,5 +1,5 @@
 import ets_store
-import server/context.{type HandlerContext}
+import server/handler_context.{type HandlerContext}
 import shared/messages.{
   type MsgFromClient, type MsgFromServer, CounterUpdated, Decrement, GetCounter,
   Increment,

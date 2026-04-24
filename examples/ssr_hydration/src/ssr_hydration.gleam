@@ -14,16 +14,16 @@ import libero/ssr
 import libero/ws_logger
 import lustre/element
 import mist.{type Connection}
-import server/context
 import server/generated/dispatch
 import server/generated/websocket as ws
+import server/handler_context
 import shared/messages.{CounterUpdated, GetCounter}
 import shared/views.{Model}
 
 pub fn main() {
   let _ = push.init()
   let _ = dispatch.ensure_atoms()
-  let state = context.new()
+  let state = handler_context.new()
   let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
@@ -52,7 +52,7 @@ pub fn main() {
 
 fn render_ssr(
   route: views.Route,
-  state: context.HandlerContext,
+  state: handler_context.HandlerContext,
 ) -> response.Response(mist.ResponseData) {
   // Fetch the counter value through dispatch (same path as client RPC).
   let counter = case
@@ -92,7 +92,7 @@ fn redirect(to: String) -> response.Response(mist.ResponseData) {
 
 fn handle_rpc(
   req: Request(Connection),
-  state: context.HandlerContext,
+  state: handler_context.HandlerContext,
   logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
   case mist.read_body(req, 1_000_000) {

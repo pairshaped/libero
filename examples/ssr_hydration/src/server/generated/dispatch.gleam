@@ -6,8 +6,8 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
-import server/context.{type HandlerContext}
 import server/handler as server_handler_handler
+import server/handler_context.{type HandlerContext}
 
 @external(erlang, "ssr_hydration@generated@rpc_atoms", "ensure")
 pub fn ensure_atoms() -> Nil

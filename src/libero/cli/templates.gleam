@@ -81,7 +81,7 @@ pub type MsgFromServer {
 
 /// Returns a skeleton handler module.
 pub fn starter_handler() -> String {
-  "import server/context.{type HandlerContext}
+  "import server/handler_context.{type HandlerContext}
 import shared/messages.{type MsgFromClient, type MsgFromServer, Ping, Pong}
 
 pub fn update_from_client(
@@ -110,7 +110,7 @@ pub fn new() -> HandlerContext {
 /// Returns a skeleton test that verifies the handler works.
 pub fn starter_test() -> String {
   "import server/handler
-import server/context
+import server/handler_context
 import shared/messages.{Ping, Pong}
 import gleeunit
 

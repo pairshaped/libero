@@ -36,7 +36,7 @@ pub fn validate_fixture_missing_handler_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: "/tmp/nonexistent_fixture_server_src",
-      context_path: "/tmp/nonexistent_fixture_server_src/server/context.gleam",
+      context_path: "/tmp/nonexistent_fixture_server_src/server/handler_context.gleam",
     )
   let assert True =
     list.any(errors, fn(e) {
@@ -65,10 +65,11 @@ pub fn scaffold_context_when_missing_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: dir,
-      context_path: server_dir <> "/context.gleam",
+      context_path: server_dir <> "/handler_context.gleam",
     )
-  // context.gleam should have been scaffolded
-  let assert Ok(content) = simplifile.read(server_dir <> "/context.gleam")
+  // handler_context.gleam should have been scaffolded
+  let assert Ok(content) =
+    simplifile.read(server_dir <> "/handler_context.gleam")
   let assert True = string.contains(content, "pub type HandlerContext")
   let assert True = string.contains(content, "pub fn new()")
 
@@ -90,7 +91,7 @@ pub fn validate_missing_handler_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: "/tmp/nonexistent_server_src",
-      context_path: "/tmp/nonexistent_server_src/server/context.gleam",
+      context_path: "/tmp/nonexistent_server_src/server/handler_context.gleam",
     )
   let assert True =
     list.any(errors, fn(e) {

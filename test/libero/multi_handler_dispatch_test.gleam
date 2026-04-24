@@ -26,7 +26,7 @@ pub fn multi_handler_dispatch_per_variant_routing_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "todos@generated@rpc_atoms",
-      context_module: "server/context",
+      context_module: "server/handler_context",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -97,7 +97,7 @@ pub fn single_handler_no_chain_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "todos@generated@rpc_atoms",
-      context_module: "server/context",
+      context_module: "server/handler_context",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 

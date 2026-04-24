@@ -6,8 +6,8 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
-import server/context.{type HandlerContext}
 import server/handler as server_handler_handler
+import server/handler_context.{type HandlerContext}
 import shared/types
 
 pub type ClientMsg {

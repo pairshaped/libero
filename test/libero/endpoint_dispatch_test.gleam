@@ -37,7 +37,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "todos@generated@rpc_atoms",
-      context_module: "server/context",
+      context_module: "server/handler_context",
       shared_module_path: "shared/messages",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")

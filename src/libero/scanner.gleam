@@ -378,7 +378,7 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 
 /// Validate that the server package follows the conventions required for
 /// code generation:
-/// 1. `server/context.gleam` exists
+/// 1. `server/handler_context.gleam` exists
 /// 2. For each message module with `has_msg_from_client`, a server module
 ///    exports `pub fn update_from_client` with the correct msg type
 ///

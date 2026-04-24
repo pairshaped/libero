@@ -16,6 +16,10 @@ pub type Model {
 }
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
+  // rpc.get_todos sends GetTodos over the WebSocket to the server handler.
+  // on_response wraps the decoded result in our GotTodos msg. The response
+  // arrives as RemoteData(List(Todo), TodoError) -- either Success(todos)
+  // or Failure(domain_error). We set todos to Loading while we wait.
   #(Model(todos: Loading, input: ""), rpc.get_todos(on_response: GotTodos))
 }
 
@@ -26,6 +30,9 @@ pub type Msg {
   UserSubmitted
   UserToggled(id: Int)
   UserDeleted(id: Int)
+  // Each Got* variant carries a RemoteData with typed domain errors.
+  // The generated stubs decode the server's Result(a, e) into
+  // RemoteData(a, e) automatically: Ok -> Success, Error -> Failure.
   GotTodos(RemoteData(List(Todo), TodoError))
   GotCreated(RemoteData(Todo, TodoError))
   GotToggled(RemoteData(Todo, TodoError))
@@ -42,11 +49,19 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
         "" -> #(model, effect.none())
         title -> #(
           Model(..model, input: ""),
+          // Send CreateTodo with the form input. The server handler validates
+          // the title and returns either Ok(Todo) or Error(TitleRequired).
           rpc.create_todo(params: TodoParams(title:), on_response: GotCreated),
         )
       }
+    // Each of these sends a typed RPC call over the WebSocket. The generated
+    // stub serializes the params, assigns a request ID for matching, and
+    // decodes the response into RemoteData when it arrives.
     UserToggled(id:) -> #(model, rpc.toggle_todo(id:, on_response: GotToggled))
     UserDeleted(id:) -> #(model, rpc.delete_todo(id:, on_response: GotDeleted))
+    // RemoteData responses: pattern match on Success/Failure to update
+    // the model. Success carries the decoded value, Failure carries the
+    // typed domain error (e.g. NotFound, TitleRequired).
     GotTodos(rd) -> #(Model(..model, todos: rd), effect.none())
     GotCreated(Success(item)) -> #(
       Model(
@@ -98,6 +113,8 @@ fn view(model: Model) -> Element(Msg) {
     [
       html.h1([], [html.text("Todos")]),
       view_form(model),
+      // RemoteData drives the view: show loading spinner, error message
+      // with typed domain errors, or the todo list on success.
       case model.todos {
         NotAsked -> html.text("")
         Loading -> html.p([], [html.text("Loading...")])

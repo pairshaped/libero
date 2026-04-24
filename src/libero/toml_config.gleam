@@ -40,7 +40,7 @@ pub type TomlConfig {
     /// import them without pulling in wisp/sqlight (Erlang-only FFI).
     shared_src_dir: String,
     /// Gleam module path to the HandlerContext type used by libero dispatch.
-    /// Default: "server/context".
+    /// Default: "server/handler_context".
     context_module: String,
   )
 }
@@ -129,7 +129,7 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
 
   let context_module =
     tom.get_string(parsed, ["tools", "libero", "context_module"])
-    |> result.unwrap("server/context")
+    |> result.unwrap("server/handler_context")
 
   use clients <- result.try(parse_clients(parsed))
 

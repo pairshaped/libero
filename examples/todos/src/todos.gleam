@@ -11,14 +11,14 @@ import gleam/string
 import libero/push
 import libero/ws_logger
 import mist.{type Connection}
-import server/context
 import server/generated/dispatch
 import server/generated/websocket as ws
+import server/handler_context
 
 pub fn main() {
   push.init()
   dispatch.ensure_atoms()
-  let state = context.new()
+  let state = handler_context.new()
   let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
@@ -58,7 +58,7 @@ pub fn main() {
 
 fn handle_rpc(
   req: Request(Connection),
-  state: context.HandlerContext,
+  state: handler_context.HandlerContext,
   logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
   // Note: HTTP RPC is stateless — state mutations are not persisted across
