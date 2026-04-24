@@ -603,12 +603,14 @@ fn parse_endpoints(file_path file_path: String) -> List(HandlerEndpoint) {
       glance.module(content) |> result.replace_error(Nil),
     )
     let module_path = derive_module_path(file_path: file_path)
+    // Build a lookup from unqualified type name to module alias
+    let type_imports = build_type_import_map(parsed.imports)
     Ok(
       list.filter_map(parsed.functions, fn(def) {
         let glance.Definition(_, func) = def
         case func.publicity == glance.Public {
           False -> Error(Nil)
-          True -> parse_single_endpoint(func, module_path)
+          True -> parse_single_endpoint(func, module_path, type_imports)
         }
       }),
     )
@@ -619,9 +621,30 @@ fn parse_endpoints(file_path file_path: String) -> List(HandlerEndpoint) {
   }
 }
 
+/// Build a map from unqualified type names to their module alias.
+/// e.g. if the handler has `import shared/messages.{type Todo, type TodoError}`
+/// then this returns {"Todo": "messages", "TodoError": "messages"}.
+fn build_type_import_map(
+  imports: List(glance.Definition(glance.Import)),
+) -> dict.Dict(String, String) {
+  list.fold(imports, dict.new(), fn(acc, def) {
+    let glance.Definition(_, imp) = def
+    // Determine the alias: explicit alias or last segment of module path
+    let alias = case imp.alias {
+      option.Some(glance.Named(name)) -> name
+      _ -> last_module_segment(module_path: imp.module)
+    }
+    // Add each unqualified type import
+    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
+      dict.insert(inner_acc, uq.name, alias)
+    })
+  })
+}
+
 fn parse_single_endpoint(
   func: glance.Function,
   module_path: String,
+  type_imports: dict.Dict(String, String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
   use <- bool.guard(when: func.name == "update_from_client", return: Error(Nil))
@@ -647,7 +670,7 @@ fn parse_single_endpoint(
     list.filter_map(non_state_params, fn(p) {
       case p.label, p.type_ {
         option.Some(label), option.Some(type_) ->
-          Ok(#(label, type_to_string(type_)))
+          Ok(#(label, qualified_type_to_string(type_, type_imports)))
         _, _ -> Error(Nil)
       }
     })
@@ -656,7 +679,7 @@ fn parse_single_endpoint(
     module_path: module_path,
     fn_name: func.name,
     params: param_info,
-    return_type_str: type_to_string(response_type),
+    return_type_str: qualified_type_to_string(response_type, type_imports),
   ))
 }
 
@@ -683,30 +706,70 @@ fn extract_handler_return(
   }
 }
 
-/// Convert a glance Type AST to a string representation.
-/// Used for storing type annotations as strings in HandlerEndpoint.
-fn type_to_string(t: glance.Type) -> String {
+/// Convert a glance Type AST to a string with fully qualified type names.
+/// Unqualified types are resolved against the handler's import map.
+/// Builtins (Int, String, Bool, Float, Nil, List, Result, Option, BitArray)
+/// are left unqualified.
+fn qualified_type_to_string(
+  t: glance.Type,
+  imports: dict.Dict(String, String),
+) -> String {
   case t {
-    glance.NamedType(name:, module: option.None, parameters: [], ..) -> name
+    glance.NamedType(name:, module: option.None, parameters: [], ..) ->
+      qualify_name(name, imports)
     glance.NamedType(name:, module: option.Some(m), parameters: [], ..) ->
       m <> "." <> name
     glance.NamedType(name:, module: option.None, parameters: params, ..) ->
-      name <> "(" <> string.join(list.map(params, type_to_string), ", ") <> ")"
+      qualify_name(name, imports)
+      <> "("
+      <> string.join(
+        list.map(params, fn(p) { qualified_type_to_string(p, imports) }),
+        ", ",
+      )
+      <> ")"
     glance.NamedType(name:, module: option.Some(m), parameters: params, ..) ->
       m
       <> "."
       <> name
       <> "("
-      <> string.join(list.map(params, type_to_string), ", ")
+      <> string.join(
+        list.map(params, fn(p) { qualified_type_to_string(p, imports) }),
+        ", ",
+      )
       <> ")"
     glance.TupleType(elements:, ..) ->
-      "#(" <> string.join(list.map(elements, type_to_string), ", ") <> ")"
+      "#("
+      <> string.join(
+        list.map(elements, fn(e) { qualified_type_to_string(e, imports) }),
+        ", ",
+      )
+      <> ")"
     glance.VariableType(name:, ..) -> name
     glance.FunctionType(parameters:, return:, ..) ->
       "fn("
-      <> string.join(list.map(parameters, type_to_string), ", ")
+      <> string.join(
+        list.map(parameters, fn(p) { qualified_type_to_string(p, imports) }),
+        ", ",
+      )
       <> ") -> "
-      <> type_to_string(return)
+      <> qualified_type_to_string(return, imports)
     glance.HoleType(name:, ..) -> name
+  }
+}
+
+/// Qualify a type name if it's not a builtin.
+/// Looks up unqualified names in the import map.
+fn qualify_name(name: String, imports: dict.Dict(String, String)) -> String {
+  let builtins = [
+    "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option",
+    "BitArray", "Dynamic",
+  ]
+  case list.contains(builtins, name) {
+    True -> name
+    False ->
+      case dict.get(imports, name) {
+        Ok(module_alias) -> module_alias <> "." <> name
+        Error(Nil) -> name
+      }
   }
 }

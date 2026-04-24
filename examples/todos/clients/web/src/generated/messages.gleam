@@ -26,20 +26,25 @@ pub fn delete_todo(
 
 pub fn toggle_todo(
   id id: Int,
-  on_response on_response: fn(RemoteData(Todo, messages.TodoError)) -> msg,
+  on_response on_response: fn(RemoteData(messages.Todo, messages.TodoError)) ->
+    msg,
 ) -> Effect(msg) {
   send(ToggleTodo(id:), fn(raw) { on_response(decode_response(raw)) })
 }
 
 pub fn create_todo(
   params params: messages.TodoParams,
-  on_response on_response: fn(RemoteData(Todo, messages.TodoError)) -> msg,
+  on_response on_response: fn(RemoteData(messages.Todo, messages.TodoError)) ->
+    msg,
 ) -> Effect(msg) {
   send(CreateTodo(params:), fn(raw) { on_response(decode_response(raw)) })
 }
 
 pub fn get_todos(
-  on_response on_response: fn(RemoteData(List(Todo), messages.TodoError)) -> msg,
+  on_response on_response: fn(
+    RemoteData(List(messages.Todo), messages.TodoError),
+  ) ->
+    msg,
 ) -> Effect(msg) {
   send(GetTodos, fn(raw) { on_response(decode_response(raw)) })
 }
