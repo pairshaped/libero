@@ -11,7 +11,7 @@ import simplifile
 
 pub fn walk_and_write_dispatch_atoms_test() {
   let assert Ok(#(modules, module_files)) =
-    scanner.scan_message_modules(shared_src: "examples/todos/shared/src/shared")
+    scanner.scan_message_modules(shared_src: "test/fixtures/shared/src/shared")
 
   let assert Ok(discovered) =
     walker.walk_message_registry_types(

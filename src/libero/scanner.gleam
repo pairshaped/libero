@@ -49,6 +49,24 @@ pub type MessageModule {
   )
 }
 
+/// A single handler endpoint discovered by scanning function signatures.
+/// Each represents one RPC function that clients can call.
+pub type HandlerEndpoint {
+  HandlerEndpoint(
+    /// Handler module path, e.g. "server/handler"
+    module_path: String,
+    /// Function name, e.g. "get_todos"
+    fn_name: String,
+    /// Parameters excluding state, with labels and type annotations.
+    /// Each entry is #(label, type_annotation_string).
+    /// e.g. [#("id", "Int"), #("params", "TodoParams")]
+    params: List(#(String, String)),
+    /// The full return type annotation string of the first tuple element.
+    /// e.g. "Result(List(Todo), TodoError)" or "List(Todo)"
+    return_type_str: String,
+  )
+}
+
 /// A discovered handler: a server module exporting `pub fn update_from_client`
 /// with the shared module path it handles (resolved from the msg parameter type).
 type DiscoveredHandler {
@@ -542,4 +560,138 @@ pub fn last_module_segment(module_path module_path: String) -> String {
   string.split(module_path, "/")
   |> list.last
   |> result.unwrap(or: module_path)
+}
+
+// ---------- Handler endpoint scanning ----------
+
+/// Scan server source for handler endpoint functions.
+/// A handler endpoint is any public function whose last parameter
+/// is typed as SharedState and whose return type is #(something, SharedState).
+pub fn scan_handler_endpoints(
+  server_src server_src: String,
+) -> Result(List(HandlerEndpoint), List(GenError)) {
+  let files =
+    walk_directory(path: server_src)
+    |> result.map_error(fn(cause) { [cause] })
+  use files <- result.try(files)
+  let endpoints =
+    list.flat_map(files, fn(file_path) { parse_endpoints(file_path: file_path) })
+  Ok(endpoints)
+}
+
+fn parse_endpoints(file_path file_path: String) -> List(HandlerEndpoint) {
+  let result = {
+    use content <- result.try(
+      simplifile.read(file_path) |> result.replace_error(Nil),
+    )
+    use parsed <- result.try(
+      glance.module(content) |> result.replace_error(Nil),
+    )
+    let module_path = derive_module_path(file_path: file_path)
+    Ok(
+      list.filter_map(parsed.functions, fn(def) {
+        let glance.Definition(_, func) = def
+        case func.publicity == glance.Public {
+          False -> Error(Nil)
+          True -> parse_single_endpoint(func, module_path)
+        }
+      }),
+    )
+  }
+  case result {
+    Ok(endpoints) -> endpoints
+    Error(Nil) -> []
+  }
+}
+
+fn parse_single_endpoint(
+  func: glance.Function,
+  module_path: String,
+) -> Result(HandlerEndpoint, Nil) {
+  // Skip update_from_client (old convention)
+  use <- bool.guard(when: func.name == "update_from_client", return: Error(Nil))
+
+  // Must have at least one parameter
+  let params = func.parameters
+  use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
+
+  // Last parameter must be typed as SharedState
+  let assert Ok(last_param) = list.last(params)
+  use last_type <- result.try(option.to_result(last_param.type_, Nil))
+  use <- bool.guard(when: !is_shared_state_type(last_type), return: Error(Nil))
+
+  // Return type must be a tuple #(something, SharedState)
+  use return_type <- result.try(option.to_result(func.return, Nil))
+  use #(response_type, _state_type) <- result.try(extract_handler_return(
+    return_type,
+  ))
+
+  // Extract non-state parameters with their labels and types
+  let non_state_params = list.take(params, list.length(params) - 1)
+  let param_info =
+    list.filter_map(non_state_params, fn(p) {
+      case p.label, p.type_ {
+        option.Some(label), option.Some(type_) ->
+          Ok(#(label, type_to_string(type_)))
+        _, _ -> Error(Nil)
+      }
+    })
+
+  Ok(HandlerEndpoint(
+    module_path: module_path,
+    fn_name: func.name,
+    params: param_info,
+    return_type_str: type_to_string(response_type),
+  ))
+}
+
+/// Check if a type annotation is SharedState (possibly qualified).
+fn is_shared_state_type(t: glance.Type) -> Bool {
+  case t {
+    glance.NamedType(name: "SharedState", ..) -> True
+    _ -> False
+  }
+}
+
+/// Extract the two elements from a #(response, SharedState) return type.
+/// Returns Error(Nil) if the return type doesn't match this pattern.
+fn extract_handler_return(
+  t: glance.Type,
+) -> Result(#(glance.Type, glance.Type), Nil) {
+  case t {
+    glance.TupleType(elements: [response, state], ..) ->
+      case is_shared_state_type(state) {
+        True -> Ok(#(response, state))
+        False -> Error(Nil)
+      }
+    _ -> Error(Nil)
+  }
+}
+
+/// Convert a glance Type AST to a string representation.
+/// Used for storing type annotations as strings in HandlerEndpoint.
+fn type_to_string(t: glance.Type) -> String {
+  case t {
+    glance.NamedType(name:, module: option.None, parameters: [], ..) -> name
+    glance.NamedType(name:, module: option.Some(m), parameters: [], ..) ->
+      m <> "." <> name
+    glance.NamedType(name:, module: option.None, parameters: params, ..) ->
+      name <> "(" <> string.join(list.map(params, type_to_string), ", ") <> ")"
+    glance.NamedType(name:, module: option.Some(m), parameters: params, ..) ->
+      m
+      <> "."
+      <> name
+      <> "("
+      <> string.join(list.map(params, type_to_string), ", ")
+      <> ")"
+    glance.TupleType(elements:, ..) ->
+      "#(" <> string.join(list.map(elements, type_to_string), ", ") <> ")"
+    glance.VariableType(name:, ..) -> name
+    glance.FunctionType(parameters:, return:, ..) ->
+      "fn("
+      <> string.join(list.map(parameters, type_to_string), ", ")
+      <> ") -> "
+      <> type_to_string(return)
+    glance.HoleType(name:, ..) -> name
+  }
 }
