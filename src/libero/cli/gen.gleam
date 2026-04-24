@@ -176,10 +176,18 @@ fn run_endpoint_convention(
   )
 
   // Determine shared module path from the shared_src dir
-  // For now, use the first .gleam file found in shared_src as the module path
   let shared_module_path =
     scanner.scan_shared_module_path(shared_src: shared_src)
     |> result.unwrap("shared/messages")
+
+  // Walk shared types for atom registration and decoder generation
+  use discovered <- result.try(
+    walker.walk_shared_types(shared_src: shared_src)
+    |> result.map_error(fn(errors) {
+      list.each(errors, gen_error.print_error)
+      "type walk failed"
+    }),
+  )
 
   // Run codegen for each client
   use _ <- result.try(
@@ -190,6 +198,7 @@ fn run_endpoint_convention(
         client:,
         endpoints:,
         shared_module_path:,
+        discovered:,
       )
     }),
   )
@@ -236,6 +245,7 @@ fn run_endpoint_client_codegen(
   client client: toml_config.ClientConfig,
   endpoints endpoints: List(scanner.HandlerEndpoint),
   shared_module_path shared_module_path: String,
+  discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, String) {
   io.println("libero: generating stubs for client: " <> client.name)
 
@@ -307,6 +317,15 @@ fn run_endpoint_client_codegen(
     }),
   )
 
+  // Atom registration (server-side)
+  use _ <- result.try(
+    codegen.write_atoms(config:, discovered:)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_atoms failed"
+    }),
+  )
+
   // Client-side (convention-independent)
   use _ <- result.try(
     codegen.write_config(config:)
@@ -320,6 +339,13 @@ fn run_endpoint_client_codegen(
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_decoders_gleam failed"
+    }),
+  )
+  use _ <- result.try(
+    codegen.write_decoders_ffi(config:, discovered:)
+    |> result.map_error(fn(err) {
+      gen_error.print_error(err)
+      "write_decoders_ffi failed"
     }),
   )
   use _ <- result.try(

@@ -23,13 +23,10 @@ ensure() ->
 do_ensure() ->
     lists:foreach(fun(B) -> binary_to_atom(B) end, [
         <<"app_error">>,
-        <<"create">>,
         <<"decode_error">>,
-        <<"delete">>,
         <<"error">>,
         <<"false">>,
         <<"internal_error">>,
-        <<"load_all">>,
         <<"malformed_request">>,
         <<"nil">>,
         <<"none">>,
@@ -38,12 +35,7 @@ do_ensure() ->
         <<"some">>,
         <<"title_required">>,
         <<"todo">>,
-        <<"todo_created">>,
-        <<"todo_deleted">>,
         <<"todo_params">>,
-        <<"todo_toggled">>,
-        <<"todos_loaded">>,
-        <<"toggle">>,
         <<"true">>,
         <<"unknown_function">>
     ]),

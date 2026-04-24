@@ -156,6 +156,81 @@ pub fn walk_message_registry_types(
   )
 }
 
+/// Walk all exported custom types from a list of shared source files.
+/// Used by the endpoint convention where there's no MsgFromClient/MsgFromServer
+/// to seed from. Instead, we walk all exported types in shared/.
+pub fn walk_shared_types(
+  shared_src shared_src: String,
+) -> Result(List(DiscoveredType), List(GenError)) {
+  // Find all .gleam files in the shared source directory
+  use files <- result.try(
+    walk_shared_files(shared_src)
+    |> result.map_error(fn(err) { [err] }),
+  )
+
+  // Build module_files dict
+  let module_files =
+    list.fold(files, dict.new(), fn(acc, file_path) {
+      let module_path = derive_shared_module_path(file_path)
+      dict.insert(acc, module_path, file_path)
+    })
+
+  // Seed from all exported custom types in all shared files
+  let seed =
+    list.fold(files, set.new(), fn(acc, file_path) {
+      let module_path = derive_shared_module_path(file_path)
+      case simplifile.read(file_path) {
+        Error(_) -> acc
+        Ok(content) ->
+          case glance.module(content) {
+            Error(_) -> acc
+            Ok(parsed) ->
+              list.fold(parsed.custom_types, acc, fn(inner, ct) {
+                let glance.Definition(_, t) = ct
+                case t.publicity == glance.Public {
+                  True -> set.insert(inner, #(module_path, t.name))
+                  False -> inner
+                }
+              })
+          }
+      }
+    })
+    |> set.to_list
+
+  do_walk(
+    WalkerState(
+      queue: seed,
+      visited: set.new(),
+      discovered: [],
+      module_files: module_files,
+      parsed_cache: dict.new(),
+      errors: [],
+    ),
+  )
+}
+
+/// Walk a directory for .gleam files (simplified version for shared/)
+fn walk_shared_files(path: String) -> Result(List(String), GenError) {
+  simplifile.get_files(path)
+  |> result.map(fn(files) {
+    list.filter(files, fn(f) { string.ends_with(f, ".gleam") })
+  })
+  |> result.map_error(fn(cause) { gen_error.CannotReadDir(path:, cause:) })
+}
+
+/// Derive a module path from a shared file path.
+/// e.g. "examples/todos/shared/src/shared/types.gleam" -> "shared/types"
+fn derive_shared_module_path(file_path: String) -> String {
+  // Find "shared/src/" and take everything after it, minus ".gleam"
+  case string.split(file_path, "shared/src/") {
+    [_, after] -> string.replace(after, ".gleam", "")
+    _ ->
+      // Fallback: just strip directory prefix and .gleam
+      file_path
+      |> string.replace(".gleam", "")
+  }
+}
+
 fn do_walk(state: WalkerState) -> Result(List(DiscoveredType), List(GenError)) {
   case state.queue {
     [] ->
