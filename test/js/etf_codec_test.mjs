@@ -1216,7 +1216,6 @@ test("FloatRegistry", "registry roundtrip: whole-number floats preserved BEAM â†
 // Response frame wire shape: Result(MsgFromServer, RpcError).
 // Error variants per libero/error.gleam:
 //   malformed_request                 -> MalformedRequest (bare atom)
-//   {app_error, appErr}               -> AppError(appErr)
 //   {unknown_function, name}          -> UnknownFunction(name)
 //   {internal_error, traceId, msg}    -> InternalError(traceId, msg)
 
@@ -1225,11 +1224,6 @@ console.log("\nRpcError envelope tests:");
 testDecode("Error(MalformedRequest) envelope",
   "{error, malformed_request}", r => {
     assert.deepEqual(r, ["error", "malformed_request"]);
-  });
-
-testDecode("Error(AppError) envelope",
-  "{error, {app_error, <<\"something failed\">>}}", r => {
-    assert.deepEqual(r, ["error", ["app_error", "something failed"]]);
   });
 
 testDecode("Error(UnknownFunction) envelope",

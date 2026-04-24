@@ -13,7 +13,7 @@ import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
 import { Ok, Error as ResultError, CustomType, Empty, NonEmpty, BitArray } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
-import { InternalError, AppError, MalformedRequest, UnknownFunction } from "./error.mjs";
+import { InternalError, MalformedRequest, UnknownFunction } from "./error.mjs";
 
 // ---------- Error names ----------
 //
@@ -883,7 +883,6 @@ function makeConnectionError(message) {
 // 0-arity variants arrive as a bare atom string; variants with fields
 // arrive as atom-tagged arrays. Wire shape matches libero/error.gleam:
 //   "malformed_request"                -> MalformedRequest
-//   ["app_error", appErr]              -> AppError(appErr)
 //   ["unknown_function", name]         -> UnknownFunction(name)
 //   ["internal_error", traceId, msg]   -> InternalError(traceId, msg)
 function decodeRpcError(term) {
@@ -892,7 +891,6 @@ function decodeRpcError(term) {
     return new InternalError("", "Malformed RpcError: " + String(term));
   }
   switch (term[0]) {
-    case "app_error": return new AppError(term[1]);
     case "malformed_request": return new MalformedRequest();
     case "unknown_function": return new UnknownFunction(term[1]);
     case "internal_error": return new InternalError(term[1], term[2]);

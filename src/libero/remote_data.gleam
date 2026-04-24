@@ -98,21 +98,21 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
 /// Convert a libero RPC response (Dynamic) into a `RemoteData` value.
 ///
 /// The server-side dispatch ships the full MsgFromServer envelope so the
-/// wire response is `Result(MsgFromServer.Variant(Result(payload, domain_err)), RpcError(app_err))`.
+/// wire response is `Result(MsgFromServer.Variant(Result(payload, domain_err)), RpcError)`.
 /// This helper peels the MsgFromServer wrapper and collapses the result
 /// into the two post-response states.
 ///
 /// The `format_domain` callback formats domain errors (which the page
 /// owns and pattern-matches on its specific error type). Framework
-/// errors (internal, unknown function, malformed request, server
-/// AppError) are formatted by libero's default formatter.
+/// errors (internal, unknown function, malformed request) are formatted
+/// by libero's default formatter.
 pub fn from_response(
   raw raw: Dynamic,
   format_domain format_domain: fn(domain) -> String,
 ) -> RemoteData(payload, RpcFailure) {
   // BY DESIGN: wire.coerce is an unwitnessed cast. Type safety relies on
   // both sides being built from the same shared/ types.
-  let outer: Result(Dynamic, RpcError(app)) = wire.coerce(raw)
+  let outer: Result(Dynamic, RpcError) = wire.coerce(raw)
   case outer {
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))
     Ok(wrapped) -> {
@@ -142,9 +142,8 @@ fn peel_msg_wrapper(wrapper: Dynamic) -> Dynamic {
 /// Default formatter for framework-level RPC errors.
 /// Domain errors travel inside `Ok(Error(domain))` and are formatted
 /// by the caller's `format_domain` function.
-fn format_rpc_error(err: RpcError(a)) -> RpcFailure {
+fn format_rpc_error(err: RpcError) -> RpcFailure {
   case err {
-    error.AppError(_) -> FrameworkFailure(message: "Server application error")
     error.InternalError(_, message) -> FrameworkFailure(message:)
     error.UnknownFunction(name) ->
       FrameworkFailure(message: "Unknown RPC: " <> name)
