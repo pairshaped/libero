@@ -72,7 +72,7 @@ pub fn write_dispatch(
           Ok(
             "    Ok(#(\""
             <> m.module_path
-            <> "\", msg)) ->\n      dispatch(state, fn() { "
+            <> "\", request_id, msg)) ->\n      dispatch(state, request_id, fn() { "
             <> alias
             <> ".update_from_client(msg: wire.coerce(msg), state:) })",
           )
@@ -104,7 +104,7 @@ pub fn write_dispatch(
           Ok(
             "    Ok(#(\""
             <> m.module_path
-            <> "\", msg)) ->\n      dispatch(state, fn() {\n"
+            <> "\", request_id, msg)) ->\n      dispatch(state, request_id, fn() {\n"
             <> body
             <> "\n        result\n      })",
           )
@@ -113,10 +113,10 @@ pub fn write_dispatch(
     })
 
   let ok_unknown_arm =
-    "    Ok(#(name, _)) ->\n      #(wire.tag_response(wire.encode(Error(UnknownFunction(name)))), None, state)"
+    "    Ok(#(name, _request_id, _)) ->\n      #(wire.tag_response(request_id: 0, data: wire.encode(Error(UnknownFunction(name)))), None, state)"
 
   let error_arm =
-    "    Error(_) ->\n      #(wire.tag_response(wire.encode(Error(MalformedRequest))), None, state)"
+    "    Error(_) ->\n      #(wire.tag_response(request_id: 0, data: wire.encode(Error(MalformedRequest))), None, state)"
 
   let all_arms = list.flatten([case_arms, [ok_unknown_arm, error_arm]])
 
@@ -160,6 +160,7 @@ pub fn handle(
 
 fn dispatch(
   state state: SharedState,
+  request_id request_id: Int,
   call call: fn() -> Result(#(a, SharedState), AppError),
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case trace.try_call(call) {
@@ -169,13 +170,13 @@ fn dispatch(
       // Encoding runs under try_call so any serialization panic (e.g.
       // a value containing an unencodable term) is captured and surfaced
       // as InternalError instead of crashing the websocket handler.
-      safe_encode(fn() { wire.encode(Ok(value)) }, new_state, \"dispatch_encode_ok\")
+      safe_encode(fn() { wire.encode(Ok(value)) }, new_state, request_id, \"dispatch_encode_ok\")
     Ok(Error(app_err)) ->
-      safe_encode(fn() { wire.encode(Error(error.AppError(app_err))) }, state, \"dispatch_encode_app_err\")
+      safe_encode(fn() { wire.encode(Error(error.AppError(app_err))) }, state, request_id, \"dispatch_encode_app_err\")
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
-        wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
+        wire.tag_response(request_id:, data: wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
         Some(error.PanicInfo(trace_id:, fn_name: \"dispatch\", reason:)),
         state,
       )
@@ -190,14 +191,15 @@ fn dispatch(
 fn safe_encode(
   encoder: fn() -> BitArray,
   state: SharedState,
+  request_id: Int,
   fn_name: String,
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case trace.try_call(encoder) {
-    Ok(bytes) -> #(wire.tag_response(bytes), None, state)
+    Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
-        wire.tag_response(wire.encode(Error(InternalError(trace_id, \"Response encoding failed\")))),
+        wire.tag_response(request_id:, data: wire.encode(Error(InternalError(trace_id, \"Response encoding failed\")))),
         Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
         state,
       )
