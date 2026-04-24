@@ -47,6 +47,8 @@ type DiscoveredHandler {
     handler_module: String,
     /// The shared module path this handler serves, e.g. "shared/todos"
     shared_module: String,
+    /// MsgFromClient constructor names matched in the case arms
+    handled_variants: List(String),
   )
 }
 
@@ -164,9 +166,11 @@ fn parse_handler(file_path file_path: String) -> Result(DiscoveredHandler, Nil) 
     imports: parsed.imports,
   ))
   let handler_module = derive_module_path(file_path: file_path)
+  let handled_variants = extract_handled_variants(func)
   Ok(DiscoveredHandler(
     handler_module: handler_module,
     shared_module: shared_module,
+    handled_variants: handled_variants,
   ))
 }
 
@@ -230,6 +234,32 @@ fn resolve_unqualified(
       True -> Ok(imp.module)
       False -> Error(Nil)
     }
+  })
+}
+
+// ---------- Variant extraction ----------
+
+/// Extract MsgFromClient variant names from the case arms in update_from_client.
+fn extract_handled_variants(func: glance.Function) -> List(String) {
+  list.flat_map(func.body, fn(stmt) {
+    case stmt {
+      glance.Expression(glance.Case(subjects: _, clauses:, ..)) ->
+        extract_variant_names(clauses)
+      _ -> []
+    }
+  })
+}
+
+fn extract_variant_names(clauses: List(glance.Clause)) -> List(String) {
+  list.flat_map(clauses, fn(clause) {
+    list.flat_map(clause.patterns, fn(pattern_list) {
+      list.filter_map(pattern_list, fn(pattern) {
+        case pattern {
+          glance.PatternVariant(constructor: name, ..) -> Ok(name)
+          _ -> Error(Nil)
+        }
+      })
+    })
   })
 }
 
