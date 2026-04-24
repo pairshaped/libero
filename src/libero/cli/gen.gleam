@@ -204,7 +204,6 @@ fn run_client_codegen(
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
       shared_state_module: toml_cfg.shared_state_module,
-      app_error_module: toml_cfg.app_error_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)

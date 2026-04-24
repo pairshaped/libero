@@ -29,7 +29,6 @@ pub fn dispatch_contains_state_threading_test() {
       server_generated: output_dir,
       atoms_module: "server@generated@libero@rpc_atoms",
       shared_state_module: "core/shared_state",
-      app_error_module: "core/app_error",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 

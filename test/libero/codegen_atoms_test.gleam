@@ -27,7 +27,6 @@ pub fn walk_and_write_dispatch_atoms_test() {
       server_generated: output_dir,
       atoms_module: "test@rpc_atoms",
       shared_state_module: "core/shared_state",
-      app_error_module: "core/app_error",
     )
   let assert Ok(dispatch) = simplifile.read(output_dir <> "/dispatch.gleam")
 
