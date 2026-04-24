@@ -3,8 +3,8 @@ import libero/scanner
 
 // Four criteria for an RPC endpoint:
 // 1. Public function
-// 2. Last parameter is SharedState
-// 3. Return type is #(something, SharedState)
+// 2. Last parameter is HandlerContext
+// 3. Return type is #(something, HandlerContext)
 // 4. All types in params and return are shared (or builtins)
 //
 // Each test below has 3 of 4 criteria met, with one missing.
@@ -15,13 +15,13 @@ pub fn excludes_private_function_test() {
   let assert False = list.contains(names, "internal_helper")
 }
 
-/// Missing criterion 2: no SharedState parameter
-pub fn excludes_no_shared_state_param_test() {
+/// Missing criterion 2: no HandlerContext parameter
+pub fn excludes_no_handler_context_param_test() {
   let names = scan_fixture_names()
   let assert False = list.contains(names, "utility_function")
 }
 
-/// Missing criterion 3: doesn't return #(something, SharedState)
+/// Missing criterion 3: doesn't return #(something, HandlerContext)
 pub fn excludes_wrong_return_shape_test() {
   let names = scan_fixture_names()
   let assert False = list.contains(names, "process_items")
@@ -39,7 +39,7 @@ pub fn excludes_server_only_param_type_test() {
   let assert False = list.contains(names, "log_action")
 }
 
-/// SharedState in wrong position in return tuple (first instead of last)
+/// HandlerContext in wrong position in return tuple (first instead of last)
 pub fn excludes_wrong_return_order_test() {
   let names = scan_fixture_names()
   let assert False = list.contains(names, "wrong_order")

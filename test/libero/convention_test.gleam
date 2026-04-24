@@ -36,7 +36,7 @@ pub fn validate_fixture_missing_handler_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: "/tmp/nonexistent_fixture_server_src",
-      shared_state_path: "/tmp/nonexistent_fixture_server_src/server/shared_state.gleam",
+      context_path: "/tmp/nonexistent_fixture_server_src/server/context.gleam",
     )
   let assert True =
     list.any(errors, fn(e) {
@@ -47,7 +47,7 @@ pub fn validate_fixture_missing_handler_test() {
     })
 }
 
-pub fn scaffold_shared_state_when_missing_test() {
+pub fn scaffold_context_when_missing_test() {
   let dir = "build/.test_scaffold"
   let server_dir = dir <> "/server"
   let _ = simplifile.create_directory_all(server_dir)
@@ -65,11 +65,11 @@ pub fn scaffold_shared_state_when_missing_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: dir,
-      shared_state_path: server_dir <> "/shared_state.gleam",
+      context_path: server_dir <> "/context.gleam",
     )
-  // shared_state.gleam should have been scaffolded
-  let assert Ok(content) = simplifile.read(server_dir <> "/shared_state.gleam")
-  let assert True = string.contains(content, "pub type SharedState")
+  // context.gleam should have been scaffolded
+  let assert Ok(content) = simplifile.read(server_dir <> "/context.gleam")
+  let assert True = string.contains(content, "pub type HandlerContext")
   let assert True = string.contains(content, "pub fn new()")
 
   // Cleanup
@@ -90,7 +90,7 @@ pub fn validate_missing_handler_test() {
     scanner.validate_conventions(
       message_modules: modules,
       server_src: "/tmp/nonexistent_server_src",
-      shared_state_path: "/tmp/nonexistent_server_src/server/shared_state.gleam",
+      context_path: "/tmp/nonexistent_server_src/server/context.gleam",
     )
   let assert True =
     list.any(errors, fn(e) {

@@ -378,7 +378,7 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 
 /// Validate that the server package follows the conventions required for
 /// code generation:
-/// 1. `server/shared_state.gleam` exists
+/// 1. `server/context.gleam` exists
 /// 2. For each message module with `has_msg_from_client`, a server module
 ///    exports `pub fn update_from_client` with the correct msg type
 ///
@@ -388,13 +388,13 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 pub fn validate_conventions(
   message_modules message_modules: List(MessageModule),
   server_src server_src: String,
-  shared_state_path shared_state_path: String,
+  context_path context_path: String,
 ) -> Result(List(MessageModule), List(GenError)) {
-  let shared_state_errors = case
-    simplifile.is_file(shared_state_path) |> result.unwrap(or: False)
+  let context_errors = case
+    simplifile.is_file(context_path) |> result.unwrap(or: False)
   {
     True -> []
-    False -> scaffold_shared_state(shared_state_path)
+    False -> scaffold_context(context_path)
   }
 
   // Scan server source for handler modules
@@ -454,7 +454,7 @@ pub fn validate_conventions(
 
   let all_errors =
     list.flatten([
-      shared_state_errors,
+      context_errors,
       scan_errors,
       list.reverse(handler_errors),
     ])
@@ -465,21 +465,21 @@ pub fn validate_conventions(
   }
 }
 
-/// Scaffold a default shared_state.gleam if missing.
+/// Scaffold a default context.gleam if missing.
 /// Returns an empty error list on success so it integrates
 /// with the existing error-collection flow.
-fn scaffold_shared_state(path: String) -> List(GenError) {
+fn scaffold_context(path: String) -> List(GenError) {
   let content =
-    "/// Replace this with your application's shared state type.
+    "/// Replace this with your application's handler context type.
 /// If your state lives in ETS or a database, this unit type
 /// is fine as-is.
 
-pub type SharedState {
-  SharedState
+pub type HandlerContext {
+  HandlerContext
 }
 
-pub fn new() -> SharedState {
-  SharedState
+pub fn new() -> HandlerContext {
+  HandlerContext
 }
 "
   case simplifile.write(path, content) {
@@ -582,7 +582,7 @@ pub fn scan_shared_module_path(
 
 /// Scan server source for handler endpoint functions.
 /// A handler endpoint is any public function whose last parameter
-/// is typed as SharedState, return type is #(something, SharedState),
+/// is typed as HandlerContext, return type is #(something, HandlerContext),
 /// and all types in params/return are from shared/ or builtins.
 pub fn scan_handler_endpoints(
   server_src server_src: String,
@@ -689,12 +689,15 @@ fn parse_single_endpoint(
   let params = func.parameters
   use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
 
-  // Last parameter must be typed as SharedState
+  // Last parameter must be typed as HandlerContext
   let assert Ok(last_param) = list.last(params)
   use last_type <- result.try(option.to_result(last_param.type_, Nil))
-  use <- bool.guard(when: !is_shared_state_type(last_type), return: Error(Nil))
+  use <- bool.guard(
+    when: !is_handler_context_type(last_type),
+    return: Error(Nil),
+  )
 
-  // Return type must be a tuple #(something, SharedState)
+  // Return type must be a tuple #(something, HandlerContext)
   use return_type <- result.try(option.to_result(func.return, Nil))
   use #(response_type, _state_type) <- result.try(extract_handler_return(
     return_type,
@@ -728,22 +731,22 @@ fn parse_single_endpoint(
   ))
 }
 
-/// Check if a type annotation is SharedState (possibly qualified).
-fn is_shared_state_type(t: glance.Type) -> Bool {
+/// Check if a type annotation is HandlerContext (possibly qualified).
+fn is_handler_context_type(t: glance.Type) -> Bool {
   case t {
-    glance.NamedType(name: "SharedState", ..) -> True
+    glance.NamedType(name: "HandlerContext", ..) -> True
     _ -> False
   }
 }
 
-/// Extract the two elements from a #(response, SharedState) return type.
+/// Extract the two elements from a #(response, HandlerContext) return type.
 /// Returns Error(Nil) if the return type doesn't match this pattern.
 fn extract_handler_return(
   t: glance.Type,
 ) -> Result(#(glance.Type, glance.Type), Nil) {
   case t {
     glance.TupleType(elements: [response, state], ..) ->
-      case is_shared_state_type(state) {
+      case is_handler_context_type(state) {
         True -> Ok(#(response, state))
         False -> Error(Nil)
       }

@@ -89,10 +89,10 @@ fn scaffold_files(
   ))
   use _ <- helpers.map_err(
     helpers.write_formatted(
-      path: server_dir <> "/shared_state.gleam",
+      path: server_dir <> "/context.gleam",
       content: case database {
-        None -> templates.starter_shared_state()
-        Some(db) -> db_templates.shared_state(db)
+        None -> templates.starter_context()
+        Some(db) -> db_templates.context(db)
       },
     ),
   )

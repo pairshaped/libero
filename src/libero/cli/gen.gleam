@@ -96,14 +96,13 @@ fn run_classic_convention(
   )
 
   // Validate conventions
-  let shared_state_path =
-    server_src <> "/" <> toml_cfg.shared_state_module <> ".gleam"
+  let context_path = server_src <> "/" <> toml_cfg.context_module <> ".gleam"
 
   use message_modules <- result.try(
     scanner.validate_conventions(
       message_modules: message_modules,
       server_src: server_src,
-      shared_state_path: shared_state_path,
+      context_path: context_path,
     )
     |> result.map_error(fn(errors) {
       list.each(errors, gen_error.print_error)
@@ -225,7 +224,7 @@ fn generate_main(
       app_name: toml_cfg.name,
       port: toml_cfg.port,
       server_generated: toml_cfg.server_generated_dir,
-      shared_state_module: toml_cfg.shared_state_module,
+      context_module: toml_cfg.context_module,
       js_client_names:,
     )
     |> result.map_error(fn(err) {
@@ -283,7 +282,7 @@ fn run_endpoint_client_codegen(
       endpoints:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
-      shared_state_module: toml_cfg.shared_state_module,
+      context_module: toml_cfg.context_module,
       shared_module_path:,
     )
     |> result.map_error(fn(err) {
@@ -309,7 +308,7 @@ fn run_endpoint_client_codegen(
   use _ <- result.try(
     codegen.write_websocket(
       server_generated: config.server_generated,
-      shared_state_module: toml_cfg.shared_state_module,
+      context_module: toml_cfg.context_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -405,7 +404,7 @@ fn run_client_codegen(
       message_modules:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
-      shared_state_module: toml_cfg.shared_state_module,
+      context_module: toml_cfg.context_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -425,7 +424,7 @@ fn run_client_codegen(
   use _ <- result.try(
     codegen.write_websocket(
       server_generated: config.server_generated,
-      shared_state_module: toml_cfg.shared_state_module,
+      context_module: toml_cfg.context_module,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)

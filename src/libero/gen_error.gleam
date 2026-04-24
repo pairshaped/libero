@@ -90,8 +90,8 @@ pub fn to_string(err: GenError) -> String {
         // " <> expected <> ".gleam
         pub fn update_from_client(
           msg msg: MsgFromClient,
-          state state: SharedState,
-        ) -> #(MsgFromServer, SharedState)"
+          state state: HandlerContext,
+        ) -> #(MsgFromServer, HandlerContext)"
 
     NoMessageModules(shared_path) -> "error: No message modules found
   \u{250c}\u{2500} " <> shared_path <> "/

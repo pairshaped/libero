@@ -1,15 +1,15 @@
 import gleam/list
 import gleeunit
+import server/context
 import server/handler
-import server/shared_state
 import shared/types.{Todo, TodoParams}
 
 pub fn main() {
   gleeunit.main()
 }
 
-fn fresh_state() -> shared_state.SharedState {
-  shared_state.new()
+fn fresh_state() -> context.HandlerContext {
+  context.new()
 }
 
 pub fn create_with_empty_title_returns_error_test() {

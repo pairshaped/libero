@@ -81,13 +81,13 @@ pub type MsgFromServer {
 
 /// Returns a skeleton handler module.
 pub fn starter_handler() -> String {
-  "import server/shared_state.{type SharedState}
+  "import server/context.{type HandlerContext}
 import shared/messages.{type MsgFromClient, type MsgFromServer, Ping, Pong}
 
 pub fn update_from_client(
   msg msg: MsgFromClient,
-  state state: SharedState,
-) -> #(MsgFromServer, SharedState) {
+  state state: HandlerContext,
+) -> #(MsgFromServer, HandlerContext) {
   case msg {
     Ping -> #(Pong(Ok(\"pong\")), state)
   }
@@ -95,14 +95,14 @@ pub fn update_from_client(
 "
 }
 
-/// Returns a skeleton SharedState module.
-pub fn starter_shared_state() -> String {
-  "pub type SharedState {
-  SharedState
+/// Returns a skeleton HandlerContext module.
+pub fn starter_context() -> String {
+  "pub type HandlerContext {
+  HandlerContext
 }
 
-pub fn new() -> SharedState {
-  SharedState
+pub fn new() -> HandlerContext {
+  HandlerContext
 }
 "
 }
@@ -110,7 +110,7 @@ pub fn new() -> SharedState {
 /// Returns a skeleton test that verifies the handler works.
 pub fn starter_test() -> String {
   "import server/handler
-import server/shared_state
+import server/context
 import shared/messages.{Ping, Pong}
 import gleeunit
 
@@ -119,7 +119,7 @@ pub fn main() {
 }
 
 pub fn ping_test() {
-  let state = shared_state.new()
+  let state = context.new()
   let assert #(Pong(Ok(\"pong\")), _) =
     handler.update_from_client(msg: Ping, state:)
 }
@@ -288,6 +288,6 @@ When you run `libero build`, it reads those types and generates:
 Your handler in `src/server/handler.gleam` pattern-matches on
 `MsgFromClient` variants and returns `MsgFromServer` values. Shared
 state (database connections, caches, etc.) is threaded through
-`SharedState` so every handler call has access to it.
+`HandlerContext` so every handler call has access to it.
 " <> db_section
 }

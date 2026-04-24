@@ -31,7 +31,7 @@ pub fn write_dispatch(
   message_modules message_modules: List(MessageModule),
   server_generated server_generated: String,
   atoms_module atoms_module: String,
-  shared_state_module shared_state_module: String,
+  context_module context_module: String,
 ) -> Result(Nil, GenError) {
   // Only modules with MsgFromClient need dispatch arms.
   let msg_from_client_modules =
@@ -136,26 +136,26 @@ import gleam/option.{type Option, None, Some}
 import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFunction}
 import libero/trace
 import libero/wire
-import " <> shared_state_module <> ".{type SharedState}
+import " <> context_module <> ".{type HandlerContext}
 " <> string.join(all_imports, "\n") <> "
 
 @external(erlang, \"" <> atoms_module <> "\", \"ensure\")
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
-  state state: SharedState,
+  state state: HandlerContext,
   data data: BitArray,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
 " <> string.join(all_arms, "\n") <> "
   }
 }
 
 fn dispatch(
-  state state: SharedState,
+  state state: HandlerContext,
   request_id request_id: Int,
-  call call: fn() -> #(a, SharedState),
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+  call call: fn() -> #(a, HandlerContext),
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(call) {
     Ok(#(value, new_state)) ->
       safe_encode(fn() { wire.encode(Ok(value)) }, new_state, request_id, \"dispatch_encode_ok\")
@@ -176,10 +176,10 @@ fn dispatch(
 /// can log it and stay alive.
 fn safe_encode(
   encoder: fn() -> BitArray,
-  state: SharedState,
+  state: HandlerContext,
   request_id: Int,
   fn_name: String,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(encoder) {
     Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
     Error(reason) -> {
@@ -201,12 +201,12 @@ fn safe_encode(
 
 /// Generate a dispatch module from handler endpoint functions.
 /// This is the handler-as-contract convention where each public function
-/// with a SharedState parameter becomes an RPC endpoint.
+/// with a HandlerContext parameter becomes an RPC endpoint.
 pub fn write_endpoint_dispatch(
   endpoints endpoints: List(scanner.HandlerEndpoint),
   server_generated server_generated: String,
   atoms_module atoms_module: String,
-  shared_state_module shared_state_module: String,
+  context_module context_module: String,
   shared_module_path shared_module_path: String,
 ) -> Result(Nil, GenError) {
   // Collect unique handler module imports
@@ -273,7 +273,7 @@ import gleam/option.{type Option, None, Some}
 import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFunction}
 import libero/trace
 import libero/wire
-import " <> shared_state_module <> ".{type SharedState}
+import " <> context_module <> ".{type HandlerContext}
 import " <> shared_module_path <> "
 " <> string.join(handler_imports, "\n") <> "
 
@@ -285,9 +285,9 @@ pub type ClientMsg {
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
-  state state: SharedState,
+  state state: HandlerContext,
   data data: BitArray,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
     Ok(#(\"" <> shared_module_path <> "\", request_id, msg)) -> {
       let typed_msg: ClientMsg = wire.coerce(msg)
@@ -303,10 +303,10 @@ pub fn handle(
 }
 
 fn dispatch(
-  state state: SharedState,
+  state state: HandlerContext,
   request_id request_id: Int,
-  call call: fn() -> #(a, SharedState),
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+  call call: fn() -> #(a, HandlerContext),
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(call) {
     Ok(#(value, new_state)) ->
       safe_encode(fn() { wire.encode(Ok(value)) }, new_state, request_id, \"dispatch_encode_ok\")
@@ -323,10 +323,10 @@ fn dispatch(
 
 fn safe_encode(
   encoder: fn() -> BitArray,
-  state: SharedState,
+  state: HandlerContext,
   request_id: Int,
   fn_name: String,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(encoder) {
     Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
     Error(reason) -> {
@@ -699,7 +699,7 @@ pub fn send_to_clients(
 /// Also writes the Erlang FFI for decoding push messages.
 pub fn write_websocket(
   server_generated server_generated: String,
-  shared_state_module shared_state_module: String,
+  context_module context_module: String,
 ) -> Result(Nil, GenError) {
   let gleam_output = server_generated <> "/websocket.gleam"
   let module_path = case string.split_once(server_generated, "src/") {
@@ -724,10 +724,10 @@ import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
 import " <> module_path <> "/dispatch
-import " <> shared_state_module <> ".{type SharedState}
+import " <> context_module <> ".{type HandlerContext}
 
 pub type ConnState {
-  ConnState(state: SharedState, topics: List(String), logger: Logger)
+  ConnState(state: HandlerContext, topics: List(String), logger: Logger)
 }
 
 type PushMsg {
@@ -741,7 +741,7 @@ type PushMsg {
 /// or pass your own structured logger.
 pub fn upgrade(
   request req: Request(Connection),
-  state state: SharedState,
+  state state: HandlerContext,
   topics topics: List(String),
   logger logger: Logger,
 ) {
@@ -756,7 +756,7 @@ pub fn upgrade(
   )
 }
 
-fn on_init(state: SharedState, topics: List(String), logger: Logger) {
+fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
   fn(_conn: mist.WebsocketConnection) -> #(ConnState, Option(process.Selector(PushMsg))) {
     logger.debug(\"WebSocket: connected\")
     list.each(topics, fn(t) { push.join(topic: t) })
@@ -1372,7 +1372,7 @@ pub fn write_main(
   app_name app_name: String,
   port port: Int,
   server_generated server_generated: String,
-  shared_state_module shared_state_module: String,
+  context_module context_module: String,
   js_client_names js_client_names: List(String),
 ) -> Result(Nil, GenError) {
   let output = "src/" <> string.replace(app_name, "-", "_") <> ".gleam"
@@ -1438,12 +1438,12 @@ import libero/ws_logger
 import mist.{type Connection}
 import " <> dispatch_module <> "/dispatch
 import " <> ws_module <> " as ws
-import " <> shared_state_module <> "
+import " <> context_module <> "
 
 pub fn main() {
   let _ = push.init()
   let _ = dispatch.ensure_atoms()
-  let state = shared_state.new()
+  let state = context.new()
   let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
@@ -1468,7 +1468,7 @@ pub fn main() {
 
 fn handle_rpc(
   req: Request(Connection),
-  state: shared_state.SharedState,
+  state: context.HandlerContext,
   logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
   // Note: HTTP RPC is stateless — state mutations are not persisted across

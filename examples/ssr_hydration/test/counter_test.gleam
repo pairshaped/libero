@@ -2,9 +2,9 @@ import gleam/string
 import gleeunit
 import libero/ssr
 import lustre/element
+import server/context
 import server/generated/dispatch
 import server/handler
-import server/shared_state
 import shared/messages.{CounterUpdated, Decrement, GetCounter, Increment}
 import shared/views.{Model}
 
@@ -12,8 +12,8 @@ pub fn main() {
   gleeunit.main()
 }
 
-fn fresh_state() -> shared_state.SharedState {
-  shared_state.new()
+fn fresh_state() -> context.HandlerContext {
+  context.new()
 }
 
 pub fn get_counter_returns_zero_initially_test() {

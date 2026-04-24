@@ -54,12 +54,12 @@ query_function = \"server/db.query\"
   }
 }
 
-/// Returns shared_state.gleam content with a database connection field.
+/// Returns context.gleam content with a database connection field.
 ///
-/// SharedState is created once at server startup and passed into every
+/// HandlerContext is created once at server startup and passed into every
 /// handler call. Storing the database connection here means handlers
 /// don't need to open their own connections.
-pub fn shared_state(database: Database) -> String {
+pub fn context(database: Database) -> String {
   case database {
     Postgres ->
       "import pog
@@ -68,12 +68,12 @@ import server/db
 /// Shared state passed to every handler call.
 /// The `db` field holds a pog connection pool, so handlers can run
 /// queries without managing connections themselves.
-pub type SharedState {
-  SharedState(db: pog.Connection)
+pub type HandlerContext {
+  HandlerContext(db: pog.Connection)
 }
 
-pub fn new() -> SharedState {
-  SharedState(db: db.connect())
+pub fn new() -> HandlerContext {
+  HandlerContext(db: db.connect())
 }
 "
     Sqlite ->
@@ -83,12 +83,12 @@ import server/db
 /// Shared state passed to every handler call.
 /// The `db` field holds an open SQLite connection, so handlers can
 /// run queries without opening their own connections.
-pub type SharedState {
-  SharedState(db: sqlight.Connection)
+pub type HandlerContext {
+  HandlerContext(db: sqlight.Connection)
 }
 
-pub fn new() -> SharedState {
-  SharedState(db: db.connect())
+pub fn new() -> HandlerContext {
+  HandlerContext(db: db.connect())
 }
 "
   }
@@ -108,7 +108,7 @@ import pog
 /// Start a PostgreSQL connection pool using pog.
 ///
 /// pog manages a pool of connections for you, so calling this once at
-/// startup is enough. Handlers share the pool through SharedState.
+/// startup is enough. Handlers share the pool through HandlerContext.
 ///
 /// By default pog connects to localhost:5432 with the \"postgres\" user
 /// and database \"postgres\". To change this, modify the config below:
@@ -136,7 +136,7 @@ import logging
 import sqlight
 
 /// Connect to the SQLite database at the default path.
-/// Called once at startup; the connection lives in SharedState.
+/// Called once at startup; the connection lives in HandlerContext.
 pub fn connect() -> sqlight.Connection {
   open(\"data.db\")
 }

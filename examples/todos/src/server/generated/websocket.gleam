@@ -14,11 +14,11 @@ import gleam/string
 import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
+import server/context.{type HandlerContext}
 import server/generated/dispatch
-import server/shared_state.{type SharedState}
 
 pub type ConnState {
-  ConnState(state: SharedState, topics: List(String), logger: Logger)
+  ConnState(state: HandlerContext, topics: List(String), logger: Logger)
 }
 
 type PushMsg {
@@ -32,7 +32,7 @@ type PushMsg {
 /// or pass your own structured logger.
 pub fn upgrade(
   request req: Request(Connection),
-  state state: SharedState,
+  state state: HandlerContext,
   topics topics: List(String),
   logger logger: Logger,
 ) {
@@ -47,7 +47,7 @@ pub fn upgrade(
   )
 }
 
-fn on_init(state: SharedState, topics: List(String), logger: Logger) {
+fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
   fn(_conn: mist.WebsocketConnection) -> #(
     ConnState,
     Option(process.Selector(PushMsg)),

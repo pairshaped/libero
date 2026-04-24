@@ -29,8 +29,7 @@ pub fn scaffold_project_test() {
   let assert Ok(True) =
     simplifile.is_file(dir <> "/shared/src/shared/messages.gleam")
   let assert Ok(True) = simplifile.is_file(dir <> "/src/server/handler.gleam")
-  let assert Ok(True) =
-    simplifile.is_file(dir <> "/src/server/shared_state.gleam")
+  let assert Ok(True) = simplifile.is_file(dir <> "/src/server/context.gleam")
   let assert Ok(True) =
     simplifile.is_file(dir <> "/test/test_scaffold_test.gleam")
   let assert Ok(True) = simplifile.is_file(dir <> "/README.md")
@@ -60,9 +59,8 @@ pub fn scaffold_pg_test() {
   let assert Ok(db_gleam) = simplifile.read(dir <> "/src/server/db.gleam")
   let assert True = string.contains(db_gleam, "import pog")
 
-  let assert Ok(shared_state) =
-    simplifile.read(dir <> "/src/server/shared_state.gleam")
-  let assert True = string.contains(shared_state, "pog.Connection")
+  let assert Ok(ctx) = simplifile.read(dir <> "/src/server/context.gleam")
+  let assert True = string.contains(ctx, "pog.Connection")
 
   let assert Ok(readme) = simplifile.read(dir <> "/README.md")
   let assert True = string.contains(readme, "squirrel")
@@ -122,9 +120,8 @@ pub fn scaffold_sqlite_test() {
   let assert True = string.contains(db_gleam, "PRAGMA journal_mode")
   let assert True = string.contains(db_gleam, "pub fn query(")
 
-  let assert Ok(shared_state) =
-    simplifile.read(dir <> "/src/server/shared_state.gleam")
-  let assert True = string.contains(shared_state, "sqlight.Connection")
+  let assert Ok(ctx) = simplifile.read(dir <> "/src/server/context.gleam")
+  let assert True = string.contains(ctx, "sqlight.Connection")
 
   let assert Ok(readme) = simplifile.read(dir <> "/README.md")
   let assert True = string.contains(readme, "marmot")

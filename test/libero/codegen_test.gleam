@@ -28,13 +28,13 @@ pub fn dispatch_contains_state_threading_test() {
       message_modules: modules,
       server_generated: output_dir,
       atoms_module: "server@generated@libero@rpc_atoms",
-      shared_state_module: "core/shared_state",
+      context_module: "core/context",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
-  // Must return 3-tuple with SharedState
+  // Must return 3-tuple with HandlerContext
   let assert True =
-    string.contains(content, "#(BitArray, Option(PanicInfo), SharedState)")
+    string.contains(content, "#(BitArray, Option(PanicInfo), HandlerContext)")
   // Must call ensure_atoms
   let assert True = string.contains(content, "ensure_atoms()")
   // Must import discovered handler module with alias

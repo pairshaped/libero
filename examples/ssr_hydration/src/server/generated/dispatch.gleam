@@ -6,16 +6,16 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
+import server/context.{type HandlerContext}
 import server/handler as server_handler_handler
-import server/shared_state.{type SharedState}
 
 @external(erlang, "ssr_hydration@generated@rpc_atoms", "ensure")
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
-  state state: SharedState,
+  state state: HandlerContext,
   data data: BitArray,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
     Ok(#("shared/messages", request_id, msg)) ->
       dispatch(state, request_id, fn() {
@@ -41,10 +41,10 @@ pub fn handle(
 }
 
 fn dispatch(
-  state state: SharedState,
+  state state: HandlerContext,
   request_id request_id: Int,
-  call call: fn() -> #(a, SharedState),
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+  call call: fn() -> #(a, HandlerContext),
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(call) {
     Ok(#(value, new_state)) ->
       safe_encode(
@@ -75,10 +75,10 @@ fn dispatch(
 /// can log it and stay alive.
 fn safe_encode(
   encoder: fn() -> BitArray,
-  state: SharedState,
+  state: HandlerContext,
   request_id: Int,
   fn_name: String,
-) -> #(BitArray, Option(PanicInfo), SharedState) {
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(encoder) {
     Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
     Error(reason) -> {

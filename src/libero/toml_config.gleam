@@ -39,9 +39,9 @@ pub type TomlConfig {
     /// if messages lived in the server package, the JS client couldn't
     /// import them without pulling in wisp/sqlight (Erlang-only FFI).
     shared_src_dir: String,
-    /// Gleam module path to the SharedState type used by libero dispatch.
-    /// Default: "server/shared_state".
-    shared_state_module: String,
+    /// Gleam module path to the HandlerContext type used by libero dispatch.
+    /// Default: "server/context".
+    context_module: String,
   )
 }
 
@@ -127,9 +127,9 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     tom.get_string(parsed, ["tools", "libero", "shared", "src_dir"])
     |> result.unwrap("shared/src/shared")
 
-  let shared_state_module =
-    tom.get_string(parsed, ["tools", "libero", "shared_state_module"])
-    |> result.unwrap("server/shared_state")
+  let context_module =
+    tom.get_string(parsed, ["tools", "libero", "context_module"])
+    |> result.unwrap("server/context")
 
   use clients <- result.try(parse_clients(parsed))
 
@@ -142,7 +142,7 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
     server_generated_dir: server_generated_dir,
     server_atoms_path: server_atoms_path,
     shared_src_dir: shared_src_dir,
-    shared_state_module: shared_state_module,
+    context_module: context_module,
   ))
 }
 
