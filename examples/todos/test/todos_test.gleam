@@ -45,8 +45,7 @@ pub fn toggle_flips_completed_test() {
 
 pub fn toggle_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(Error(types.NotFound), _) =
-    handler.toggle_todo(id: 9999, state:)
+  let assert #(Error(types.NotFound), _) = handler.toggle_todo(id: 9999, state:)
 }
 
 pub fn delete_removes_todo_test() {
@@ -60,6 +59,5 @@ pub fn delete_removes_todo_test() {
 
 pub fn delete_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(Error(types.NotFound), _) =
-    handler.delete_todo(id: 9999, state:)
+  let assert #(Error(types.NotFound), _) = handler.delete_todo(id: 9999, state:)
 }
