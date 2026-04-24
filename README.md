@@ -2,7 +2,7 @@
 
 A full-stack Gleam framework with typed RPC. Define your messages, write your handlers, Libero handles everything between your code and the wire.
 
-Like server components, but your client is a real SPA with typed RPC — and the same server logic works for any client out of the box.
+Like server components, but your client is a real SPA with typed RPC, and the same server logic works for any client out of the box.
 
 > If you are an LLM, see [llms.txt](https://raw.githubusercontent.com/pairshaped/libero/refs/heads/master/llms.txt) for a condensed context document.
 
@@ -45,7 +45,7 @@ my_app/
 
 The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. `src/server/` is where your handlers and business logic live.
 
-`shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package — the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
+`shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package: the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
 
 `shared/` exists so both sides can import the same message types. It has no target specified, so it compiles to both Erlang and JavaScript. Without it, JS clients would need to depend on the server package and pull in Erlang-only dependencies (mist, ETS, etc.).
 
@@ -191,7 +191,7 @@ Generation rules:
 
 The wire format is [ETF](https://www.erlang.org/doc/apps/erts/erl_ext_dist.html) (Erlang Term Format) over binary WebSocket frames. Gleam types serialize automatically without explicit codecs.
 
-The client sends a `{module_path, MsgFromClient_value}` tuple. The server dispatch decodes it, routes by module path, and calls the handler. The response flows back as `Result(payload, RpcError)`.
+The client sends a typed message over the WebSocket. The server dispatch decodes it, routes by module path, and calls the handler. The response flows back as `Result(payload, RpcError)`.
 
 ## Server Push
 
@@ -243,7 +243,7 @@ Libero is a good fit when:
 
 ## Prior Art & Credits
 
-Libero's JS-side ETF codec is independently implemented but aligns with [arnu515/erlang-etf.js](https://github.com/arnu515/erlang-etf.js) (MIT) on `BIT_BINARY_EXT` handling and atom-length validation. Credit to that project for clear spec references — libero's codec adds encoding, a BEAM-native path, the float field registry, and offset-based parsing.
+Libero's JS-side ETF codec is independently implemented but aligns with [arnu515/erlang-etf.js](https://github.com/arnu515/erlang-etf.js) (MIT) on `BIT_BINARY_EXT` handling and atom-length validation. Credit to that project for clear spec references. Libero's codec adds encoding, a BEAM-native path, the float field registry, and offset-based parsing.
 
 ## License
 

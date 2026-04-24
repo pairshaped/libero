@@ -28,7 +28,7 @@ my_app/
     my_app_test.gleam
 ```
 
-The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. Gleam compiles to a single target per package, so `shared/` and `clients/` are separate nested packages (each with their own `gleam.toml`). `shared/` has no target, so it compiles to both Erlang and JavaScript — this lets both the server and JS clients import the same message types without the client pulling in Erlang-only dependencies.
+The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. Gleam compiles to a single target per package, so `shared/` and `clients/` are separate nested packages (each with their own `gleam.toml`). `shared/` has no target, so it compiles to both Erlang and JavaScript. This lets both the server and JS clients import the same message types without the client pulling in Erlang-only dependencies.
 
 ```
 root (server)     → shared, libero, mist     [target: erlang]
@@ -206,7 +206,7 @@ Topics are set during WebSocket upgrade (in the generated server entry point).
 
 ## Server-Side Rendering (SSR)
 
-SSR lets the server pre-render the initial page HTML with real data so the browser displays content immediately — no loading spinner, no blank page while JavaScript boots. The client then hydrates the pre-rendered DOM (attaches event handlers, connects WebSocket) and takes over as a normal SPA. Users see content faster, and search engines see fully rendered pages.
+SSR lets the server pre-render the initial page HTML with real data so the browser displays content immediately. No loading spinner, no blank page while JavaScript boots. The client then hydrates the pre-rendered DOM (attaches event handlers, connects WebSocket) and takes over as a normal SPA. Users see content faster, and search engines see fully rendered pages.
 
 The `libero/ssr` module provides four functions:
 
@@ -308,7 +308,7 @@ The server entry point (`src/<app>.gleam`) is generated once and never overwritt
 - Format: ETF (Erlang External Term Format). Binary, not text.
 - Call envelope: `{module_path, request_id, MsgFromClient_value}` (3-tuple with monotonic request ID).
 - Response frame: `<<0x00, request_id:32-big, etf_bytes>>`. Responses matched by ID, not FIFO.
-- Push frame: `<<0x01, etf_bytes>>` (no request ID — server-initiated).
+- Push frame: `<<0x01, etf_bytes>>` (no request ID, server-initiated).
 - Response payload: `Result(MsgFromServer_variant, RpcError(AppError))`.
 
 ## Error Model
@@ -328,7 +328,7 @@ pub type RemoteData(value, error) {
   Success(value)
 }
 
-/// Convenience alias — pins error to RpcFailure (like Elm's WebData).
+/// Convenience alias that pins error to RpcFailure (like Elm's WebData).
 pub type RpcData(value) = RemoteData(value, RpcFailure)
 ```
 
