@@ -1,17 +1,17 @@
 import ets_store
 import server/shared_state.{type SharedState}
-import shared/messages.{type Todo, NotFound, TitleRequired, Todo}
+import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 
 pub fn get_todos(
   state state: SharedState,
-) -> #(Result(List(Todo), messages.TodoError), SharedState) {
+) -> #(Result(List(Todo), types.TodoError), SharedState) {
   #(Ok(ets_store.all()), state)
 }
 
 pub fn create_todo(
-  params params: messages.TodoParams,
+  params params: types.TodoParams,
   state state: SharedState,
-) -> #(Result(Todo, messages.TodoError), SharedState) {
+) -> #(Result(Todo, types.TodoError), SharedState) {
   case params.title {
     "" -> #(Error(TitleRequired), state)
     title -> {
@@ -26,7 +26,7 @@ pub fn create_todo(
 pub fn toggle_todo(
   id id: Int,
   state state: SharedState,
-) -> #(Result(Todo, messages.TodoError), SharedState) {
+) -> #(Result(Todo, types.TodoError), SharedState) {
   case ets_store.lookup(id) {
     Error(Nil) -> #(Error(NotFound), state)
     Ok(item) -> {
@@ -40,7 +40,7 @@ pub fn toggle_todo(
 pub fn delete_todo(
   id id: Int,
   state state: SharedState,
-) -> #(Result(Int, messages.TodoError), SharedState) {
+) -> #(Result(Int, types.TodoError), SharedState) {
   case ets_store.lookup(id) {
     Error(Nil) -> #(Error(NotFound), state)
     Ok(_) -> {

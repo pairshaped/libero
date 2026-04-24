@@ -7,7 +7,7 @@ import lustre/effect.{type Effect}
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
-import shared/messages.{type Todo, type TodoError, TodoParams}
+import shared/types.{type Todo, type TodoError, TodoParams}
 
 // --- Model ---
 
@@ -113,8 +113,8 @@ fn view(model: Model) -> Element(Msg) {
 
 fn format_error(err: TodoError) -> String {
   case err {
-    messages.NotFound -> "Not found"
-    messages.TitleRequired -> "Title is required"
+    types.NotFound -> "Not found"
+    types.TitleRequired -> "Title is required"
   }
 }
 

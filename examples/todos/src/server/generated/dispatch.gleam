@@ -8,12 +8,12 @@ import libero/trace
 import libero/wire
 import server/handler as server_handler_handler
 import server/shared_state.{type SharedState}
-import shared/messages
+import shared/types
 
 pub type ClientMsg {
   DeleteTodo(id: Int)
   ToggleTodo(id: Int)
-  CreateTodo(params: messages.TodoParams)
+  CreateTodo(params: types.TodoParams)
   GetTodos
 }
 
@@ -25,7 +25,7 @@ pub fn handle(
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), SharedState) {
   case wire.decode_call(data) {
-    Ok(#("shared/messages", request_id, msg)) -> {
+    Ok(#("shared/types", request_id, msg)) -> {
       let typed_msg: ClientMsg = wire.coerce(msg)
       case typed_msg {
         DeleteTodo(id:) ->

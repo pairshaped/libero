@@ -2,7 +2,7 @@ import gleam/list
 import gleeunit
 import server/handler
 import server/shared_state
-import shared/messages.{Todo, TodoParams}
+import shared/types.{Todo, TodoParams}
 
 pub fn main() {
   gleeunit.main()
@@ -14,7 +14,7 @@ fn fresh_state() -> shared_state.SharedState {
 
 pub fn create_with_empty_title_returns_error_test() {
   let state = fresh_state()
-  let assert #(Error(messages.TitleRequired), _) =
+  let assert #(Error(types.TitleRequired), _) =
     handler.create_todo(params: TodoParams(title: ""), state:)
 }
 
@@ -45,7 +45,7 @@ pub fn toggle_flips_completed_test() {
 
 pub fn toggle_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(Error(messages.NotFound), _) =
+  let assert #(Error(types.NotFound), _) =
     handler.toggle_todo(id: 9999, state:)
 }
 
@@ -60,6 +60,6 @@ pub fn delete_removes_todo_test() {
 
 pub fn delete_nonexistent_returns_not_found_test() {
   let state = fresh_state()
-  let assert #(Error(messages.NotFound), _) =
+  let assert #(Error(types.NotFound), _) =
     handler.delete_todo(id: 9999, state:)
 }
