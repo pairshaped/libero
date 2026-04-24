@@ -40,7 +40,8 @@ pub fn validate_todos_example_passes_test() {
     )
   // Handler should be discovered
   let assert [m] = updated_modules
-  let assert True = m.handler_modules == ["server/handler"]
+  let assert True =
+    list.map(m.handlers, fn(h) { h.module_path }) == ["server/handler"]
 }
 
 pub fn scaffold_shared_state_when_missing_test() {
@@ -53,7 +54,7 @@ pub fn scaffold_shared_state_when_missing_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: [],
+      handlers: [],
     ),
   ]
   // Validation will scaffold missing files, but still error on missing handler
@@ -83,7 +84,7 @@ pub fn scaffold_app_error_when_missing_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: [],
+      handlers: [],
     ),
   ]
   let assert Error(_errors) =
@@ -108,7 +109,7 @@ pub fn validate_missing_handler_test() {
       file_path: "/tmp/todos.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: [],
+      handlers: [],
     ),
   ]
   let assert Error(errors) =
@@ -154,7 +155,7 @@ pub fn validate_msg_from_server_multi_field_fails_test() {
       file_path: path,
       has_msg_from_client: False,
       has_msg_from_server: True,
-      handler_modules: [],
+      handlers: [],
     ),
   ]
   let assert Error(errors) =
@@ -195,7 +196,7 @@ pub fn validate_msg_from_server_zero_field_passes_test() {
       file_path: path,
       has_msg_from_client: False,
       has_msg_from_server: True,
-      handler_modules: [],
+      handlers: [],
     ),
   ]
   let assert Ok(Nil) =

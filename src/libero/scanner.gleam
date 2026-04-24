@@ -22,6 +22,16 @@ import simplifile
 
 // ---------- Types ----------
 
+/// Info about a single handler module and which MsgFromClient variants it handles.
+pub type HandlerInfo {
+  HandlerInfo(
+    /// The server module path, e.g. "server/store"
+    module_path: String,
+    /// MsgFromClient constructor names matched in the case arms
+    handled_variants: List(String),
+  )
+}
+
 /// A message module discovered in the shared package.
 pub type MessageModule {
   MessageModule(
@@ -33,9 +43,9 @@ pub type MessageModule {
     has_msg_from_client: Bool,
     /// Whether this module exports a MsgFromServer type
     has_msg_from_server: Bool,
-    /// The server modules that handle MsgFromClient for this message module,
-    /// e.g. ["server/store"]. Empty if no handler found or not applicable.
-    handler_modules: List(String),
+    /// The server modules that handle MsgFromClient for this message module.
+    /// Empty if no handler found or not applicable.
+    handlers: List(HandlerInfo),
   )
 }
 
@@ -117,7 +127,7 @@ fn parse_message_module(
       file_path: file_path,
       has_msg_from_client: has_msg_from_client,
       has_msg_from_server: has_msg_from_server,
-      handler_modules: [],
+      handlers: [],
     ),
   )
 }
@@ -387,16 +397,16 @@ pub fn validate_conventions(
   // Match a message module to its handler(s), returning an error if missing.
   let match_handler = fn(
     m: MessageModule,
-    handler_map: Dict(String, List(String)),
+    handler_map: Dict(String, List(HandlerInfo)),
   ) -> #(MessageModule, option.Option(GenError)) {
     case m.has_msg_from_client, dict.get(handler_map, m.module_path) {
-      False, _ -> #(MessageModule(..m, handler_modules: []), option.None)
+      False, _ -> #(MessageModule(..m, handlers: []), option.None)
       True, Ok(handler_list) -> #(
-        MessageModule(..m, handler_modules: handler_list),
+        MessageModule(..m, handlers: handler_list),
         option.None,
       )
       True, Error(Nil) -> #(
-        MessageModule(..m, handler_modules: []),
+        MessageModule(..m, handlers: []),
         option.Some(MissingHandler(
           message_module: m.module_path,
           expected: "a server module exporting pub fn update_from_client with msg: "
@@ -407,16 +417,17 @@ pub fn validate_conventions(
     }
   }
 
-  // Build a dict from shared_module -> List(handler_module) for quick lookup.
+  // Build a dict from shared_module -> List(HandlerInfo) for quick lookup.
   // Multiple server modules can handle the same shared message module.
   let handler_map =
     list.fold(handlers, dict.new(), fn(acc, h) {
       let existing = dict.get(acc, h.shared_module) |> result.unwrap([])
-      dict.insert(
-        acc,
-        h.shared_module,
-        list.append(existing, [h.handler_module]),
-      )
+      let info =
+        HandlerInfo(
+          module_path: h.handler_module,
+          handled_variants: h.handled_variants,
+        )
+      dict.insert(acc, h.shared_module, list.append(existing, [info]))
     })
 
   // Match handlers to message modules and collect missing handler errors

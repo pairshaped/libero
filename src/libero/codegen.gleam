@@ -42,9 +42,9 @@ pub fn write_dispatch(
   // e.g. handler_module "server/store" -> import server/store as server_store_handler
   let handler_imports =
     list.flat_map(msg_from_client_modules, fn(m) {
-      list.map(m.handler_modules, fn(handler_mod) {
-        let alias = handler_alias(handler_mod)
-        "import " <> handler_mod <> " as " <> alias
+      list.map(m.handlers, fn(handler) {
+        let alias = handler_alias(handler.module_path)
+        "import " <> handler.module_path <> " as " <> alias
       })
     })
 
@@ -52,7 +52,7 @@ pub fn write_dispatch(
   // on coerced value). e.g. import shared/messages/admin as messages_admin
   let message_type_imports =
     list.filter_map(msg_from_client_modules, fn(m) {
-      case m.handler_modules {
+      case m.handlers {
         [_, _, ..] -> {
           let alias = message_alias(m.module_path)
           Ok("import " <> m.module_path <> " as " <> alias)
@@ -64,11 +64,11 @@ pub fn write_dispatch(
   // Build the case arms for the dispatch function.
   let case_arms =
     list.filter_map(msg_from_client_modules, fn(m) {
-      case m.handler_modules {
+      case m.handlers {
         [] -> Error(Nil)
         [single_handler] -> {
           // Single handler: simple dispatch (no chaining needed)
-          let alias = handler_alias(single_handler)
+          let alias = handler_alias(single_handler.module_path)
           Ok(
             "    Ok(#(\""
             <> m.module_path
@@ -83,7 +83,7 @@ pub fn write_dispatch(
           // handler are caught by trace.try_call - otherwise a crash in a
           // handler escapes dispatch and takes down the websocket handler.
           let msg_alias = message_alias(m.module_path)
-          let first_alias = handler_alias(first_handler)
+          let first_alias = handler_alias(first_handler.module_path)
           let typed_msg_line =
             "        let typed_msg: "
             <> msg_alias
@@ -93,8 +93,8 @@ pub fn write_dispatch(
             <> first_alias
             <> ".update_from_client(msg: typed_msg, state:)"
           let chain_calls =
-            list.map(rest_handlers, fn(handler_mod) {
-              let alias = handler_alias(handler_mod)
+            list.map(rest_handlers, fn(handler) {
+              let alias = handler_alias(handler.module_path)
               "        let result = case result {\n          Error(UnhandledMessage) -> "
               <> alias
               <> ".update_from_client(msg: typed_msg, state:)\n          other -> other\n        }"
@@ -123,7 +123,7 @@ pub fn write_dispatch(
   // Check if any module has multiple handlers (needs app_error.UnhandledMessage)
   let needs_unhandled_import =
     list.any(msg_from_client_modules, fn(m) {
-      case m.handler_modules {
+      case m.handlers {
         [_, _, ..] -> True
         _ -> False
       }

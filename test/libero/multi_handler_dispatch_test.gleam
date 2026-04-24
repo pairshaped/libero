@@ -10,7 +10,14 @@ pub fn multi_handler_dispatch_chains_test() {
       file_path: "test/fixtures/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: ["server/handler_a", "server/handler_b"],
+      handlers: [
+        scanner.HandlerInfo(module_path: "server/handler_a", handled_variants: [
+          "Ping",
+        ]),
+        scanner.HandlerInfo(module_path: "server/handler_b", handled_variants: [
+          "Pong",
+        ]),
+      ],
     ),
   ]
   let output_dir = "build/.test_multi_handler_dispatch"
@@ -76,7 +83,11 @@ pub fn single_handler_no_chain_test() {
       file_path: "test/fixtures/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: ["server/handler"],
+      handlers: [
+        scanner.HandlerInfo(module_path: "server/handler", handled_variants: [
+          "Ping",
+        ]),
+      ],
     ),
   ]
   let output_dir = "build/.test_single_handler_dispatch"

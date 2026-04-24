@@ -14,7 +14,12 @@ pub fn dispatch_contains_state_threading_test() {
       file_path: "examples/todos/shared/src/shared/messages.gleam",
       has_msg_from_client: True,
       has_msg_from_server: True,
-      handler_modules: ["core/handler"],
+      handlers: [
+        scanner.HandlerInfo(module_path: "core/handler", handled_variants: [
+          "AddTodo",
+          "RemoveTodo",
+        ]),
+      ],
     ),
   ]
   let output_dir = "build/.test_codegen_dispatch"
