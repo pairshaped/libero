@@ -29,9 +29,9 @@ pub fn internal_error_roundtrips_through_wire_test() {
       message: "Something went wrong, please try again.",
     ))
   let encoded = wire.encode(value)
-  // Wrap in a call envelope {module, value} and decode to verify structure survives.
-  let envelope = ffi_encode(coerce(#("shared/test", coerce(encoded))))
-  let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
+  // Wrap in a call envelope {module, request_id, value} and decode to verify structure survives.
+  let envelope = ffi_encode(coerce(#("shared/test", 0, coerce(encoded))))
+  let assert Ok(#("shared/test", 0, rebuilt)) = wire.decode_call(envelope)
   let decoded: Result(String, RpcError(Never)) =
     wire.decode(unsafe_coerce(rebuilt))
   let assert Error(InternalError(

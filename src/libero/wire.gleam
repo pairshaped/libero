@@ -7,9 +7,10 @@
 //// needed because ETF is the BEAM's native serialization format.
 ////
 //// **Wire shape:**
-//// - The call envelope is `{module_name_binary, msg_from_client_value}` - a
-////   2-tuple where the first element is a UTF-8 binary (Gleam String)
-////   naming the shared module, and the second is the typed MsgFromClient
+//// - The call envelope is `{module_name_binary, request_id, msg_from_client_value}` -
+////   a 3-tuple where the first element is a UTF-8 binary (Gleam String)
+////   naming the shared module, the second is an integer request ID for
+////   correlating responses, and the third is the typed MsgFromClient
 ////   value serialized as a native ETF term.
 //// - The response is the Gleam value directly (e.g. `Ok(value)` or
 ////   `Error(MalformedRequest)`), serialized as ETF.
@@ -96,38 +97,48 @@ pub type DecodeError {
   DecodeError(message: String)
 }
 
-/// Parse a `{<<"module_name">>, toserver_value}` tuple from an ETF binary.
-/// Returns the module name and the raw Dynamic value to be coerced.
+/// Parse a `{<<"module_name">>, request_id, toserver_value}` tuple from an ETF binary.
+/// Returns the module name, request ID, and the raw Dynamic value to be coerced.
 /// Since `binary_to_term` returns real Erlang terms, no rebuild step
 /// is needed - atoms are atoms, tuples are tuples, maps are maps.
 ///
 /// This is specifically for RPC call envelopes. For decoding
 /// arbitrary values, use `decode`.
-pub fn decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
+pub fn decode_call(
+  data: BitArray,
+) -> Result(#(String, Int, Dynamic), DecodeError) {
   ffi_decode_call(data)
 }
 
 // nolint: avoid_panic, discarded_result -- Erlang-only @external; JS fallback is unreachable
 @external(erlang, "libero_wire_ffi", "decode_call")
-fn ffi_decode_call(data: BitArray) -> Result(#(String, Dynamic), DecodeError) {
+fn ffi_decode_call(
+  data: BitArray,
+) -> Result(#(String, Int, Dynamic), DecodeError) {
   let _ = data
   panic as "libero/wire.decode_call is a server-side function, unreachable on JavaScript target"
 }
 
 // ---------- Call envelope encoder ----------
 
-/// Encode a call envelope: `{module_name, msg}` as ETF binary.
+/// Encode a call envelope: `{module_name, request_id, msg}` as ETF binary.
 /// Used by generated client send_to_server functions to pack a MsgFromClient value
 /// for transport to the server.
-pub fn encode_call(module module: String, msg msg: a) -> BitArray {
-  encode(#(module, msg))
+pub fn encode_call(
+  module module: String,
+  request_id request_id: Int,
+  msg msg: a,
+) -> BitArray {
+  encode(#(module, request_id, msg))
 }
 
 // ---------- Frame tagging ----------
 
-/// Tag a response frame so the JS client routes it to the FIFO callback queue.
-pub fn tag_response(data: BitArray) -> BitArray {
-  <<0, data:bits>>
+/// Tag a response frame so the JS client routes it to the correct callback.
+/// Prepends a 0 tag byte and the 32-bit request ID so the client can
+/// correlate the response with the originating call.
+pub fn tag_response(request_id request_id: Int, data data: BitArray) -> BitArray {
+  <<0, request_id:32, data:bits>>
 }
 
 /// Tag a push frame so the JS client routes it to the push handler.

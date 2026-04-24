@@ -14,11 +14,12 @@ import libero/wire
 // ============================================================================
 
 /// Encode a value, wrap it in a call envelope, decode it back.
-/// The envelope is {<<"shared/test">>, value} - a 2-tuple where
-/// the second element is the typed message value (not a list of args).
+/// The envelope is {<<"shared/test">>, 0, value} - a 3-tuple where
+/// the second element is the request ID and the third is the typed
+/// message value (not a list of args).
 fn roundtrip(value: a) -> Dynamic {
-  let envelope = ffi_encode(coerce(#("shared/test", coerce(value))))
-  let assert Ok(#("shared/test", rebuilt)) = wire.decode_call(envelope)
+  let envelope = ffi_encode(coerce(#("shared/test", 0, coerce(value))))
+  let assert Ok(#("shared/test", 0, rebuilt)) = wire.decode_call(envelope)
   rebuilt
 }
 
