@@ -274,6 +274,7 @@ import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFun
 import libero/trace
 import libero/wire
 import " <> shared_state_module <> ".{type SharedState}
+import " <> shared_module_path <> "
 " <> string.join(handler_imports, "\n") <> "
 
 pub type ClientMsg {
@@ -427,6 +428,7 @@ import libero/remote_data.{type RemoteData, Failure, Success}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
+import " <> shared_module_path <> "
 
 pub type ClientMsg {
 " <> string.join(client_msg_variants, "\n") <> "

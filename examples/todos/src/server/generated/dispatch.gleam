@@ -6,15 +6,15 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
-import server/handler
+import server/handler as server_handler_handler
 import server/shared_state.{type SharedState}
 import shared/messages
 
 pub type ClientMsg {
-  GetTodos
-  CreateTodo(params: messages.TodoParams)
-  ToggleTodo(id: Int)
   DeleteTodo(id: Int)
+  ToggleTodo(id: Int)
+  CreateTodo(params: messages.TodoParams)
+  GetTodos
 }
 
 @external(erlang, "todos@generated@rpc_atoms", "ensure")
@@ -28,16 +28,22 @@ pub fn handle(
     Ok(#("shared/messages", request_id, msg)) -> {
       let typed_msg: ClientMsg = wire.coerce(msg)
       case typed_msg {
-        GetTodos ->
-          dispatch(state, request_id, fn() { handler.get_todos(state:) })
-        CreateTodo(params:) ->
+        DeleteTodo(id:) ->
           dispatch(state, request_id, fn() {
-            handler.create_todo(params:, state:)
+            server_handler_handler.delete_todo(id:, state:)
           })
         ToggleTodo(id:) ->
-          dispatch(state, request_id, fn() { handler.toggle_todo(id:, state:) })
-        DeleteTodo(id:) ->
-          dispatch(state, request_id, fn() { handler.delete_todo(id:, state:) })
+          dispatch(state, request_id, fn() {
+            server_handler_handler.toggle_todo(id:, state:)
+          })
+        CreateTodo(params:) ->
+          dispatch(state, request_id, fn() {
+            server_handler_handler.create_todo(params:, state:)
+          })
+        GetTodos ->
+          dispatch(state, request_id, fn() {
+            server_handler_handler.get_todos(state:)
+          })
       }
     }
     Ok(#(name, _request_id, _)) -> #(

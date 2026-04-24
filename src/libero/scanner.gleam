@@ -562,6 +562,21 @@ pub fn last_module_segment(module_path module_path: String) -> String {
   |> result.unwrap(or: module_path)
 }
 
+/// Find the module path of the first .gleam file in the shared src directory.
+/// Used by the endpoint convention to determine the wire envelope module path.
+pub fn scan_shared_module_path(
+  shared_src shared_src: String,
+) -> Result(String, Nil) {
+  case walk_directory(path: shared_src) {
+    Ok(files) ->
+      case list.first(files) {
+        Ok(file_path) -> Ok(derive_module_path(file_path: file_path))
+        Error(Nil) -> Error(Nil)
+      }
+    Error(_) -> Error(Nil)
+  }
+}
+
 // ---------- Handler endpoint scanning ----------
 
 /// Scan server source for handler endpoint functions.
