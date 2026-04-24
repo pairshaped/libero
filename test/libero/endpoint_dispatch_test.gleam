@@ -67,7 +67,10 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
 pub fn scan_todos_handler_endpoints_test() {
   // Scan the actual todos example handler
   let assert Ok(endpoints) =
-    scanner.scan_handler_endpoints(server_src: "examples/todos/src")
+    scanner.scan_handler_endpoints(
+      server_src: "examples/todos/src",
+      shared_src: "examples/todos/shared/src/shared",
+    )
   // Should find 4 endpoints: get_todos, create_todo, toggle_todo, delete_todo
   let names = list.map(endpoints, fn(e) { e.fn_name })
   let assert True = list.contains(names, "get_todos")

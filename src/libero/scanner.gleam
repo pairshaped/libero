@@ -13,6 +13,7 @@ import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/set
 import gleam/string
 import libero/gen_error.{
   type GenError, CannotReadDir, CannotReadFile, CannotWriteFile, MissingHandler,
@@ -581,20 +582,54 @@ pub fn scan_shared_module_path(
 
 /// Scan server source for handler endpoint functions.
 /// A handler endpoint is any public function whose last parameter
-/// is typed as SharedState and whose return type is #(something, SharedState).
+/// is typed as SharedState, return type is #(something, SharedState),
+/// and all types in params/return are from shared/ or builtins.
 pub fn scan_handler_endpoints(
   server_src server_src: String,
+  shared_src shared_src: String,
 ) -> Result(List(HandlerEndpoint), List(GenError)) {
+  // Build a set of shared type names from the shared source directory
+  let shared_types = scan_shared_type_names(shared_src)
   let files =
     walk_directory(path: server_src)
     |> result.map_error(fn(cause) { [cause] })
   use files <- result.try(files)
   let endpoints =
-    list.flat_map(files, fn(file_path) { parse_endpoints(file_path: file_path) })
+    list.flat_map(files, fn(file_path) {
+      parse_endpoints(file_path:, shared_types:)
+    })
   Ok(endpoints)
 }
 
-fn parse_endpoints(file_path file_path: String) -> List(HandlerEndpoint) {
+/// Scan shared source directory and collect all exported type names.
+fn scan_shared_type_names(shared_src: String) -> set.Set(String) {
+  case walk_directory(path: shared_src) {
+    Error(_) -> set.new()
+    Ok(files) ->
+      list.fold(files, set.new(), fn(acc, file_path) {
+        case simplifile.read(file_path) {
+          Error(_) -> acc
+          Ok(content) ->
+            case glance.module(content) {
+              Error(_) -> acc
+              Ok(parsed) ->
+                list.fold(parsed.custom_types, acc, fn(inner, ct) {
+                  let glance.Definition(_, t) = ct
+                  case t.publicity == glance.Public {
+                    True -> set.insert(inner, t.name)
+                    False -> inner
+                  }
+                })
+            }
+        }
+      })
+  }
+}
+
+fn parse_endpoints(
+  file_path file_path: String,
+  shared_types shared_types: set.Set(String),
+) -> List(HandlerEndpoint) {
   let result = {
     use content <- result.try(
       simplifile.read(file_path) |> result.replace_error(Nil),
@@ -603,14 +638,14 @@ fn parse_endpoints(file_path file_path: String) -> List(HandlerEndpoint) {
       glance.module(content) |> result.replace_error(Nil),
     )
     let module_path = derive_module_path(file_path: file_path)
-    // Build a lookup from unqualified type name to module alias
     let type_imports = build_type_import_map(parsed.imports)
     Ok(
       list.filter_map(parsed.functions, fn(def) {
         let glance.Definition(_, func) = def
         case func.publicity == glance.Public {
           False -> Error(Nil)
-          True -> parse_single_endpoint(func, module_path, type_imports)
+          True ->
+            parse_single_endpoint(func, module_path, type_imports, shared_types)
         }
       }),
     )
@@ -645,6 +680,7 @@ fn parse_single_endpoint(
   func: glance.Function,
   module_path: String,
   type_imports: dict.Dict(String, String),
+  shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
   use <- bool.guard(when: func.name == "update_from_client", return: Error(Nil))
@@ -674,6 +710,15 @@ fn parse_single_endpoint(
         _, _ -> Error(Nil)
       }
     })
+
+  // All non-builtin types must be from shared/
+  let all_param_types =
+    list.filter_map(non_state_params, fn(p) { option.to_result(p.type_, Nil) })
+  let all_types = [response_type, ..all_param_types]
+  use <- bool.guard(
+    when: !all_types_shared(all_types, shared_types),
+    return: Error(Nil),
+  )
 
   Ok(HandlerEndpoint(
     module_path: module_path,
@@ -754,6 +799,36 @@ fn qualified_type_to_string(
       <> ") -> "
       <> qualified_type_to_string(return, imports)
     glance.HoleType(name:, ..) -> name
+  }
+}
+
+/// Check that all types in a list are shared types or builtins.
+/// Walks type parameters recursively (e.g. List(Todo) checks Todo).
+fn all_types_shared(
+  types: List(glance.Type),
+  shared_types: set.Set(String),
+) -> Bool {
+  list.all(types, fn(t) { is_type_shared(t, shared_types) })
+}
+
+/// Check if a single type (and all its parameters) are shared or builtins.
+fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
+  let builtins =
+    set.from_list([
+      "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option",
+      "BitArray", "Dynamic",
+    ])
+  case t {
+    glance.NamedType(name:, parameters:, ..) ->
+      { set.contains(builtins, name) || set.contains(shared_types, name) }
+      && list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
+    glance.TupleType(elements:, ..) ->
+      list.all(elements, fn(e) { is_type_shared(e, shared_types) })
+    glance.VariableType(..) -> True
+    glance.FunctionType(parameters:, return:, ..) ->
+      list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
+      && is_type_shared(return, shared_types)
+    glance.HoleType(..) -> True
   }
 }
 

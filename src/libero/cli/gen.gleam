@@ -161,7 +161,7 @@ fn run_endpoint_convention(
 ) -> Result(Nil, String) {
   // Scan for handler endpoints (per-function convention)
   use endpoints <- result.try(
-    scanner.scan_handler_endpoints(server_src: server_src)
+    scanner.scan_handler_endpoints(server_src:, shared_src:)
     |> result.map_error(fn(errors) {
       list.each(errors, gen_error.print_error)
       "endpoint scan failed"
