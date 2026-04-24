@@ -865,15 +865,16 @@ export function decode_safe(buffer) {
 // application layer.
 
 let ws = null;
-let pendingSends = [];    // [{payload, callback, timer}]
-let responseCallbacks = []; // [{callback, timer}]
+let pendingSends = [];    // [{payload, requestId, callback, timer}]
+let responseCallbacks = new Map(); // requestId -> {callback, timer}
+let nextRequestId = 1;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 // Push handler registry: module path → callback
 const pushHandlers = new Map();
 
 // Build a connection-error value as a proper Gleam Result(_, RpcError)
-// so `wire.coerce` + pattern matching in remote_data.to_remote can extract
+// so `wire.coerce` + pattern matching in remote_data.from_response can extract
 // the InternalError and read its .message field.
 function makeConnectionError(message) {
   return new ResultError(new InternalError("", message));
@@ -907,12 +908,12 @@ function clearAllPending(reason) {
     if (entry.timer) clearTimeout(entry.timer);
     entry.callback(error);
   }
-  for (const entry of responseCallbacks) {
+  for (const [, entry] of responseCallbacks) {
     if (entry.timer) clearTimeout(entry.timer);
     entry.callback(error);
   }
   pendingSends = [];
-  responseCallbacks = [];
+  responseCallbacks = new Map();
 }
 
 function ensureSocket(url) {
@@ -939,7 +940,7 @@ function ensureSocket(url) {
   ws.addEventListener("open", () => {
     for (const entry of pendingSends) {
       ws.send(entry.payload);
-      responseCallbacks.push({ callback: entry.callback, timer: entry.timer });
+      responseCallbacks.set(entry.requestId, { callback: entry.callback, timer: entry.timer });
     }
     pendingSends = [];
   });
@@ -976,33 +977,31 @@ function ensureSocket(url) {
       return;
     }
 
-    // Response frame (tag 0x00): matched to pending callback in FIFO order.
-    // The response wire shape is Result(MsgFromServer.Variant(payload), RpcError).
-    // If a typed decoder is registered, decode raw and apply it to the inner
-    // MsgFromServer term so nested payload types use the correct constructors.
+    // Response frame (tag 0x00): extract request ID and match by ID.
+    // Frame format: <<0x00, request_id:32-big, etf_bytes>>
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const requestId = view.getUint32(1);
+    const responsePayload = bytes.slice(5);
+
     let decoded;
     const typedDecoder = getMsgFromServerDecoder();
     if (typedDecoder) {
-      // Decode the full payload raw: no registry reconstruction.
-      // raw is a plain JS array: ["ok", rawMsgFromServerTerm] or
-      // ["error", rawRpcErrorTerm].
-      const raw = decode_value_raw(payload);
+      const raw = decode_value_raw(responsePayload);
       if (Array.isArray(raw) && raw[0] === "ok" && raw[1] !== undefined) {
-        // Ok branch: apply the typed decoder to the inner MsgFromServer value.
         const typedVariant = typedDecoder(raw[1]);
         decoded = new Ok(typedVariant);
       } else if (Array.isArray(raw) && raw[0] === "error" && raw[1] !== undefined) {
-        // Error branch: raw[1] is the RpcError tuple. Reconstruct the proper
-        // Gleam class instance so Gleam pattern matching and field access work.
         decoded = new ResultError(decodeRpcError(raw[1]));
       } else {
-        decoded = decode_value(payload);
+        decoded = decode_value(responsePayload);
       }
     } else {
-      decoded = decode_value(payload);
+      decoded = decode_value(responsePayload);
     }
-    const entry = responseCallbacks.shift();
+
+    const entry = responseCallbacks.get(requestId);
     if (entry) {
+      responseCallbacks.delete(requestId);
       if (entry.timer) clearTimeout(entry.timer);
       entry.callback(decoded);
     }
@@ -1024,9 +1023,9 @@ function ensureSocket(url) {
       const sock = ws;
       ws = null;
       // Clear pending callbacks immediately so a reconnection via the
-      // next send() starts with a clean FIFO state. The "close" event
-      // fires asynchronously after sock.close(), so without this, a
-      // send() call between error and close could queue into stale state.
+      // next send() starts with a clean state. The "close" event fires
+      // asynchronously after sock.close(), so without this, a send()
+      // call between error and close could queue into stale state.
       clearAllPending("WebSocket error");
       sock.close();
     }
@@ -1035,9 +1034,9 @@ function ensureSocket(url) {
 
 /**
  * Send a message and queue a callback for the server's response.
- * Responses are matched to sends in FIFO order. Each request has a
- * 30-second timeout — if no response arrives, the callback receives
- * an InternalError so the UI doesn't hang indefinitely.
+ * Responses are matched by request ID. Each request has a 30-second
+ * timeout — if no response arrives, the callback receives an
+ * InternalError so the UI doesn't hang indefinitely.
  * @param {string} url WebSocket URL (typically from rpc_config)
  * @param {string} module shared module path (e.g. "shared/messages")
  * @param {any} msg the typed MsgFromClient value to encode and send
@@ -1045,46 +1044,25 @@ function ensureSocket(url) {
  */
 export function send(url, module, msg, callback) {
   ensureSocket(url);
-  const payload = encode_call(module, msg);
-  // DESIGN NOTE: Timeout + FIFO desync risk.
-  // When a timeout fires and we remove the entry from responseCallbacks,
-  // the server may still send a response for that request later. That
-  // response will be matched to the *next* pending callback (FIFO), causing
-  // all subsequent responses to be misrouted. This is a known limitation
-  // of the FIFO matching design. The v5 wire protocol adds request IDs to
-  // eliminate this entirely (see docs/request_ids.md). For v4, we close
-  // the WebSocket after a timeout to force a clean reconnection, resetting
-  // the FIFO state.
-  // BY DESIGN for v4 — the race window between timeout and close is
-  // accepted; in practice, the 30s timeout means the server is likely
-  // down and no late response will arrive.
+  const requestId = nextRequestId++;
+  const payload = encode_call(module, requestId, msg);
+
   const timer = setTimeout(() => {
-    // Remove from whichever queue this entry is in
-    const pendingIdx = pendingSends.findIndex(e => e.callback === callback);
+    // Remove from whichever state this request is in.
+    const pendingIdx = pendingSends.findIndex(e => e.requestId === requestId);
     if (pendingIdx !== -1) {
       pendingSends.splice(pendingIdx, 1);
     }
-    const responseIdx = responseCallbacks.findIndex(e => e.callback === callback);
-    if (responseIdx !== -1) {
-      responseCallbacks.splice(responseIdx, 1);
-    }
+    responseCallbacks.delete(requestId);
     callback(makeConnectionError("Request timed out"));
-    // Close the WebSocket to prevent FIFO desync: the server's late
-    // response for the timed-out request would otherwise be delivered
-    // to the wrong callback. The next send() call will reconnect.
-    if (ws) {
-      const sock = ws;
-      ws = null;
-      clearAllPending("WebSocket closed after request timeout");
-      sock.close();
-    }
+    // No need to close the WebSocket — request IDs prevent FIFO desync.
   }, REQUEST_TIMEOUT_MS);
 
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(payload);
-    responseCallbacks.push({ callback, timer });
+    responseCallbacks.set(requestId, { callback, timer });
   } else {
-    pendingSends.push({ payload, callback, timer });
+    pendingSends.push({ payload, requestId, callback, timer });
   }
 }
 
@@ -1100,22 +1078,24 @@ export function registerPushHandler(module, callback) {
 }
 
 /**
- * Encode a call envelope: `{module_name, msg}` as ETF binary.
- * Symmetric with the server-side `wire.encode_call`. Returns a raw
+ * Encode a call envelope: `{module_name, request_id, msg}` as ETF binary.
+ * Symmetric with the server-side `wire.decode_call`. Returns a raw
  * ArrayBuffer (not a Gleam BitArray) because this is only called
  * internally by `send()`, which passes it directly to `WebSocket.send()`.
  * Compare with `encode_value()` which returns a BitArray for Gleam callers.
  * @param {string} module
+ * @param {number} requestId
  * @param {any} msg
  * @returns {ArrayBuffer}
  */
-export function encode_call(module, msg) {
+export function encode_call(module, requestId, msg) {
   const encoder = new ETFEncoder();
   encoder.writeUint8(131); // ETF version byte
-  // Envelope: {<<"module_name">>, msg_value}
+  // Envelope: {<<"module_name">>, request_id, msg_value}
   encoder.writeUint8(104); // SMALL_TUPLE_EXT
-  encoder.writeUint8(2);   // arity 2
+  encoder.writeUint8(3);   // arity 3
   encoder.encodeBinary(module);
+  encoder.encodeTerm(requestId);
   encoder.encodeTerm(msg);
   return encoder.result();
 }
