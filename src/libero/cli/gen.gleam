@@ -89,10 +89,16 @@ fn run_with_clients(
   }
 }
 
-/// True if the only error from scanning is `NoMessageModules`. Anything else
-/// (e.g. `CannotReadDir`, `ParseFailed`) is a real failure we need to surface
-/// rather than treat as an implicit signal to switch conventions.
-fn is_no_message_modules_only(errors: List(gen_error.GenError)) -> Bool {
+/// True if every error from scanning is `NoMessageModules`. Used by `run`
+/// to switch from the classic convention to the handler-as-contract
+/// convention when the shared dir has no MsgFromClient/MsgFromServer
+/// types. Anything else (e.g. `CannotReadDir`, `ParseFailed`) is a real
+/// failure we need to surface rather than treat as an implicit signal
+/// to switch conventions.
+///
+/// Public so the convention switch logic stays testable: this is the
+/// load-bearing branch in `run`.
+pub fn is_no_message_modules_only(errors: List(gen_error.GenError)) -> Bool {
   list.all(errors, fn(err) {
     case err {
       gen_error.NoMessageModules(_) -> True

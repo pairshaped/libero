@@ -1,10 +1,12 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{None, Some}
+import gleam/string
 import libero/error
 import libero/remote_data.{
   type RpcData, DomainFailure, Failure, FrameworkFailure, Loading, NotAsked,
   Success,
 }
+import libero/trace
 
 // -- map --
 
@@ -179,6 +181,28 @@ pub fn from_response_internal_error_test() {
   let rd: RpcData(Item) =
     remote_data.from_response(raw: wire, format_domain: format_domain)
   let assert Failure(FrameworkFailure(message: "Something went wrong")) = rd
+}
+
+// -- peel_msg_wrapper safety contract --
+//
+// A wire payload that isn't a MsgFromServer variant (zero-arg atom or
+// tagged tuple) is a programming error: codegen produces only those
+// shapes. Silently passing the value through would let `wire.coerce`
+// downstream cast garbage into a typed value. Crash loud and early.
+
+pub fn peel_msg_wrapper_crashes_on_non_variant_shape_test() {
+  // wire = Ok(<integer>) — outer Ok decodes, but the wrapped value is
+  // an integer, not a MsgFromServer variant. The peel must raise a
+  // specific tagged exception, not silently pass garbage downstream.
+  let bad_wire: Dynamic = coerce(Ok(42))
+  let result =
+    trace.try_call(fn() {
+      let _: RpcData(Item) =
+        remote_data.from_response(raw: bad_wire, format_domain: format_domain)
+      Nil
+    })
+  let assert Error(reason) = result
+  let assert True = string.contains(reason, "peel_msg_wrapper_unexpected_shape")
 }
 
 // -- helpers --
