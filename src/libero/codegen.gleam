@@ -972,7 +972,7 @@ pub fn ensure_decoders() -> Bool
 /// so tests can assert on the output without filesystem I/O.
 pub fn emit_typed_decoders(discovered: List(DiscoveredType)) -> String {
   let type_decoders = list.map(discovered, fn(t) { emit_type_decoder(t) })
-  let entry = emit_msg_from_server_decoder(discovered)
+  let entry = emit_ensure_decoders()
   let parts =
     list.filter([string.join(type_decoders, "\n\n"), entry], fn(s) { s != "" })
   string.join(parts, "\n\n")
@@ -1277,48 +1277,11 @@ fn field_decoder_call_depth(
   }
 }
 
-/// Emit the `decode_msg_from_server` entry point function.
-/// Delegates to the per-type decoder to avoid duplicating the switch body.
-/// If no MsgFromServer type is found in the discovered list, returns "".
-///
-/// DESIGN NOTE: Only the first MsgFromServer type is wired into the decoder
-/// entry point. Multiple MsgFromServer types across different modules are not
-/// supported — define a single MsgFromServer in one shared module.
-/// If multiple are found, a build-time warning is printed.
-fn emit_msg_from_server_decoder(discovered: List(DiscoveredType)) -> String {
-  let msg_from_server_types =
-    list.filter(discovered, fn(t) { t.type_name == "MsgFromServer" })
-  case msg_from_server_types {
-    [] ->
-      // No MsgFromServer type (endpoint convention).
-      "export function ensure_decoders() { return true; }"
-    [t] -> {
-      let fn_name = decoder_fn_name(t.module_path, t.type_name)
-      "export function ensure_decoders() { return true; }\n\n"
-      <> "export function decode_msg_from_server(term) {\n"
-      <> "  return "
-      <> fn_name
-      <> "(term);\n"
-      <> "}"
-    }
-    [first, ..rest] -> {
-      let other_modules =
-        list.map(rest, fn(t) { t.module_path }) |> string.join(", ")
-      io.println_error(
-        "warning: multiple MsgFromServer types found. Only "
-        <> first.module_path
-        <> " will be wired into the client decoder. Ignored: "
-        <> other_modules,
-      )
-      let fn_name = decoder_fn_name(first.module_path, first.type_name)
-      "export function ensure_decoders() { return true; }\n\n"
-      <> "export function decode_msg_from_server(term) {\n"
-      <> "  return "
-      <> fn_name
-      <> "(term);\n"
-      <> "}"
-    }
-  }
+/// Emit the `ensure_decoders` FFI export. This is a no-op function whose
+/// only purpose is to force the JS module to load, triggering the
+/// constructor registration side effects that run at module scope.
+fn emit_ensure_decoders() -> String {
+  "export function ensure_decoders() { return true; }"
 }
 
 // ---------- Config file ----------

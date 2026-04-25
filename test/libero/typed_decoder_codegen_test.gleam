@@ -129,18 +129,16 @@ pub fn record_decoder_constructs_correct_variant_test() {
   let assert True = string.contains(js, "return new _m_shared_todo.Todo(")
 }
 
-pub fn msg_from_server_decoder_is_exported_test() {
+pub fn ensure_decoders_is_always_exported_test() {
   let js = codegen.emit_typed_decoders(sample_msg_from_server())
   let assert True =
-    string.contains(js, "export function decode_msg_from_server(term)")
+    string.contains(js, "export function ensure_decoders()")
 }
 
-pub fn msg_from_server_switches_on_tag_test() {
+pub fn type_decoders_generated_for_msg_from_server_test() {
   let js = codegen.emit_typed_decoders(sample_msg_from_server())
-  let assert True = string.contains(js, "case \"items_loaded\":")
-  let assert True = string.contains(js, "case \"status_changed\":")
-  let assert True = string.contains(js, "case \"disconnected\":")
-  let assert True = string.contains(js, "case \"refreshed\":")
+  let assert True =
+    string.contains(js, "decode_shared_messages_msg_from_server")
 }
 
 pub fn msg_from_server_dispatches_all_four_variants_test() {
@@ -161,17 +159,10 @@ pub fn msg_from_server_uses_list_decoder_for_list_field_test() {
   let assert True = string.contains(js, "decode_shared_item_item(t0)")
 }
 
-pub fn msg_from_server_delegates_to_per_type_decoder_test() {
-  let js = codegen.emit_typed_decoders(sample_msg_from_server())
-  // Entry point should delegate to the per-type decoder, not duplicate it
-  let assert True =
-    string.contains(js, "return decode_shared_messages_msg_from_server(term)")
-}
-
-pub fn no_msg_from_server_emits_no_entry_point_test() {
+pub fn ensure_decoders_emitted_even_without_msg_from_server_test() {
   let js = codegen.emit_typed_decoders(sample_status_enum())
-  let assert False =
-    string.contains(js, "export function decode_msg_from_server")
+  let assert True =
+    string.contains(js, "export function ensure_decoders()")
 }
 
 pub fn result_field_uses_result_decoder_test() {
