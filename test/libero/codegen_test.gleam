@@ -2,6 +2,7 @@ import gleam/option
 import gleam/string
 import libero/codegen
 import libero/config
+import libero/field_type
 import libero/scanner
 import libero/walker
 import simplifile
@@ -146,7 +147,11 @@ pub fn decoders_ffi_registers_float_fields_test() {
           variant_name: "WithFloats",
           atom_name: "with_floats",
           float_field_indices: [0, 1],
-          fields: [walker.FloatField, walker.FloatField, walker.StringField],
+          fields: [
+            field_type.FloatField,
+            field_type.FloatField,
+            field_type.StringField,
+          ],
         ),
       ],
     ),
@@ -187,7 +192,9 @@ pub fn response_decoder_fallback_emits_transport_failure_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "ping",
+      return_type: field_type.ResultOf(field_type.NilField, field_type.NilField),
       params: [],
+      params_str: [],
       return_type_str: "Result(Nil, Nil)",
     ),
   ]
@@ -228,7 +235,23 @@ pub fn response_decoder_handles_dict_of_custom_type_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict_string_item",
-      params: [#("value", "Dict(String, types.Item)")],
+      return_type: field_type.ResultOf(
+        field_type.DictOf(
+          field_type.StringField,
+          field_type.UserType("shared/types", "Item", []),
+        ),
+        field_type.NilField,
+      ),
+      params: [
+        #(
+          "value",
+          field_type.DictOf(
+            field_type.StringField,
+            field_type.UserType("shared/types", "Item", []),
+          ),
+        ),
+      ],
+      params_str: [#("value", "Dict(String, types.Item)")],
       return_type_str: "Result(Dict(String, types.Item), Nil)",
     ),
   ]
@@ -251,11 +274,12 @@ pub fn response_decoder_handles_dict_of_custom_type_test() {
       "build/.test_decoders_response_dict/src/client/generated/libero/rpc_decoders_ffi.mjs",
     )
 
+  // Structural decoder builds nested calls with depth-numbered lambda
+  // params. The Result wraps a Dict, so the outer Result occupies
+  // depth 0; Dict's lambdas are emitted at depth 1+.
   let assert True =
-    string.contains(
-      content,
-      "decode_dict_of((t0) => decode_string(t0), (t1) => decode_shared_types_item(t1), inner[1])",
-    )
+    string.contains(content, "decode_dict_of((t1) => decode_string(t1)")
+  let assert True = string.contains(content, "decode_shared_types_item(t2)")
   let assert False = string.contains(content, "decode_shared_Dict")
 
   let assert Ok(Nil) =

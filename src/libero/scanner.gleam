@@ -15,6 +15,7 @@ import gleam/option
 import gleam/result
 import gleam/set
 import gleam/string
+import libero/field_type
 import libero/gen_error.{
   type GenError, CannotReadDir, CannotReadFile, CannotWriteFile, MissingHandler,
   MsgFromServerFieldCount, NoMessageModules, ParseFailed,
@@ -58,10 +59,19 @@ pub type HandlerEndpoint {
     module_path: String,
     /// Function name, e.g. "get_todos"
     fn_name: String,
-    /// Parameters excluding state, with labels and type annotations.
-    /// Each entry is #(label, type_annotation_string).
-    /// e.g. [#("id", "Int"), #("params", "TodoParams")]
-    params: List(#(String, String)),
+    /// Structured return type, with module-qualified user types resolved
+    /// to their full path. Codegen pattern-matches on this directly
+    /// instead of re-parsing strings — the failure mode that made the
+    /// `bool.guard`-recursion bug class possible.
+    return_type: field_type.FieldType,
+    /// Parameters excluding state, with labels and resolved types.
+    /// Each entry is #(label, FieldType).
+    params: List(#(String, field_type.FieldType)),
+    /// String form of the parameter types, kept temporarily for
+    /// codegen sites still consuming strings (e.g. import collection
+    /// in `collect_param_type_imports`). Migrate those to use the
+    /// structured form, then drop these fields.
+    params_str: List(#(String, String)),
     /// The full return type annotation string of the first tuple element.
     /// e.g. "Result(List(Todo), TodoError)" or "List(Todo)"
     return_type_str: String,
@@ -658,6 +668,8 @@ fn parse_endpoints(
     let module_path = derive_module_path(file_path: file_path)
     let type_imports = build_type_import_map(parsed.imports)
     let alias_map = build_alias_resolution_map(parsed.imports)
+    let type_imports_full = build_type_import_map_full(parsed.imports)
+    let alias_map_full = build_alias_resolution_map_full(parsed.imports)
     Ok(
       list.filter_map(parsed.functions, fn(def) {
         let glance.Definition(_, func) = def
@@ -669,6 +681,8 @@ fn parse_endpoints(
               module_path: module_path,
               type_imports: type_imports,
               alias_map: alias_map,
+              type_imports_full: type_imports_full,
+              alias_map_full: alias_map_full,
               shared_types: shared_types,
             )
         }
@@ -716,11 +730,45 @@ fn build_alias_resolution_map(
   })
 }
 
+/// Like `build_type_import_map`, but maps unqualified names to the FULL
+/// module path instead of the last segment. Used by structured type
+/// resolution where downstream codegen needs the full path for decoder
+/// function naming (`decoder_fn_name(module_path, type_name)`).
+fn build_type_import_map_full(
+  imports: List(glance.Definition(glance.Import)),
+) -> dict.Dict(String, String) {
+  list.fold(imports, dict.new(), fn(acc, def) {
+    let glance.Definition(_, imp) = def
+    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
+      dict.insert(inner_acc, uq.name, imp.module)
+    })
+  })
+}
+
+/// Like `build_alias_resolution_map`, but maps aliases (and bare module
+/// names) to the FULL module path. Same rationale as
+/// `build_type_import_map_full`.
+fn build_alias_resolution_map_full(
+  imports: List(glance.Definition(glance.Import)),
+) -> dict.Dict(String, String) {
+  list.fold(imports, dict.new(), fn(acc, def) {
+    let glance.Definition(_, imp) = def
+    let last_seg = last_module_segment(module_path: imp.module)
+    let alias = case imp.alias {
+      option.Some(glance.Named(name)) -> name
+      _ -> last_seg
+    }
+    dict.insert(acc, alias, imp.module)
+  })
+}
+
 fn parse_single_endpoint(
   func func: glance.Function,
   module_path module_path: String,
   type_imports type_imports: dict.Dict(String, String),
   alias_map alias_map: dict.Dict(String, String),
+  type_imports_full type_imports_full: dict.Dict(String, String),
+  alias_map_full alias_map_full: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
@@ -767,6 +815,21 @@ fn parse_single_endpoint(
         _, _ -> Error(Nil)
       }
     })
+  let params_typed =
+    list.filter_map(non_state_params, fn(p) {
+      case p.label, p.type_ {
+        option.Some(label), option.Some(type_) ->
+          Ok(#(
+            label,
+            glance_type_to_field_type(
+              type_: type_,
+              imports_full: type_imports_full,
+              aliases_full: alias_map_full,
+            ),
+          ))
+        _, _ -> Error(Nil)
+      }
+    })
 
   // All non-builtin types must be from shared/
   let all_param_types =
@@ -780,7 +843,13 @@ fn parse_single_endpoint(
   Ok(HandlerEndpoint(
     module_path: module_path,
     fn_name: func.name,
-    params: param_info,
+    return_type: glance_type_to_field_type(
+      type_: response_type,
+      imports_full: type_imports_full,
+      aliases_full: alias_map_full,
+    ),
+    params: params_typed,
+    params_str: param_info,
     return_type_str: qualified_type_to_string(
       type_: response_type,
       imports: type_imports,
@@ -909,6 +978,85 @@ fn resolve_alias(
   case dict.get(alias_map, alias) {
     Ok(real_name) -> real_name
     Error(Nil) -> alias
+  }
+}
+
+/// Convert a glance.Type AST into a structured FieldType, resolving
+/// module-qualified types to their full paths via the supplied maps.
+/// Mirrors `qualified_type_to_string` but produces the structured form
+/// codegen pattern-matches on.
+///
+/// `imports_full` and `aliases_full` map unqualified names and module
+/// aliases (respectively) to FULL module paths (e.g. "shared/types"),
+/// not last segments. See `build_type_import_map_full`.
+fn glance_type_to_field_type(
+  type_ t: glance.Type,
+  imports_full imports_full: dict.Dict(String, String),
+  aliases_full aliases_full: dict.Dict(String, String),
+) -> field_type.FieldType {
+  case t {
+    glance.NamedType(name:, module: option.None, parameters: [], ..) ->
+      builtin_or_user(name:, parameters: [], imports_full:, aliases_full:)
+    glance.NamedType(name:, module: option.None, parameters: params, ..) ->
+      builtin_or_user(name:, parameters: params, imports_full:, aliases_full:)
+    glance.NamedType(name:, module: option.Some(m), parameters: params, ..) -> {
+      let module_path = dict.get(aliases_full, m) |> result.unwrap(or: m)
+      field_type.UserType(
+        module_path:,
+        type_name: name,
+        args: list.map(params, fn(p) {
+          glance_type_to_field_type(type_: p, imports_full:, aliases_full:)
+        }),
+      )
+    }
+    glance.TupleType(elements:, ..) ->
+      field_type.TupleOf(
+        elements: list.map(elements, fn(e) {
+          glance_type_to_field_type(type_: e, imports_full:, aliases_full:)
+        }),
+      )
+    glance.VariableType(name:, ..) -> field_type.TypeVar(name:)
+    glance.FunctionType(..) -> field_type.TypeVar(name: "_fn")
+    glance.HoleType(..) -> field_type.TypeVar(name: "_")
+  }
+}
+
+/// Resolve a non-module-qualified named type. Builtins return their
+/// FieldType directly. Other names are looked up in `imports_full` to
+/// produce a `UserType` with the import's full module path. Unknown
+/// names fall back to a `UserType` with the bare name as `module_path`
+/// — caller is expected to have validated all types via
+/// `all_types_shared` first, so this branch is unreachable in practice.
+fn builtin_or_user(
+  name name: String,
+  parameters parameters: List(glance.Type),
+  imports_full imports_full: dict.Dict(String, String),
+  aliases_full aliases_full: dict.Dict(String, String),
+) -> field_type.FieldType {
+  let recurse = fn(t) {
+    glance_type_to_field_type(type_: t, imports_full:, aliases_full:)
+  }
+  case name, parameters {
+    "Int", [] -> field_type.IntField
+    "Float", [] -> field_type.FloatField
+    "String", [] -> field_type.StringField
+    "Bool", [] -> field_type.BoolField
+    "BitArray", [] -> field_type.BitArrayField
+    "Nil", [] -> field_type.NilField
+    "List", [elem] -> field_type.ListOf(element: recurse(elem))
+    "Option", [inner] -> field_type.OptionOf(inner: recurse(inner))
+    "Result", [ok, err] ->
+      field_type.ResultOf(ok: recurse(ok), err: recurse(err))
+    "Dict", [key, val] ->
+      field_type.DictOf(key: recurse(key), value: recurse(val))
+    _, _ -> {
+      let module_path = dict.get(imports_full, name) |> result.unwrap(or: name)
+      field_type.UserType(
+        module_path:,
+        type_name: name,
+        args: list.map(parameters, recurse),
+      )
+    }
   }
 }
 

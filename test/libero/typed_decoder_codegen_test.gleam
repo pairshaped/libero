@@ -1,5 +1,6 @@
 import gleam/string
 import libero/codegen
+import libero/field_type
 import libero/walker
 
 fn sample_status_enum() -> List(walker.DiscoveredType) {
@@ -40,7 +41,11 @@ fn sample_record_type() -> List(walker.DiscoveredType) {
           variant_name: "Todo",
           atom_name: "todo",
           float_field_indices: [],
-          fields: [walker.StringField, walker.IntField, walker.BoolField],
+          fields: [
+            field_type.StringField,
+            field_type.IntField,
+            field_type.BoolField,
+          ],
         ),
       ],
     ),
@@ -60,8 +65,8 @@ fn sample_msg_from_server() -> List(walker.DiscoveredType) {
           atom_name: "items_loaded",
           float_field_indices: [],
           fields: [
-            walker.ListOf(
-              walker.UserType(
+            field_type.ListOf(
+              field_type.UserType(
                 module_path: "shared/item",
                 type_name: "Item",
                 args: [],
@@ -74,7 +79,7 @@ fn sample_msg_from_server() -> List(walker.DiscoveredType) {
           variant_name: "StatusChanged",
           atom_name: "status_changed",
           float_field_indices: [],
-          fields: [walker.StringField],
+          fields: [field_type.StringField],
         ),
         walker.DiscoveredVariant(
           module_path: "shared/messages",
@@ -176,7 +181,10 @@ pub fn result_field_uses_result_decoder_test() {
           atom_name: "wrapper",
           float_field_indices: [],
           fields: [
-            walker.ResultOf(ok: walker.StringField, err: walker.IntField),
+            field_type.ResultOf(
+              ok: field_type.StringField,
+              err: field_type.IntField,
+            ),
           ],
         ),
       ],
@@ -201,7 +209,7 @@ pub fn option_field_uses_option_decoder_test() {
           variant_name: "OptWrapper",
           atom_name: "opt_wrapper",
           float_field_indices: [],
-          fields: [walker.OptionOf(walker.StringField)],
+          fields: [field_type.OptionOf(field_type.StringField)],
         ),
       ],
     ),

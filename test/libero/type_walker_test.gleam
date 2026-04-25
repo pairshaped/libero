@@ -6,6 +6,7 @@
 import gleam/dict
 import gleam/list
 import gleam/set
+import libero/field_type
 import libero/scanner
 import libero/walker
 import simplifile
@@ -117,7 +118,7 @@ pub fn walk_populates_primitive_field_types_test() {
   // TodoParams(title: String) carries a single String field.
   let assert Ok(todo_params) =
     list.find(variants, fn(v) { v.variant_name == "TodoParams" })
-  let assert [walker.StringField] = todo_params.fields
+  let assert [field_type.StringField] = todo_params.fields
 }
 
 pub fn walk_resolves_user_type_in_field_test() {
@@ -134,13 +135,13 @@ pub fn walk_resolves_user_type_in_field_test() {
   let assert Ok(loaded) =
     list.find(variants, fn(v) { v.variant_name == "TodosLoaded" })
   let assert [
-    walker.ResultOf(
-      ok: walker.ListOf(walker.UserType(
+    field_type.ResultOf(
+      ok: field_type.ListOf(field_type.UserType(
         module_path: "shared/messages",
         type_name: "Todo",
         args: [],
       )),
-      err: walker.UserType(
+      err: field_type.UserType(
         module_path: "shared/messages",
         type_name: "TodoError",
         args: [],

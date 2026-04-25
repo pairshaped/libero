@@ -8,27 +8,14 @@ import gleam/set.{type Set}
 import gleam/string
 import simplifile
 
+import libero/field_type.{
+  type FieldType, BitArrayField, BoolField, DictOf, FloatField, IntField, ListOf,
+  NilField, OptionOf, ResultOf, StringField, TupleOf, TypeVar, UserType,
+}
 import libero/gen_error.{
   type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
 }
 import libero/scanner.{type MessageModule}
-
-/// The Gleam type of a single variant field, resolved to a structured form.
-pub type FieldType {
-  UserType(module_path: String, type_name: String, args: List(FieldType))
-  ListOf(element: FieldType)
-  OptionOf(inner: FieldType)
-  ResultOf(ok: FieldType, err: FieldType)
-  DictOf(key: FieldType, value: FieldType)
-  TupleOf(elements: List(FieldType))
-  IntField
-  FloatField
-  StringField
-  BoolField
-  BitArrayField
-  NilField
-  TypeVar(name: String)
-}
 
 /// A custom type discovered by the walker, grouping all its variants.
 pub type DiscoveredType {

@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/string
 import libero/codegen
+import libero/field_type
 import libero/scanner
 import simplifile
 
@@ -9,25 +10,33 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_todos",
+      return_type: field_type.placeholder(),
       params: [],
+      params_str: [],
       return_type_str: "Result(List(Todo), TodoError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "create_todo",
-      params: [#("params", "TodoParams")],
+      return_type: field_type.placeholder(),
+      params: [#("params", field_type.placeholder())],
+      params_str: [#("params", "TodoParams")],
       return_type_str: "Result(Todo, TodoError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "toggle_todo",
-      params: [#("id", "Int")],
+      return_type: field_type.placeholder(),
+      params: [#("id", field_type.placeholder())],
+      params_str: [#("id", "Int")],
       return_type_str: "Result(Todo, TodoError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "delete_todo",
-      params: [#("id", "Int")],
+      return_type: field_type.placeholder(),
+      params: [#("id", field_type.placeholder())],
+      params_str: [#("id", "Int")],
       return_type_str: "Result(Int, TodoError)",
     ),
   ]
@@ -78,7 +87,9 @@ pub fn endpoint_dispatch_is_server_only_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_todos",
+      return_type: field_type.placeholder(),
       params: [],
+      params_str: [],
       return_type_str: "Result(List(Todo), TodoError)",
     ),
   ]
@@ -110,19 +121,25 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      params: [#("filters", "widgets.WidgetFilters")],
+      return_type: field_type.placeholder(),
+      params: [#("filters", field_type.placeholder())],
+      params_str: [#("filters", "widgets.WidgetFilters")],
       return_type_str: "Result(widgets.WidgetList, widgets.WidgetError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      params: [#("params", "alerts.AlertParams")],
+      return_type: field_type.placeholder(),
+      params: [#("params", field_type.placeholder())],
+      params_str: [#("params", "alerts.AlertParams")],
       return_type_str: "Result(alerts.AlertResult, alerts.AlertError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "get_widget",
-      params: [#("id", "Int")],
+      return_type: field_type.placeholder(),
+      params: [#("id", field_type.placeholder())],
+      params_str: [#("id", "Int")],
       return_type_str: "Result(widget_detail.Widget, String)",
     ),
   ]
@@ -158,7 +175,9 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      params: [#("value", "Dict(String, Int)")],
+      return_type: field_type.placeholder(),
+      params: [#("value", field_type.placeholder())],
+      params_str: [#("value", "Dict(String, Int)")],
       return_type_str: "Result(Dict(String, Int), Nil)",
     ),
   ]
@@ -186,13 +205,17 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      params: [#("filters", "widgets.WidgetFilters")],
+      return_type: field_type.placeholder(),
+      params: [#("filters", field_type.placeholder())],
+      params_str: [#("filters", "widgets.WidgetFilters")],
       return_type_str: "Result(widgets.WidgetList, widgets.WidgetError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      params: [#("params", "alerts.AlertParams")],
+      return_type: field_type.placeholder(),
+      params: [#("params", field_type.placeholder())],
+      params_str: [#("params", "alerts.AlertParams")],
       return_type_str: "Result(alerts.AlertResult, alerts.AlertError)",
     ),
   ]
@@ -218,7 +241,9 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      params: [#("value", "Dict(String, Int)")],
+      return_type: field_type.placeholder(),
+      params: [#("value", field_type.placeholder())],
+      params_str: [#("value", "Dict(String, Int)")],
       return_type_str: "Result(Dict(String, Int), Nil)",
     ),
   ]
@@ -284,12 +309,19 @@ pub fn create_gadget(
   let assert [endpoint] = endpoints
   let assert "create_gadget" = endpoint.fn_name
 
-  // Param type should use the real module name, not the alias
-  let assert [#("params", type_str)] = endpoint.params
+  // Structured form must resolve the alias to the real module path.
+  let assert [
+    #("params", field_type.UserType("shared/gadgets", "GadgetParams", [])),
+  ] = endpoint.params
+  let assert field_type.ResultOf(
+    ok: field_type.UserType("shared/gadgets", "GadgetParams", []),
+    err: field_type.UserType("shared/gadgets", "GadgetError", []),
+  ) = endpoint.return_type
+
+  // String-form (kept for codegen compatibility) also resolves the alias.
+  let assert [#("params", type_str)] = endpoint.params_str
   let assert True = string.contains(type_str, "gadgets.GadgetParams")
   let assert False = string.contains(type_str, "g.GadgetParams")
-
-  // Return type should also use real module name
   let assert True = string.contains(endpoint.return_type_str, "gadgets.")
   let assert False = string.contains(endpoint.return_type_str, "g.")
 
@@ -314,7 +346,7 @@ pub fn scan_fixture_handler_endpoints_test() {
   // create_item should have one labelled param
   let assert Ok(create) =
     list.find(endpoints, fn(e) { e.fn_name == "create_item" })
-  let assert [#("params", _type_str)] = create.params
+  let assert [#("params", _type)] = create.params
 
   // get_items should have no params (only state)
   let assert Ok(get) = list.find(endpoints, fn(e) { e.fn_name == "get_items" })

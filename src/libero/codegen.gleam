@@ -7,6 +7,10 @@ import gleam/result
 import gleam/set
 import gleam/string
 import libero/config.{type Config, WsFullUrl, WsPathOnly}
+import libero/field_type.{
+  type FieldType, BitArrayField, BoolField, DictOf, FloatField, IntField, ListOf,
+  NilField, OptionOf, ResultOf, StringField, TupleOf, TypeVar, UserType,
+}
 import libero/format
 import libero/gen_error.{type GenError, CannotWriteFile}
 import libero/scanner.{type MessageModule}
@@ -241,7 +245,7 @@ pub fn write_endpoint_dispatch(
   let client_msg_variants =
     list.map(endpoints, fn(e) {
       let variant_name = to_pascal_case(e.fn_name)
-      case e.params {
+      case e.params_str {
         [] -> "  " <> variant_name
         params -> {
           let fields =
@@ -405,7 +409,7 @@ pub fn write_endpoint_client_stubs(
   let client_msg_variants =
     list.map(endpoints, fn(e) {
       let variant_name = to_pascal_case(e.fn_name)
-      case e.params {
+      case e.params_str {
         [] -> "  " <> variant_name
         params -> {
           let fields =
@@ -436,7 +440,7 @@ pub fn write_endpoint_client_stubs(
       let #(payload_type, error_type) = parse_result_type(e.return_type_str)
 
       // Build function params (endpoint params + on_response)
-      let fn_params = case e.params {
+      let fn_params = case e.params_str {
         [] ->
           "  on_response on_response: fn(RemoteData("
           <> payload_type
@@ -458,7 +462,7 @@ pub fn write_endpoint_client_stubs(
       }
 
       // Build ClientMsg constructor call
-      let msg_construct = case e.params {
+      let msg_construct = case e.params_str {
         [] -> variant_name
         params -> {
           let args = list.map(params, fn(p) { p.0 <> ":" })
@@ -480,7 +484,10 @@ pub fn write_endpoint_client_stubs(
   // Check if any type string references Option (not a prelude type in Gleam)
   let needs_option =
     list.any(endpoints, fn(e) {
-      let all_strs = [e.return_type_str, ..list.map(e.params, fn(p) { p.1 })]
+      let all_strs = [
+        e.return_type_str,
+        ..list.map(e.params_str, fn(p) { p.1 })
+      ]
       list.any(all_strs, fn(s) { string.contains(s, "Option") })
     })
   let option_import = case needs_option {
@@ -528,69 +535,31 @@ fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
   write_file(path: output, content: content)
 }
 
-/// Extract Result type parameters from a return type string.
-/// "Result(List(Todo), TodoError)" -> #("List(Todo)", "TodoError")
-/// "List(Todo)" -> #("List(Todo)", "Nil")  (bare type, no error)
+/// Extract Result type parameters from a return type string for use in
+/// generated Gleam source. "Result(List(Todo), TodoError)" produces
+/// #("List(Todo)", "TodoError"). Bare types (no Result wrapper) produce
+/// #(type_str, "Nil"). Splits only at the top-level comma so nested
+/// Result/Tuple/Dict types parse correctly.
+///
+/// Used by client stub generation to populate `RemoteData(payload, error)`
+/// annotations with the user-written type strings. The bug-prone
+/// recursive decoder generation that previously lived here is gone —
+/// see `field_decoder_call` for structural pattern matching on
+/// FieldType.
 fn parse_result_type(type_str: String) -> #(String, String) {
   use <- bool.guard(when: !string.starts_with(type_str, "Result("), return: #(
     type_str,
     "Nil",
   ))
-  // Strip "Result(" prefix and ")" suffix
-  let inner = string.drop_start(type_str, 7)
-  let inner = string.drop_end(inner, 1)
-  // Split on the top-level comma (not inside nested parens)
+  let inner = string.drop_start(type_str, 7) |> string.drop_end(1)
   case split_top_level_comma(inner) {
     Ok(#(payload, error)) -> #(string.trim(payload), string.trim(error))
     Error(Nil) -> #(type_str, "Nil")
   }
 }
 
-/// Split a string on the first comma that's not inside parentheses.
 fn split_top_level_comma(s: String) -> Result(#(String, String), Nil) {
   split_at_depth(remaining: s, depth: 0, acc: "")
-}
-
-fn split_top_level_commas(s: String) -> List(String) {
-  split_commas_loop(remaining: s, depth: 0, current: "", parts: [])
-  |> list.map(string.trim)
-}
-
-fn split_commas_loop(
-  remaining remaining: String,
-  depth depth: Int,
-  current current: String,
-  parts parts: List(String),
-) -> List(String) {
-  case string.pop_grapheme(remaining) {
-    Error(Nil) -> list.reverse([current, ..parts])
-    Ok(#("(", rest)) ->
-      split_commas_loop(
-        remaining: rest,
-        depth: depth + 1,
-        current: current <> "(",
-        parts: parts,
-      )
-    Ok(#(")", rest)) ->
-      split_commas_loop(
-        remaining: rest,
-        depth: depth - 1,
-        current: current <> ")",
-        parts: parts,
-      )
-    Ok(#(",", rest)) if depth == 0 ->
-      split_commas_loop(remaining: rest, depth: depth, current: "", parts: [
-        current,
-        ..parts
-      ])
-    Ok(#(c, rest)) ->
-      split_commas_loop(
-        remaining: rest,
-        depth: depth,
-        current: current <> c,
-        parts: parts,
-      )
-  }
 }
 
 fn split_at_depth(
@@ -647,7 +616,7 @@ fn collect_param_type_imports(
   endpoints endpoints: List(scanner.HandlerEndpoint),
 ) -> List(String) {
   endpoints
-  |> list.flat_map(fn(e) { list.map(e.params, fn(p) { p.1 }) })
+  |> list.flat_map(fn(e) { list.map(e.params_str, fn(p) { p.1 }) })
   |> list.flat_map(fn(s) { extract_module_qualifiers(s) })
   |> list.unique()
   |> list.sort(string.compare)
@@ -662,7 +631,7 @@ fn collect_shared_type_imports(
 ) -> List(String) {
   let all_type_strings =
     list.flat_map(endpoints, fn(e) {
-      let param_types = list.map(e.params, fn(p) { p.1 })
+      let param_types = list.map(e.params_str, fn(p) { p.1 })
       [e.return_type_str, ..param_types]
     })
 
@@ -678,7 +647,10 @@ fn endpoints_use_type(
   type_marker type_marker: String,
 ) -> Bool {
   list.any(endpoints, fn(e) {
-    let type_strings = [e.return_type_str, ..list.map(e.params, fn(p) { p.1 })]
+    let type_strings = [
+      e.return_type_str,
+      ..list.map(e.params_str, fn(p) { p.1 })
+    ]
     list.any(type_strings, fn(type_str) {
       string.contains(type_str, type_marker)
     })
@@ -1332,26 +1304,26 @@ fn emit_tagged_union_decoder(
 
 /// Produce the JS expression that decodes `term_expr` according to `ft`.
 /// `depth` tracks nesting to generate unique lambda param names (t0, t1, ...).
-fn field_decoder_call(ft: walker.FieldType, term_expr: String) -> String {
+fn field_decoder_call(ft: FieldType, term_expr: String) -> String {
   field_decoder_call_depth(ft, term_expr, 0)
 }
 
 // nolint: label_possible -- internal recursive helper, labels add noise
 fn field_decoder_call_depth(
-  ft: walker.FieldType,
+  ft: FieldType,
   term_expr: String,
   depth: Int,
 ) -> String {
   let param = "t" <> int.to_string(depth)
   let next = depth + 1
   case ft {
-    walker.IntField -> "decode_int(" <> term_expr <> ")"
-    walker.FloatField -> "decode_float(" <> term_expr <> ")"
-    walker.StringField -> "decode_string(" <> term_expr <> ")"
-    walker.BoolField -> "decode_bool(" <> term_expr <> ")"
-    walker.BitArrayField -> "decode_bit_array(" <> term_expr <> ")"
-    walker.NilField -> "decode_nil(" <> term_expr <> ")"
-    walker.ListOf(inner) ->
+    IntField -> "decode_int(" <> term_expr <> ")"
+    FloatField -> "decode_float(" <> term_expr <> ")"
+    StringField -> "decode_string(" <> term_expr <> ")"
+    BoolField -> "decode_bool(" <> term_expr <> ")"
+    BitArrayField -> "decode_bit_array(" <> term_expr <> ")"
+    NilField -> "decode_nil(" <> term_expr <> ")"
+    ListOf(inner) ->
       "decode_list_of(("
       <> param
       <> ") => "
@@ -1359,7 +1331,7 @@ fn field_decoder_call_depth(
       <> ", "
       <> term_expr
       <> ")"
-    walker.OptionOf(inner) ->
+    OptionOf(inner) ->
       "decode_option_of(("
       <> param
       <> ") => "
@@ -1367,7 +1339,7 @@ fn field_decoder_call_depth(
       <> ", "
       <> term_expr
       <> ")"
-    walker.ResultOf(ok, err) -> {
+    ResultOf(ok, err) -> {
       let ok_param = "t" <> int.to_string(next)
       let err_depth = next + 1
       let err_param = "t" <> int.to_string(err_depth)
@@ -1383,7 +1355,7 @@ fn field_decoder_call_depth(
       <> term_expr
       <> ")"
     }
-    walker.DictOf(k, v) -> {
+    DictOf(k, v) -> {
       let key_param = "t" <> int.to_string(next)
       let val_depth = next + 1
       let val_param = "t" <> int.to_string(val_depth)
@@ -1399,7 +1371,7 @@ fn field_decoder_call_depth(
       <> term_expr
       <> ")"
     }
-    walker.TupleOf(elems) -> {
+    TupleOf(elems) -> {
       let decoders =
         list.index_map(elems, fn(e, i) {
           let elem_depth = next + i
@@ -1415,11 +1387,11 @@ fn field_decoder_call_depth(
       <> term_expr
       <> ")"
     }
-    walker.TypeVar(name) ->
+    TypeVar(name) ->
       "(() => { throw new DecodeError(\"TypeVar<"
       <> name
       <> "> not supported at runtime\"); })()"
-    walker.UserType(module_path, type_name, _args) ->
+    UserType(module_path, type_name, _args) ->
       decoder_fn_name(module_path, type_name) <> "(" <> term_expr <> ")"
   }
 }
@@ -1440,9 +1412,21 @@ fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
     _ -> {
       let decoders =
         list.map(endpoints, fn(e) {
-          let #(ok_type, err_type) = parse_result_type(e.return_type_str)
-          let ok_decoder = type_to_decoder_call(ok_type, "inner[1]")
-          let err_decoder = type_to_decoder_call(err_type, "inner[1]")
+          // Pattern-match on the structured return type. Scanner has
+          // already confirmed `parse_single_endpoint` that the return
+          // shape is Result(payload, error), so this match is total in
+          // practice. The fallback arm exists to satisfy exhaustiveness
+          // and would only fire on a future scanner regression.
+          let #(ok_decoder, err_decoder) = case e.return_type {
+            ResultOf(ok:, err:) -> #(
+              field_decoder_call(ok, "inner[1]"),
+              field_decoder_call(err, "inner[1]"),
+            )
+            _ -> #(
+              "(() => { throw new DecodeError(\"non-Result return\"); })()",
+              "(() => { throw new DecodeError(\"non-Result return\"); })()",
+            )
+          }
           "export function decode_response_"
           <> e.fn_name
           <> "(raw) {\n"
@@ -1467,110 +1451,6 @@ fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
       <> string.join(decoders, "\n\n")
       <> "\n"
     }
-  }
-}
-
-/// Convert a type string to the JS decoder call for that type.
-/// Handles builtins, module-qualified types, and parameterized wrappers
-/// recursively.
-fn type_to_decoder_call(type_str: String, term_expr: String) -> String {
-  let type_str = string.trim(type_str)
-  case type_str {
-    "Int" -> "decode_int(" <> term_expr <> ")"
-    "String" -> "decode_string(" <> term_expr <> ")"
-    "Bool" -> "decode_bool(" <> term_expr <> ")"
-    "Float" -> "decode_float(" <> term_expr <> ")"
-    "BitArray" -> "decode_bit_array(" <> term_expr <> ")"
-    "Nil" -> "decode_nil(" <> term_expr <> ")"
-    _ -> decode_wrapper_or_custom(type_str, term_expr)
-  }
-}
-
-fn decode_wrapper_or_custom(type_str: String, term_expr: String) -> String {
-  use <- bool.lazy_guard(
-    when: string.starts_with(type_str, "List("),
-    return: fn() {
-      let inner = unwrap_type_args(type_str, 5)
-      "decode_list_of((t0) => "
-      <> type_to_decoder_call(inner, "t0")
-      <> ", "
-      <> term_expr
-      <> ")"
-    },
-  )
-  use <- bool.lazy_guard(
-    when: string.starts_with(type_str, "Option("),
-    return: fn() {
-      let inner = unwrap_type_args(type_str, 7)
-      "decode_option_of((t0) => "
-      <> type_to_decoder_call(inner, "t0")
-      <> ", "
-      <> term_expr
-      <> ")"
-    },
-  )
-  use <- bool.lazy_guard(
-    when: string.starts_with(type_str, "Result("),
-    return: fn() {
-      let parts = unwrap_type_args(type_str, 7) |> split_top_level_commas
-      case parts {
-        [ok_type, err_type] ->
-          "decode_result_of((t0) => "
-          <> type_to_decoder_call(ok_type, "t0")
-          <> ", (t1) => "
-          <> type_to_decoder_call(err_type, "t1")
-          <> ", "
-          <> term_expr
-          <> ")"
-        _ -> term_expr
-      }
-    },
-  )
-  use <- bool.lazy_guard(
-    when: string.starts_with(type_str, "Dict("),
-    return: fn() {
-      let parts = unwrap_type_args(type_str, 5) |> split_top_level_commas
-      case parts {
-        [key_type, value_type] ->
-          "decode_dict_of((t0) => "
-          <> type_to_decoder_call(key_type, "t0")
-          <> ", (t1) => "
-          <> type_to_decoder_call(value_type, "t1")
-          <> ", "
-          <> term_expr
-          <> ")"
-        _ -> term_expr
-      }
-    },
-  )
-  use <- bool.lazy_guard(when: string.starts_with(type_str, "#("), return: fn() {
-    let parts =
-      unwrap_type_args(type_str, 2)
-      |> split_top_level_commas
-    let decoders =
-      list.index_map(parts, fn(part, i) {
-        let param = "t" <> int.to_string(i)
-        "(" <> param <> ") => " <> type_to_decoder_call(part, param)
-      })
-    "decode_tuple_of(["
-    <> string.join(decoders, ", ")
-    <> "], "
-    <> term_expr
-    <> ")"
-  })
-  type_to_custom_decoder_call(type_str, term_expr)
-}
-
-fn unwrap_type_args(type_str: String, prefix_len: Int) -> String {
-  string.drop_start(type_str, prefix_len)
-  |> string.drop_end(1)
-}
-
-fn type_to_custom_decoder_call(type_str: String, term_expr: String) -> String {
-  use <- bool.guard(when: !string.contains(type_str, "."), return: term_expr)
-  case string.split(type_str, ".") {
-    [m, t] -> decoder_fn_name("shared/" <> m, t) <> "(" <> term_expr <> ")"
-    _ -> term_expr
   }
 }
 

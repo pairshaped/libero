@@ -4,6 +4,7 @@
 //// to their underlying type and continue walking transitively.
 
 import gleam/list
+import libero/field_type
 import libero/scanner
 import libero/walker
 
@@ -79,7 +80,11 @@ pub fn alias_field_resolves_to_correct_field_type_test() {
     list.find(variants, fn(v) { v.variant_name == "GotPriority" })
   // The field should be a UserType pointing to shared/item.Priority
   let assert [
-    walker.UserType(module_path: "shared/item", type_name: "Priority", args: []),
+    field_type.UserType(
+      module_path: "shared/item",
+      type_name: "Priority",
+      args: [],
+    ),
   ] = got_priority.fields
 }
 
@@ -97,7 +102,7 @@ pub fn alias_container_field_resolves_correctly_test() {
     list.find(variants, fn(v) { v.variant_name == "GotItems" })
   // The field should be ListOf(UserType(shared/item, Item))
   let assert [
-    walker.ListOf(walker.UserType(
+    field_type.ListOf(field_type.UserType(
       module_path: "shared/item",
       type_name: "Item",
       args: [],
