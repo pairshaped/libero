@@ -48,6 +48,42 @@ pub fn update_from_server(
   })
 }
 
+/// Register a callback that fires whenever the WebSocket connects —
+/// the initial connection and every successful reconnect. Use this
+/// to load (or reload) state without a separate code path for the
+/// first connection. Register early in your app's `init`.
+pub fn on_connect(handler handler: fn() -> msg) -> Effect(msg) {
+  effect.from(fn(dispatch) {
+    ffi_register_on_connect(callback: fn() { dispatch(handler()) })
+  })
+}
+
+/// Register a callback that fires when the WebSocket disconnects.
+/// The reason is a human-readable string suitable for display.
+/// Auto-reconnect kicks in after the disconnect with exponential
+/// backoff, so a paired `on_connect` will fire when service resumes.
+pub fn on_disconnect(handler handler: fn(String) -> msg) -> Effect(msg) {
+  effect.from(fn(dispatch) {
+    ffi_register_on_disconnect(callback: fn(reason) {
+      dispatch(handler(reason))
+    })
+  })
+}
+
+// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+@external(javascript, "./rpc_ffi.mjs", "registerOnConnect")
+fn ffi_register_on_connect(callback callback: fn() -> Nil) -> Nil {
+  let _ = callback
+  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+}
+
+// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+@external(javascript, "./rpc_ffi.mjs", "registerOnDisconnect")
+fn ffi_register_on_disconnect(callback callback: fn(String) -> Nil) -> Nil {
+  let _ = callback
+  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+}
+
 // nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "registerPushHandler")
 fn ffi_register_push(

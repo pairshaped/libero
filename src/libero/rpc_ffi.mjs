@@ -868,11 +868,14 @@ export function decode_safe(buffer) {
 // WebSocket — late responses for timed-out requests are harmlessly
 // dropped since their ID has been removed from the callback Map.
 //
-// Reconnection is the consumer's responsibility — call send() again
-// after a close and the socket will be re-established. Push messages
-// arriving between close and reconnect are lost by design; consumers
-// needing durable push should implement reconnect-with-replay at the
-// application layer.
+// Reconnection is automatic. On unexpected close (network blip, server
+// restart, page resume from sleep), the socket reconnects with
+// exponential backoff (500ms → 30s, full jitter). Pending requests
+// reject with a connection-lost error rather than wait — application
+// code retries idempotently or surfaces the error. Push handlers
+// remain registered across reconnects, so push frames resume once the
+// socket is back. Apps that need to refetch state on reconnect should
+// register an `on_connect` listener (see registerOnConnect below).
 
 let ws = null;
 let pendingSends = [];    // [{payload, requestId, callback, timer}]
@@ -882,6 +885,22 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 // Push handler registry: module path → callback
 const pushHandlers = new Map();
+
+// Connection lifecycle listeners. `on_connect` fires on every socket
+// open — first connect AND reconnects — so apps can use one path for
+// "load initial state". `on_disconnect` fires when the socket closes
+// (the reason string is human-readable and intended for UX).
+const onConnectListeners = new Set();
+const onDisconnectListeners = new Set();
+
+// Reconnect state. lastUrl is captured on first ensureSocket() so
+// auto-reconnect can re-create the socket without the caller passing
+// the URL again.
+let lastUrl = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 30_000;
 
 // Build a connection-error value as a proper Gleam Result(_, RpcError)
 // so `wire.coerce` + pattern matching in remote_data.from_response (or the
@@ -935,6 +954,35 @@ function clearAllPending(reason) {
   responseCallbacks = new Map();
 }
 
+// Compute the next reconnect delay with full jitter: pick a value in
+// [cap/2, cap] where cap doubles each attempt. The jitter avoids a
+// thundering herd if many clients drop and reconnect together.
+function nextReconnectDelay() {
+  const cap = Math.min(
+    RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts),
+    RECONNECT_MAX_MS,
+  );
+  return cap / 2 + Math.random() * (cap / 2);
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer !== null) return;
+  if (lastUrl === null) return;
+  const delay = nextReconnectDelay();
+  reconnectAttempts += 1;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (ws === null) ensureSocket(lastUrl);
+  }, delay);
+}
+
+function cancelReconnect() {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
 function ensureSocket(url) {
   if (ws !== null) {
     if (ws.url !== url) {
@@ -946,22 +994,29 @@ function ensureSocket(url) {
     return;
   }
 
+  lastUrl = url;
   let sock;
   try {
     sock = new WebSocket(url);
   } catch (e) {
     clearAllPending("WebSocket constructor failed: " + (e && e.message ? e.message : String(e)));
+    scheduleReconnect();
     return;
   }
   ws = sock;
   ws.binaryType = "arraybuffer";
 
   ws.addEventListener("open", () => {
+    reconnectAttempts = 0;
+    cancelReconnect();
     for (const entry of pendingSends) {
       ws.send(entry.payload);
       responseCallbacks.set(entry.requestId, { callback: entry.callback, timer: entry.timer });
     }
     pendingSends = [];
+    for (const listener of onConnectListeners) {
+      try { listener(); } catch (_) { /* swallow listener exceptions */ }
+    }
   });
 
   ws.addEventListener("message", (event) => {
@@ -1031,26 +1086,46 @@ function ensureSocket(url) {
   ws.addEventListener("close", () => {
     ws = null;
     clearAllPending("WebSocket connection closed");
-    // Note: no automatic reconnection. The next send() call will create a
-    // new connection via ensureSocket(). However, push handlers registered
-    // via registerPushHandler() will silently stop receiving messages until
-    // that reconnection happens. Consumers that rely on push should handle
-    // reconnection in their app layer (e.g., re-send a subscription message
-    // or reload data after ServerResponded triggers a new connection).
+    for (const listener of onDisconnectListeners) {
+      try { listener("connection closed"); } catch (_) { /* swallow */ }
+    }
+    scheduleReconnect();
   });
 
   ws.addEventListener("error", () => {
     if (ws) {
       const sock = ws;
       ws = null;
-      // Clear pending callbacks immediately so a reconnection via the
-      // next send() starts with a clean state. The "close" event fires
-      // asynchronously after sock.close(), so without this, a send()
-      // call between error and close could queue into stale state.
+      // Clear pending callbacks immediately so the close handler (which
+      // fires asynchronously) doesn't operate on stale state. The close
+      // handler will fire scheduleReconnect; we just need clean teardown.
       clearAllPending("WebSocket error");
+      for (const listener of onDisconnectListeners) {
+        try { listener("connection error"); } catch (_) { /* swallow */ }
+      }
       sock.close();
     }
   });
+}
+
+/**
+ * Register a callback that fires whenever the WebSocket connection
+ * opens — both the initial connect and every successful reconnect.
+ * Use this to load (or reload) state without a separate code path
+ * for the first connection.
+ * @param {() => void} callback
+ */
+export function registerOnConnect(callback) {
+  onConnectListeners.add(callback);
+}
+
+/**
+ * Register a callback that fires when the WebSocket disconnects.
+ * The reason is a human-readable string suitable for UX messaging.
+ * @param {(reason: string) => void} callback
+ */
+export function registerOnDisconnect(callback) {
+  onDisconnectListeners.add(callback);
 }
 
 /**

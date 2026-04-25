@@ -195,6 +195,15 @@ Key patterns:
 - Use `remote_data.map` to update loaded data: `remote_data.map(data: model.todos, transform: fn(todos) { ... })`.
 - Pattern match all states in the view: `Success`, `Loading`, `Failure`, `NotAsked`.
 
+### Connection lifecycle
+
+The WebSocket auto-reconnects with exponential backoff (500ms → 30s, full jitter) on unexpected disconnects. Hook in via `libero/rpc`:
+
+- `rpc.on_connect(handler:)` — fires on initial connect AND every successful reconnect. Use it to load (or reload) state without separate code paths for the first connection.
+- `rpc.on_disconnect(handler:)` — fires when the connection drops; the reason string is human-readable and intended for UX ("offline" indicator, "reconnecting…").
+
+Pending requests at disconnect time reject with a connection-lost error rather than waiting. Push handlers persist across reconnects.
+
 ## BEAM Clients (CLI, Services)
 
 Any BEAM process can call the server over HTTP POST with native ETF:
