@@ -1,11 +1,16 @@
-import ets_store
-import server/handler_context.{type HandlerContext}
+import gleam/list
+import server/handler_context.{type HandlerContext, HandlerContext}
 import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 
 // Each pub function below is an RPC endpoint. Libero's scanner detects these
 // by checking four criteria: (1) public, (2) last param is HandlerContext,
 // (3) returns #(Result(value, error), HandlerContext), and (4) all types in
 // the signature come from shared/ or are builtins.
+//
+// These functions can live in any module under src/server/, not just this one.
+// Larger apps typically organize handlers into domain modules (e.g.
+// server/todos.gleam, server/auth.gleam). The scanner walks all server
+// source files and collects every function that matches the criteria.
 //
 // The codegen reads these signatures and generates:
 //   - A ClientMsg variant per function (e.g. GetTodos, CreateTodo(params: TodoParams))
@@ -22,7 +27,7 @@ import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 pub fn get_todos(
   state state: HandlerContext,
 ) -> #(Result(List(Todo), types.TodoError), HandlerContext) {
-  #(Ok(ets_store.all()), state)
+  #(Ok(state.todos), state)
 }
 
 // create_todo -> generates ClientMsg variant: CreateTodo(params: TodoParams)
@@ -36,9 +41,12 @@ pub fn create_todo(
   case params.title {
     "" -> #(Error(TitleRequired), state)
     title -> {
-      let id = ets_store.next_id()
-      let item = Todo(id:, title:, completed: False)
-      ets_store.insert(id, item)
+      let item = Todo(id: state.next_id, title:, completed: False)
+      let state =
+        HandlerContext(
+          todos: list.append(state.todos, [item]),
+          next_id: state.next_id + 1,
+        )
       #(Ok(item), state)
     }
   }
@@ -51,12 +59,18 @@ pub fn toggle_todo(
   id id: Int,
   state state: HandlerContext,
 ) -> #(Result(Todo, types.TodoError), HandlerContext) {
-  case ets_store.lookup(id) {
+  case list.find(state.todos, fn(t) { t.id == id }) {
     Error(Nil) -> #(Error(NotFound), state)
     Ok(item) -> {
       let toggled = Todo(..item, completed: !item.completed)
-      ets_store.insert(id, toggled)
-      #(Ok(toggled), state)
+      let todos =
+        list.map(state.todos, fn(t) {
+          case t.id == id {
+            True -> toggled
+            False -> t
+          }
+        })
+      #(Ok(toggled), HandlerContext(..state, todos:))
     }
   }
 }
@@ -68,11 +82,11 @@ pub fn delete_todo(
   id id: Int,
   state state: HandlerContext,
 ) -> #(Result(Int, types.TodoError), HandlerContext) {
-  case ets_store.lookup(id) {
-    Error(Nil) -> #(Error(NotFound), state)
-    Ok(_) -> {
-      ets_store.delete(id)
-      #(Ok(id), state)
+  case list.any(state.todos, fn(t) { t.id == id }) {
+    False -> #(Error(NotFound), state)
+    True -> {
+      let todos = list.filter(state.todos, fn(t) { t.id != id })
+      #(Ok(id), HandlerContext(..state, todos:))
     }
   }
 }
