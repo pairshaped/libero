@@ -9,6 +9,12 @@ import libero/wire
 import server/handler as server_handler_handler
 import server/handler_context.{type HandlerContext}
 
+pub type ClientMsg {
+  Increment
+  Decrement
+  GetCounter
+}
+
 @external(erlang, "ssr_hydration@generated@rpc_atoms", "ensure")
 pub fn ensure_atoms() -> Nil
 
@@ -17,10 +23,23 @@ pub fn handle(
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
-    Ok(#("shared/messages", request_id, msg)) ->
-      dispatch(state, request_id, fn() {
-        server_handler_handler.update_from_client(msg: wire.coerce(msg), state:)
-      })
+    Ok(#("shared/messages", request_id, msg)) -> {
+      let typed_msg: ClientMsg = wire.coerce(msg)
+      case typed_msg {
+        Increment ->
+          dispatch(state, request_id, fn() {
+            server_handler_handler.increment(state:)
+          })
+        Decrement ->
+          dispatch(state, request_id, fn() {
+            server_handler_handler.decrement(state:)
+          })
+        GetCounter ->
+          dispatch(state, request_id, fn() {
+            server_handler_handler.get_counter(state:)
+          })
+      }
+    }
     Ok(#(name, _request_id, _)) -> #(
       wire.tag_response(
         request_id: 0,
@@ -69,10 +88,6 @@ fn dispatch(
   }
 }
 
-/// Run an encoder thunk under try_call protection. If encoding panics
-/// (e.g. a response value contains an unencodable term), return an
-/// InternalError response with the panic reason so the websocket handler
-/// can log it and stay alive.
 fn safe_encode(
   encoder: fn() -> BitArray,
   state: HandlerContext,

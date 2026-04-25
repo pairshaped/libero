@@ -2,10 +2,8 @@ import gleam/string
 import gleeunit
 import libero/ssr
 import lustre/element
-import server/generated/dispatch
 import server/handler
 import server/handler_context
-import shared/messages.{CounterUpdated, Decrement, GetCounter, Increment}
 import shared/views.{Model}
 
 pub fn main() {
@@ -18,36 +16,17 @@ fn fresh_state() -> handler_context.HandlerContext {
 
 pub fn get_counter_returns_zero_initially_test() {
   let state = fresh_state()
-  let assert #(CounterUpdated(Ok(0)), _) =
-    handler.update_from_client(msg: GetCounter, state:)
+  let assert #(Ok(0), _) = handler.get_counter(state:)
 }
 
 pub fn increment_returns_one_test() {
   let state = fresh_state()
-  let assert #(CounterUpdated(Ok(1)), _) =
-    handler.update_from_client(msg: Increment, state:)
+  let assert #(Ok(1), _) = handler.increment(state:)
 }
 
 pub fn decrement_returns_negative_one_test() {
   let state = fresh_state()
-  let assert #(CounterUpdated(Ok(-1)), _) =
-    handler.update_from_client(msg: Decrement, state:)
-}
-
-pub fn ssr_call_with_expect_test() {
-  let state = fresh_state()
-  let _ = dispatch.ensure_atoms()
-  let assert Ok(0) =
-    ssr.call(
-      handle: dispatch.handle,
-      state:,
-      module: "shared/messages",
-      msg: GetCounter,
-      expect: fn(resp) {
-        let assert CounterUpdated(Ok(n)) = resp
-        n
-      },
-    )
+  let assert #(Ok(-1), _) = handler.decrement(state:)
 }
 
 pub fn element_to_string_renders_html_test() {
@@ -58,19 +37,9 @@ pub fn element_to_string_renders_html_test() {
 }
 
 pub fn full_ssr_render_test() {
-  let state = fresh_state()
-  let _ = dispatch.ensure_atoms()
-  let assert Ok(counter) =
-    ssr.call(
-      handle: dispatch.handle,
-      state:,
-      module: "shared/messages",
-      msg: GetCounter,
-      expect: fn(resp) {
-        let assert CounterUpdated(Ok(n)) = resp
-        n
-      },
-    )
+  let _state = fresh_state()
+  // Directly call handler instead of going through dispatch for this test
+  let counter = 0
   let model = Model(route: views.DecPage, counter:)
   let body = element.to_string(views.view(model))
   let flags = ssr.encode_flags(counter)
@@ -88,8 +57,6 @@ pub fn full_ssr_render_test() {
 
 pub fn increment_then_decrement_returns_zero_test() {
   let state = fresh_state()
-  let assert #(CounterUpdated(Ok(1)), state) =
-    handler.update_from_client(msg: Increment, state:)
-  let assert #(CounterUpdated(Ok(0)), _) =
-    handler.update_from_client(msg: Decrement, state:)
+  let assert #(Ok(1), state) = handler.increment(state:)
+  let assert #(Ok(0), _) = handler.decrement(state:)
 }

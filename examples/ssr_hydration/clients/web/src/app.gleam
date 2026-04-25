@@ -3,12 +3,11 @@
 import generated/messages as rpc
 import generated/ssr
 import gleam/dynamic.{type Dynamic}
-import libero/remote_data
+import libero/remote_data.{type RemoteData, Success}
 import libero/ssr as libero_ssr
 import lustre
 import lustre/effect.{type Effect}
 import router
-import shared/messages.{Decrement, Increment}
 import shared/views.{
   type Model, type Msg, CounterChanged, DecPage, IncPage, Model, NavigateTo,
   UserClickedAction,
@@ -40,17 +39,21 @@ fn init(flags: Dynamic) -> #(Model, Effect(Msg)) {
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
+    // Send increment or decrement RPC based on current route.
+    // The generated stub handles wire encoding and response decoding.
+    // on_response wraps the RemoteData result in our CounterChanged msg.
     UserClickedAction -> {
-      let rpc_msg = case model.route {
-        IncPage -> Increment
-        DecPage -> Decrement
+      let effect = case model.route {
+        IncPage ->
+          rpc.increment(on_response: fn(rd) {
+            CounterChanged(unwrap_counter(rd))
+          })
+        DecPage ->
+          rpc.decrement(on_response: fn(rd) {
+            CounterChanged(unwrap_counter(rd))
+          })
       }
-      #(
-        model,
-        rpc.send_to_server(msg: rpc_msg, on_response: fn(raw) {
-          CounterChanged(decode_counter(raw))
-        }),
-      )
+      #(model, effect)
     }
     NavigateTo(route) -> #(
       Model(..model, route:),
@@ -60,7 +63,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn decode_counter(raw: Dynamic) -> Int {
-  remote_data.from_response(raw:, format_domain: fn(_) { "error" })
-  |> remote_data.unwrap(default: 0)
+// Extract the counter value from RemoteData, defaulting to 0 on failure.
+fn unwrap_counter(rd: RemoteData(Int, Nil)) -> Int {
+  case rd {
+    Success(n) -> n
+    _ -> 0
+  }
 }

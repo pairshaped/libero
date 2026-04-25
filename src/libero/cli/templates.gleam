@@ -55,42 +55,36 @@ gleeunit = \"~> 1.0\"
 "
 }
 
-/// Returns a skeleton messages module.
+/// Returns a skeleton shared types module.
 ///
-/// Defines the typed RPC boundary between client and server.
-/// Add your message types here — libero scans for MsgFromClient
-/// and MsgFromServer to generate dispatch and client stubs.
+/// Domain types used in handler signatures live here. Only types
+/// exported from shared/ (or builtins) can appear in handler
+/// function signatures. Libero scans these to validate endpoints.
 pub fn starter_messages() -> String {
-  "/// Define your message types here.
-/// Libero scans for MsgFromClient and MsgFromServer to generate
-/// dispatch and client stubs.
-///
-/// Each MsgFromServer variant should have exactly one field.
-/// Wrap it in Result(payload, error) so the client can use
-/// remote_data.from_response to handle responses.
+  "/// Domain types shared between server and client.
+/// Only types from shared/ (or builtins like Int, String, List)
+/// can appear in handler function signatures.
 
-pub type MsgFromClient {
-  Ping
-}
-
-pub type MsgFromServer {
-  Pong(Result(String, Nil))
+pub type PingError {
+  PingFailed
 }
 "
 }
 
 /// Returns a skeleton handler module.
+///
+/// Each pub function becomes an RPC endpoint. Libero detects them
+/// by checking: (1) public, (2) last param is HandlerContext,
+/// (3) returns #(Result(value, error), HandlerContext), and
+/// (4) all types come from shared/ or are builtins.
 pub fn starter_handler() -> String {
   "import server/handler_context.{type HandlerContext}
-import shared/messages.{type MsgFromClient, type MsgFromServer, Ping, Pong}
+import shared/messages.{type PingError}
 
-pub fn update_from_client(
-  msg msg: MsgFromClient,
+pub fn ping(
   state state: HandlerContext,
-) -> #(MsgFromServer, HandlerContext) {
-  case msg {
-    Ping -> #(Pong(Ok(\"pong\")), state)
-  }
+) -> #(Result(String, PingError), HandlerContext) {
+  #(Ok(\"pong\"), state)
 }
 "
 }
@@ -111,7 +105,6 @@ pub fn new() -> HandlerContext {
 pub fn starter_test() -> String {
   "import server/handler
 import server/handler_context
-import shared/messages.{Ping, Pong}
 import gleeunit
 
 pub fn main() {
@@ -119,9 +112,9 @@ pub fn main() {
 }
 
 pub fn ping_test() {
-  let state = context.new()
-  let assert #(Pong(Ok(\"pong\")), _) =
-    handler.update_from_client(msg: Ping, state:)
+  let state = handler_context.new()
+  let assert #(Ok(\"pong\"), _) =
+    handler.ping(state:)
 }
 "
 }
@@ -129,25 +122,25 @@ pub fn ping_test() {
 /// Returns a starter Lustre SPA app module with a working RPC example.
 pub fn starter_spa(name name: String) -> String {
   "import generated/messages as rpc
-import libero/remote_data.{type RpcData, Failure, Loading, NotAsked, Success}
+import libero/remote_data.{type RemoteData, Failure, Loading, NotAsked, Success}
 import lustre
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/effect.{type Effect}
 import lustre/event
-import shared/messages.{Ping}
+import shared/messages.{type PingError}
 
 // -- Model --
 
 pub type Model {
-  Model(response: RpcData(String))
+  Model(response: RemoteData(String, PingError))
 }
 
 // -- Messages --
 
 pub type Msg {
   UserClickedPing
-  GotPong(RpcData(String))
+  GotPong(RemoteData(String, PingError))
 }
 
 // -- Init --
@@ -162,16 +155,10 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     UserClickedPing -> #(
       Model(response: Loading),
-      send_ping(),
+      rpc.ping(on_response: GotPong),
     )
     GotPong(rd) -> #(Model(response: rd), effect.none())
   }
-}
-
-fn send_ping() -> Effect(Msg) {
-  rpc.send_to_server(msg: Ping, on_response: fn(raw) {
-    GotPong(remote_data.from_response(raw:, format_domain: fn(_) { \"error\" }))
-  })
 }
 
 // -- View --
@@ -185,7 +172,7 @@ fn view(model: Model) -> Element(Msg) {
         NotAsked -> \"Click the button to ping the server.\"
         Loading -> \"Loading...\"
         Success(msg) -> \"Server says: \" <> msg
-        Failure(err) -> \"Error: \" <> err.message
+        Failure(_err) -> \"Ping failed\"
       },
     )]),
   ])
@@ -257,8 +244,8 @@ The server starts on the port configured in `gleam.toml` under
 ## Project structure
 
 ```
-src/server/         Server-side Gleam code (handlers, shared state, etc.)
-shared/             Types shared between server and clients (messages, models)
+src/server/         Server-side Gleam code (handlers, context, etc.)
+shared/             Domain types shared between server and clients
 clients/            Client packages (SPA, CLI, etc.)
 test/               Tests
 ```
@@ -266,7 +253,7 @@ test/               Tests
 ## Commands
 
 - `gleam run -m libero -- build` generates dispatch, client stubs, and
-  other derived code from your message types.
+  other derived code from your handler signatures.
 - `gleam run -m libero -- gen` regenerates only the derived code without
   rebuilding everything.
 - `gleam run -m libero -- add <name> --target <javascript|erlang>` adds
@@ -275,19 +262,21 @@ test/               Tests
 
 ## How it works
 
-Define your message types in `shared/src/shared/messages.gleam`. The
-`MsgFromClient` type lists every request the client can send; the
-`MsgFromServer` type lists every response the server can return.
+Define your domain types in `shared/src/shared/messages.gleam`, then
+write handler functions in `src/server/handler.gleam`. Each public
+function that takes a `HandlerContext` as its last parameter and
+returns `#(Result(value, error), HandlerContext)` becomes an RPC
+endpoint.
 
-When you run `libero build`, it reads those types and generates:
+When you run `libero build`, it scans those handler signatures and
+generates:
 
-- A dispatch module that routes incoming messages to your handler.
-- Client stub functions so each client package can call the server
+- A `ClientMsg` type with a variant per handler function.
+- A dispatch module that routes each variant to the right handler.
+- Typed client stubs so each client package can call the server
   with typed arguments.
 
-Your handler in `src/server/handler.gleam` pattern-matches on
-`MsgFromClient` variants and returns `MsgFromServer` values. Shared
-state (database connections, caches, etc.) is threaded through
+Server context (database connections, caches, etc.) is threaded through
 `HandlerContext` so every handler call has access to it.
 " <> db_section
 }

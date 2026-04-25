@@ -3,16 +3,37 @@
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
+import libero/error.{type RpcError}
+import libero/remote_data.{type RemoteData, Failure, Success}
 import libero/rpc
+import libero/wire
 import lustre/effect.{type Effect}
-import shared/messages.{type MsgFromClient}
 
-pub fn send_to_server(
-  msg msg: MsgFromClient,
-  on_response on_response: fn(Dynamic) -> msg,
+pub type ClientMsg {
+  Increment
+  Decrement
+  GetCounter
+}
+
+pub fn increment(
+  on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
 ) -> Effect(msg) {
-  // Reference rpc_decoders to ensure its side-effecting module-level code
-  // (constructor setters, decoder registration) runs before any RPC call.
+  send(Increment, fn(raw) { on_response(decode_response(raw)) })
+}
+
+pub fn decrement(
+  on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
+) -> Effect(msg) {
+  send(Decrement, fn(raw) { on_response(decode_response(raw)) })
+}
+
+pub fn get_counter(
+  on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
+) -> Effect(msg) {
+  send(GetCounter, fn(raw) { on_response(decode_response(raw)) })
+}
+
+fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
   let _ = rpc_decoders.decode_msg_from_server
   rpc.send(
     url: rpc_config.ws_url(),
@@ -22,6 +43,11 @@ pub fn send_to_server(
   )
 }
 
-pub fn update_from_server(handler handler: fn(Dynamic) -> msg) -> Effect(msg) {
-  rpc.update_from_server(module: "shared/messages", handler: handler)
+fn decode_response(raw: Dynamic) -> RemoteData(a, e) {
+  let outer: Result(Result(a, e), RpcError) = wire.coerce(raw)
+  case outer {
+    Ok(Ok(value)) -> Success(value)
+    Ok(Error(err)) -> Failure(err)
+    Error(_rpc_err) -> panic as "RPC framework error"
+  }
 }

@@ -22,12 +22,11 @@ pub type SsrError {
 
 /// Call a dispatch handler directly on the server, returning a
 /// decoded payload. Encodes the call envelope, invokes the handler,
-/// strips the wire framing, and passes the `MsgFromServer` response
-/// through the `expect` function to extract the desired value.
+/// strips the wire framing, and passes the response through the
+/// `expect` function to extract the desired value.
 ///
-/// The `expect` parameter works like Elm's `Http.expect` — you tell
-/// the call how to unwrap the response variant into the value you
-/// actually want:
+/// With handler-as-contract, the response is the handler's return
+/// type (e.g. `Result(Int, Nil)`), not a wrapped MsgFromServer.
 ///
 /// ```gleam
 /// ssr.call(
@@ -36,7 +35,7 @@ pub type SsrError {
 ///   module: "shared/messages",
 ///   msg: GetCounter,
 ///   expect: fn(resp) {
-///     let assert CounterUpdated(Ok(n)) = resp
+///     let assert Ok(n) = resp
 ///     n
 ///   },
 /// )
@@ -56,7 +55,7 @@ pub fn call(
     option.None ->
       case response_bytes {
         <<_tag, _request_id:32, etf:bytes>> -> {
-          // dispatch encodes Ok(MsgFromServer_variant) or Error(RpcError).
+          // dispatch encodes Ok(handler_return_value) or Error(RpcError).
           // wire.decode_safe returns a Result instead of panicking.
           let decoded: Result(Result(response, _), _) = wire.decode_safe(etf)
           case decoded {

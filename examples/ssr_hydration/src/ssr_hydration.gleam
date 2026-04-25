@@ -14,10 +14,9 @@ import libero/ssr
 import libero/ws_logger
 import lustre/element
 import mist.{type Connection}
-import server/generated/dispatch
+import server/generated/dispatch.{GetCounter}
 import server/generated/websocket as ws
 import server/handler_context
-import shared/messages.{CounterUpdated, GetCounter}
 import shared/views.{Model}
 
 pub fn main() {
@@ -55,6 +54,8 @@ fn render_ssr(
   state: handler_context.HandlerContext,
 ) -> response.Response(mist.ResponseData) {
   // Fetch the counter value through dispatch (same path as client RPC).
+  // With handler-as-contract, the response is Result(Int, Nil) directly
+  // (the handler's return type), no MsgFromServer wrapper to unwrap.
   let counter = case
     ssr.call(
       handle: dispatch.handle,
@@ -62,7 +63,7 @@ fn render_ssr(
       module: "shared/messages",
       msg: GetCounter,
       expect: fn(resp) {
-        let assert CounterUpdated(Ok(n)) = resp
+        let assert Ok(n) = resp
         n
       },
     )

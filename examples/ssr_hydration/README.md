@@ -7,9 +7,8 @@ The server pre-renders the page HTML with real data so the browser displays cont
 ## What's in here
 
 - `src/ssr_hydration.gleam` - server entry point with per-route SSR rendering
-- `src/server/handler.gleam` - handles Increment, Decrement, and GetCounter messages
+- `src/server/handler.gleam` - handler functions for increment, decrement, and get_counter (each is an RPC endpoint)
 - `src/ets_store.gleam` - simple ETS-backed integer storage
-- `shared/src/shared/messages.gleam` - message types shared between server and client
 - `shared/src/shared/views.gleam` - view functions that compile to both Erlang (for SSR) and JavaScript (for the client)
 - `clients/web/src/app.gleam` - Lustre client that hydrates the SSR HTML
 - `clients/web/src/router.gleam` - browser routing (pushState, popstate)
