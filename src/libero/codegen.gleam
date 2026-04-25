@@ -1530,12 +1530,14 @@ fn handle_rpc(
   }
 }
 
+// Return an HTML string as a response.
 fn serve_html(html: String) -> response.Response(mist.ResponseData) {
   response.new(200)
   |> response.set_header(\"content-type\", \"text/html\")
   |> response.set_body(mist.Bytes(bytes_tree.from_string(html)))
 }
 
+// Serve a static file from disk. Used for client JS bundles and assets.
 fn serve_file(
   path: String,
 ) -> response.Response(mist.ResponseData) {
@@ -1550,6 +1552,7 @@ fn serve_file(
   }
 }
 
+// Map file extensions to MIME types for static file serving.
 fn content_type(path: String) -> String {
   case string.split(path, \".\") |> list.last {
     Ok(\"js\") | Ok(\"mjs\") -> \"application/javascript\"

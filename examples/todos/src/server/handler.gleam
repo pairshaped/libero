@@ -9,7 +9,7 @@ import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 //
 // These functions can live in any module under src/server/, not just this one.
 // Larger apps typically organize handlers into domain modules (e.g.
-// server/todos.gleam, server/auth.gleam). The scanner walks all server
+// server/users.gleam, server/posts.gleam). The scanner walks all server
 // source files and collects every function that matches the criteria.
 //
 // The codegen reads these signatures and generates:

@@ -51,6 +51,8 @@ pub fn main() {
   process.sleep_forever()
 }
 
+// Render a page server-side. Calls the handler directly (no network) to fetch
+// data, renders the shared view to HTML, and embeds flags for client hydration.
 fn render_ssr(
   route: views.Route,
   state: handler_context.HandlerContext,
@@ -87,6 +89,7 @@ fn render_ssr(
   serve_html(html)
 }
 
+// Send a 302 redirect to another path.
 fn redirect(to: String) -> response.Response(mist.ResponseData) {
   response.new(302)
   |> response.set_header("location", to)
@@ -130,12 +133,14 @@ fn handle_rpc(
   }
 }
 
+// Return an HTML string as a response.
 fn serve_html(html: String) -> response.Response(mist.ResponseData) {
   response.new(200)
   |> response.set_header("content-type", "text/html")
   |> response.set_body(mist.Bytes(bytes_tree.from_string(html)))
 }
 
+// Serve a static file from disk. Used for client JS bundles and assets.
 fn serve_file(path: String) -> response.Response(mist.ResponseData) {
   case mist.send_file(path, offset: 0, limit: None) {
     Ok(body) ->
@@ -148,6 +153,7 @@ fn serve_file(path: String) -> response.Response(mist.ResponseData) {
   }
 }
 
+// Map file extensions to MIME types for static file serving.
 fn content_type(path: String) -> String {
   case string.split(path, ".") |> list.last {
     Ok("js") | Ok("mjs") -> "application/javascript"
