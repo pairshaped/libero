@@ -220,6 +220,9 @@ pub fn write_endpoint_dispatch(
       "import " <> mod <> " as " <> alias
     })
 
+  // Collect shared type imports from parameter and return type annotations
+  let shared_type_imports = collect_shared_type_imports(endpoints:)
+
   // Generate ClientMsg variants from endpoints
   let client_msg_variants =
     list.map(endpoints, fn(e) {
@@ -276,6 +279,7 @@ import libero/wire
 import " <> context_module <> ".{type HandlerContext}
 import " <> shared_module_path <> "
 " <> string.join(handler_imports, "\n") <> "
+" <> string.join(shared_type_imports, "\n") <> "
 
 pub type ClientMsg {
 " <> string.join(client_msg_variants, "\n") <> "
@@ -354,6 +358,9 @@ pub fn write_endpoint_client_stubs(
   client_generated client_generated: String,
   shared_module_path shared_module_path: String,
 ) -> Result(Nil, GenError) {
+  // Collect shared type imports from parameter and return type annotations
+  let shared_type_imports = collect_shared_type_imports(endpoints:)
+
   // Generate ClientMsg variants (same structure as in dispatch)
   let client_msg_variants =
     list.map(endpoints, fn(e) {
@@ -429,6 +436,7 @@ import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
 import " <> shared_module_path <> "
+" <> string.join(shared_type_imports, "\n") <> "
 
 pub type ClientMsg {
 " <> string.join(client_msg_variants, "\n") <> "
@@ -526,6 +534,86 @@ fn handler_alias(module_path: String) -> String {
 /// e.g. "shared/messages/admin" -> "shared_messages_admin_msg"
 fn message_alias(module_path: String) -> String {
   string.replace(module_path, "/", "_") <> "_msg"
+}
+
+/// Extract module qualifiers from type strings used in endpoint signatures.
+/// Scans parameter types and return types for "module.Type" references and
+/// returns unique "shared/<module>" import paths. Skips builtins (Int, String,
+/// Bool, List, Option, Nil, Result) which have no module qualifier.
+///
+/// Example: "broadcast_admin.SendBroadcastParams" -> "shared/broadcast_admin"
+fn collect_shared_type_imports(
+  endpoints endpoints: List(scanner.HandlerEndpoint),
+) -> List(String) {
+  let all_type_strings =
+    list.flat_map(endpoints, fn(e) {
+      let param_types = list.map(e.params, fn(p) { p.1 })
+      [e.return_type_str, ..param_types]
+    })
+
+  all_type_strings
+  |> list.flat_map(fn(s) { extract_module_qualifiers(s) })
+  |> list.unique()
+  |> list.sort(string.compare)
+  |> list.map(fn(mod) { "import shared/" <> mod })
+}
+
+/// Find all "module.Type" patterns in a type string and return the module names.
+/// Handles nested types like "Result(order_admin.OrderListResult, String)".
+fn extract_module_qualifiers(type_str: String) -> List(String) {
+  // Split on any character that can't be part of a module.Type reference
+  // then look for segments containing a dot
+  type_str
+  |> string.to_graphemes()
+  |> collect_identifiers("")
+  |> list.filter_map(fn(ident) {
+    case string.split(ident, ".") {
+      [module, _type] ->
+        case is_builtin_module(module) {
+          True -> Error(Nil)
+          False -> Ok(module)
+        }
+      _ -> Error(Nil)
+    }
+  })
+}
+
+/// Walk characters to collect identifier.identifier sequences.
+fn collect_identifiers(
+  chars: List(String),
+  current: String,
+) -> List(String) {
+  case chars {
+    [] ->
+      case current {
+        "" -> []
+        _ -> [current]
+      }
+    [c, ..rest] ->
+      case is_ident_char(c) {
+        True -> collect_identifiers(rest, current <> c)
+        False ->
+          case current {
+            "" -> collect_identifiers(rest, "")
+            _ -> [current, ..collect_identifiers(rest, "")]
+          }
+      }
+  }
+}
+
+const ident_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"
+
+fn is_ident_char(c: String) -> Bool {
+  string.contains(ident_chars, c)
+}
+
+fn is_builtin_module(name: String) -> Bool {
+  case name {
+    "Int" | "String" | "Bool" | "Float" | "Nil" | "List" | "Option"
+    | "Result"
+    -> True
+    _ -> False
+  }
 }
 
 /// Convert a snake_case name to PascalCase.
