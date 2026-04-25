@@ -162,9 +162,11 @@ pub fn walk_message_registry_types(
 pub fn walk_shared_types(
   shared_src shared_src: String,
 ) -> Result(List(DiscoveredType), List(GenError)) {
-  // Find all .gleam files in the shared source directory
+  // Find all .gleam files in the shared source directory.
+  // Reuses scanner.walk_directory so generated/ subdirectories and
+  // symlinks are skipped consistently with the rest of the pipeline.
   use files <- result.try(
-    walk_shared_files(shared_src)
+    scanner.walk_directory(path: shared_src)
     |> result.map_error(fn(err) { [err] }),
   )
 
@@ -217,15 +219,6 @@ fn read_public_type_pairs(
     )
   }
   result.unwrap(pairs, or: [])
-}
-
-/// Walk a directory for .gleam files (simplified version for shared/)
-fn walk_shared_files(path: String) -> Result(List(String), GenError) {
-  simplifile.get_files(path)
-  |> result.map(fn(files) {
-    list.filter(files, fn(f) { string.ends_with(f, ".gleam") })
-  })
-  |> result.map_error(fn(cause) { gen_error.CannotReadDir(path:, cause:) })
 }
 
 /// Derive a module path from a shared file path.

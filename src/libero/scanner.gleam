@@ -303,7 +303,7 @@ fn extract_variant_names(clauses: List(glance.Clause)) -> List(String) {
 ///
 /// Results are sorted alphabetically so codegen output is deterministic
 /// across runs and across machines (filesystem order is not stable).
-fn walk_directory(path path: String) -> Result(List(String), GenError) {
+pub fn walk_directory(path path: String) -> Result(List(String), GenError) {
   use entries <- result.try(
     simplifile.read_directory(path)
     |> result.map_error(fn(cause) { CannotReadDir(path: path, cause: cause) }),

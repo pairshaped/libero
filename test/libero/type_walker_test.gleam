@@ -8,6 +8,7 @@ import gleam/list
 import gleam/set
 import libero/scanner
 import libero/walker
+import simplifile
 
 pub fn walk_discovers_toserver_variants_test() {
   let assert Ok(#(modules, module_files)) =
@@ -160,4 +161,39 @@ pub fn walk_groups_variants_under_type_test() {
     list.find(types, fn(t) { t.type_name == "MsgFromClient" })
   let variant_count = list.length(msg_from_client.variants)
   let assert True = variant_count > 1
+}
+
+/// walk_shared_types must skip a `generated/` subdirectory the same way
+/// the scanner does. Shared trees never contain shipped generated files,
+/// but a left-over symlink or stale gen output should not pollute the
+/// type graph the codegen builds from.
+pub fn walk_shared_types_skips_generated_directory_test() {
+  let base = "build/.test_walker_generated"
+  let shared_src = base <> "/shared/src/shared"
+
+  let assert Ok(Nil) =
+    simplifile.create_directory_all(shared_src <> "/generated")
+  let assert Ok(Nil) =
+    simplifile.write(
+      shared_src <> "/types.gleam",
+      "pub type Real {
+  Real(id: Int)
+}
+",
+    )
+  let assert Ok(Nil) =
+    simplifile.write(
+      shared_src <> "/generated/decoy.gleam",
+      "pub type Decoy {
+  Decoy(value: String)
+}
+",
+    )
+
+  let assert Ok(types) = walker.walk_shared_types(shared_src: shared_src)
+  let names = list.map(types, fn(t) { t.type_name })
+  let assert True = list.contains(names, "Real")
+  let assert False = list.contains(names, "Decoy")
+
+  let assert Ok(Nil) = simplifile.delete_all([base])
 }
