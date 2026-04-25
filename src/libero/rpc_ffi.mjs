@@ -993,7 +993,9 @@ function ensureSocket(url) {
         decoded = decode_value(responsePayload);
       }
     } else {
-      decoded = decode_value(responsePayload);
+      // Endpoint convention: per-endpoint decoders expect fully raw ETF
+      // (atoms as strings, tuples as arrays, no Gleam constructors).
+      decoded = decode_value_raw(responsePayload);
     }
 
     const entry = responseCallbacks.get(requestId);

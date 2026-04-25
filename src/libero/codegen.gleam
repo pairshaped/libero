@@ -440,9 +440,9 @@ pub fn write_endpoint_client_stubs(
       <> fn_params
       <> "\n) -> Effect(msg) {\n  send("
       <> msg_construct
-      <> ", fn(raw) { on_response(decode_response_"
+      <> ", fn(raw) { on_response(wire.coerce(decode_response_"
       <> fn_name
-      <> "(raw)) })\n}"
+      <> "(raw))) })\n}"
     })
 
   // Check if any type string references Option (not a prelude type in Gleam)
@@ -1310,8 +1310,8 @@ fn emit_response_decoders(
           "export function decode_response_"
           <> e.fn_name
           <> "(raw) {\n"
-          <> "  if (raw instanceof _Ok) {\n"
-          <> "    const inner = raw[0];\n"
+          <> "  if (Array.isArray(raw) && raw[0] === \"ok\") {\n"
+          <> "    const inner = raw[1];\n"
           <> "    if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
           <> "      return new _Success("
           <> ok_decoder
@@ -1326,8 +1326,6 @@ fn emit_response_decoders(
           <> "}"
         })
       "\n// --- Per-endpoint response decoders ---\n\n"
-      <> "import { Ok as _Ok } from \""
-      <> "../../gleam_stdlib/gleam.mjs\";\n"
       <> "import { Success as _Success, Failure as _Failure } from \""
       <> "../../libero/libero/remote_data.mjs\";\n\n"
       <> string.join(decoders, "\n\n")
@@ -1337,29 +1335,58 @@ fn emit_response_decoders(
 }
 
 /// Convert a type string to the JS decoder call for that type.
-/// Builtins (Int, String, Bool, Nil, Float) pass through as-is.
-/// Module-qualified types call their per-type decoder.
-/// List(X) recursively decodes elements.
+/// Handles builtins, module-qualified types, and parameterized wrappers
+/// (List, Option) recursively.
 fn type_to_decoder_call(type_str: String, term_expr: String) -> String {
   case type_str {
     "Int" | "String" | "Bool" | "Float" -> term_expr
     "Nil" -> "undefined"
     _ ->
-      case string.contains(type_str, ".") {
+      case string.starts_with(type_str, "List(") {
         True -> {
-          // Module-qualified type: discount.Discount -> decode_shared_discount_discount
-          let assert Ok(#(module, type_name)) = case
-            string.split(type_str, ".")
-          {
-            [m, t] -> Ok(#(m, t))
-            _ -> Error(Nil)
-          }
-          decoder_fn_name("shared/" <> module, type_name) <> "(" <> term_expr <> ")"
+          // List(X) -> decode_list_of((t) => decode_X(t), term)
+          let inner =
+            string.drop_start(type_str, 5)
+            |> string.drop_end(1)
+          "decode_list_of((t) => "
+          <> type_to_decoder_call(inner, "t")
+          <> ", "
+          <> term_expr
+          <> ")"
         }
         False ->
-          // Unqualified shared type - shouldn't normally appear in endpoint convention
-          // since the scanner fully qualifies types, but handle gracefully
-          term_expr
+          case string.starts_with(type_str, "Option(") {
+            True -> {
+              // Option(X) -> decode_option_of((t) => decode_X(t), term)
+              let inner =
+                string.drop_start(type_str, 7)
+                |> string.drop_end(1)
+              "decode_option_of((t) => "
+              <> type_to_decoder_call(inner, "t")
+              <> ", "
+              <> term_expr
+              <> ")"
+            }
+            False ->
+              case string.contains(type_str, ".") {
+                True -> {
+                  // Module-qualified: discount.Discount -> decode_shared_discount_discount
+                  let assert Ok(#(module, type_name)) = case
+                    string.split(type_str, ".")
+                  {
+                    [m, t] -> Ok(#(m, t))
+                    _ -> Error(Nil)
+                  }
+                  decoder_fn_name("shared/" <> module, type_name)
+                  <> "("
+                  <> term_expr
+                  <> ")"
+                }
+                False ->
+                  // Unqualified type (shouldn't occur in endpoint convention)
+                  term_expr
+              }
+          }
       }
   }
 }
