@@ -1,4 +1,3 @@
-import gleam/bool
 import gleam/dict
 import gleam/int
 import gleam/io
@@ -236,7 +235,7 @@ pub fn write_endpoint_dispatch(
   let shared_type_imports =
     collect_param_type_imports(endpoints:)
     |> list.filter(fn(imp) { imp != shared_module_import })
-  let dict_import = case endpoints_use_type(endpoints:, type_marker: "Dict(") {
+  let dict_import = case endpoints_contain(endpoints:, predicate: is_dict) {
     True -> "\nimport gleam/dict.{type Dict}"
     False -> ""
   }
@@ -245,13 +244,13 @@ pub fn write_endpoint_dispatch(
   let client_msg_variants =
     list.map(endpoints, fn(e) {
       let variant_name = to_pascal_case(e.fn_name)
-      case e.params_str {
+      case e.params {
         [] -> "  " <> variant_name
         params -> {
           let fields =
             list.map(params, fn(p) {
-              let #(label, type_str) = p
-              label <> ": " <> type_str
+              let #(label, ft) = p
+              label <> ": " <> field_type.to_gleam_source(ft)
             })
           "  " <> variant_name <> "(" <> string.join(fields, ", ") <> ")"
         }
@@ -409,13 +408,13 @@ pub fn write_endpoint_client_stubs(
   let client_msg_variants =
     list.map(endpoints, fn(e) {
       let variant_name = to_pascal_case(e.fn_name)
-      case e.params_str {
+      case e.params {
         [] -> "  " <> variant_name
         params -> {
           let fields =
             list.map(params, fn(p) {
-              let #(label, type_str) = p
-              label <> ": " <> type_str
+              let #(label, ft) = p
+              label <> ": " <> field_type.to_gleam_source(ft)
             })
           "  " <> variant_name <> "(" <> string.join(fields, ", ") <> ")"
         }
@@ -437,10 +436,20 @@ pub fn write_endpoint_client_stubs(
     list.map(endpoints, fn(e) {
       let fn_name = e.fn_name
       let variant_name = to_pascal_case(e.fn_name)
-      let #(payload_type, error_type) = parse_result_type(e.return_type_str)
+      // The scanner's parse_single_endpoint enforces that the return is
+      // Result-shaped, so this match is total in practice. Fall back to
+      // (Nil, Nil) defensively if a future scanner change would let
+      // something else through.
+      let #(payload_type, error_type) = case e.return_type {
+        field_type.ResultOf(ok:, err:) -> #(
+          field_type.to_gleam_source(ok),
+          field_type.to_gleam_source(err),
+        )
+        other -> #(field_type.to_gleam_source(other), "Nil")
+      }
 
       // Build function params (endpoint params + on_response)
-      let fn_params = case e.params_str {
+      let fn_params = case e.params {
         [] ->
           "  on_response on_response: fn(RemoteData("
           <> payload_type
@@ -450,7 +459,13 @@ pub fn write_endpoint_client_stubs(
         params -> {
           let param_lines =
             list.map(params, fn(p) {
-              "  " <> p.0 <> " " <> p.0 <> ": " <> p.1 <> ","
+              "  "
+              <> p.0
+              <> " "
+              <> p.0
+              <> ": "
+              <> field_type.to_gleam_source(p.1)
+              <> ","
             })
           string.join(param_lines, "\n")
           <> "\n  on_response on_response: fn(RemoteData("
@@ -462,7 +477,7 @@ pub fn write_endpoint_client_stubs(
       }
 
       // Build ClientMsg constructor call
-      let msg_construct = case e.params_str {
+      let msg_construct = case e.params {
         [] -> variant_name
         params -> {
           let args = list.map(params, fn(p) { p.0 <> ":" })
@@ -481,20 +496,11 @@ pub fn write_endpoint_client_stubs(
       <> "(raw))) })\n}"
     })
 
-  // Check if any type string references Option (not a prelude type in Gleam)
-  let needs_option =
-    list.any(endpoints, fn(e) {
-      let all_strs = [
-        e.return_type_str,
-        ..list.map(e.params_str, fn(p) { p.1 })
-      ]
-      list.any(all_strs, fn(s) { string.contains(s, "Option") })
-    })
-  let option_import = case needs_option {
+  let option_import = case endpoints_contain(endpoints:, predicate: is_option) {
     True -> "\nimport gleam/option.{type Option}"
     False -> ""
   }
-  let dict_import = case endpoints_use_type(endpoints:, type_marker: "Dict(") {
+  let dict_import = case endpoints_contain(endpoints:, predicate: is_dict) {
     True -> "\nimport gleam/dict.{type Dict}"
     False -> ""
   }
@@ -535,50 +541,6 @@ fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
   write_file(path: output, content: content)
 }
 
-/// Extract Result type parameters from a return type string for use in
-/// generated Gleam source. "Result(List(Todo), TodoError)" produces
-/// #("List(Todo)", "TodoError"). Bare types (no Result wrapper) produce
-/// #(type_str, "Nil"). Splits only at the top-level comma so nested
-/// Result/Tuple/Dict types parse correctly.
-///
-/// Used by client stub generation to populate `RemoteData(payload, error)`
-/// annotations with the user-written type strings. The bug-prone
-/// recursive decoder generation that previously lived here is gone —
-/// see `field_decoder_call` for structural pattern matching on
-/// FieldType.
-fn parse_result_type(type_str: String) -> #(String, String) {
-  use <- bool.guard(when: !string.starts_with(type_str, "Result("), return: #(
-    type_str,
-    "Nil",
-  ))
-  let inner = string.drop_start(type_str, 7) |> string.drop_end(1)
-  case split_top_level_comma(inner) {
-    Ok(#(payload, error)) -> #(string.trim(payload), string.trim(error))
-    Error(Nil) -> #(type_str, "Nil")
-  }
-}
-
-fn split_top_level_comma(s: String) -> Result(#(String, String), Nil) {
-  split_at_depth(remaining: s, depth: 0, acc: "")
-}
-
-fn split_at_depth(
-  remaining remaining: String,
-  depth depth: Int,
-  acc acc: String,
-) -> Result(#(String, String), Nil) {
-  case string.pop_grapheme(remaining) {
-    Error(Nil) -> Error(Nil)
-    Ok(#("(", rest)) ->
-      split_at_depth(remaining: rest, depth: depth + 1, acc: acc <> "(")
-    Ok(#(")", rest)) ->
-      split_at_depth(remaining: rest, depth: depth - 1, acc: acc <> ")")
-    Ok(#(",", rest)) if depth == 0 -> Ok(#(acc, rest))
-    Ok(#(c, rest)) ->
-      split_at_depth(remaining: rest, depth: depth, acc: acc <> c)
-  }
-}
-
 /// Build a case arm that routes specific MsgFromClient variants to a handler.
 fn variant_arm(
   handler handler: scanner.HandlerInfo,
@@ -608,111 +570,63 @@ fn message_alias(module_path: String) -> String {
   string.replace(module_path, "/", "_") <> "_msg"
 }
 
-/// Extract module qualifiers from parameter type strings in endpoint signatures.
-/// Returns unique "import shared/<module>" lines for types used in ClientMsg
-/// variant fields. Skips builtins and return types (dispatch doesn't reference
-/// return types statically).
+/// Collect import lines for shared modules referenced by parameter
+/// types in any endpoint. Skips builtins (those have no module path)
+/// and return types (dispatch only references param types statically).
 fn collect_param_type_imports(
   endpoints endpoints: List(scanner.HandlerEndpoint),
 ) -> List(String) {
   endpoints
-  |> list.flat_map(fn(e) { list.map(e.params_str, fn(p) { p.1 }) })
-  |> list.flat_map(fn(s) { extract_module_qualifiers(s) })
+  |> list.flat_map(fn(e) {
+    list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
+  })
+  |> list.map(fn(ref) { ref.0 })
   |> list.unique()
   |> list.sort(string.compare)
-  |> list.map(fn(mod) { "import shared/" <> mod })
+  |> list.map(fn(mod) { "import " <> mod })
 }
 
-/// Extract module qualifiers from both parameter and return type strings.
-/// Used by client stubs which reference both param types (in ClientMsg and stub
-/// function params) and return types (in RemoteData annotations).
+/// Collect import lines for shared modules referenced by parameter OR
+/// return types. Used by client stubs which reference both (RemoteData
+/// annotations need return types).
 fn collect_shared_type_imports(
   endpoints endpoints: List(scanner.HandlerEndpoint),
 ) -> List(String) {
-  let all_type_strings =
-    list.flat_map(endpoints, fn(e) {
-      let param_types = list.map(e.params_str, fn(p) { p.1 })
-      [e.return_type_str, ..param_types]
-    })
-
-  all_type_strings
-  |> list.flat_map(fn(s) { extract_module_qualifiers(s) })
+  endpoints
+  |> list.flat_map(fn(e) {
+    let from_params =
+      list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
+    list.append(from_params, field_type.collect_user_types(e.return_type))
+  })
+  |> list.map(fn(ref) { ref.0 })
   |> list.unique()
   |> list.sort(string.compare)
-  |> list.map(fn(mod) { "import shared/" <> mod })
+  |> list.map(fn(mod) { "import " <> mod })
 }
 
-fn endpoints_use_type(
+/// True if any endpoint's parameter or return type (transitively)
+/// satisfies `predicate`. Used for stdlib import detection
+/// (Option, Dict).
+fn endpoints_contain(
   endpoints endpoints: List(scanner.HandlerEndpoint),
-  type_marker type_marker: String,
+  predicate predicate: fn(field_type.FieldType) -> Bool,
 ) -> Bool {
   list.any(endpoints, fn(e) {
-    let type_strings = [
-      e.return_type_str,
-      ..list.map(e.params_str, fn(p) { p.1 })
-    ]
-    list.any(type_strings, fn(type_str) {
-      string.contains(type_str, type_marker)
-    })
+    field_type.contains(e.return_type, predicate)
+    || list.any(e.params, fn(p) { field_type.contains(p.1, predicate) })
   })
 }
 
-/// Find all "module.Type" patterns in a type string and return the module names.
-/// Handles nested types like "Result(order_admin.OrderListResult, String)".
-fn extract_module_qualifiers(type_str: String) -> List(String) {
-  // Split on any character that can't be part of a module.Type reference
-  // then look for segments containing a dot
-  type_str
-  |> string.to_graphemes()
-  |> collect_identifiers("")
-  |> list.filter_map(fn(ident) {
-    case string.split(ident, ".") {
-      [module, _type] ->
-        case is_builtin_module(module) {
-          True -> Error(Nil)
-          False -> Ok(module)
-        }
-      _ -> Error(Nil)
-    }
-  })
-}
-
-/// Walk characters to collect identifier.identifier sequences.
-fn collect_identifiers(chars: List(String), current: String) -> List(String) {
-  case chars {
-    [] ->
-      case current {
-        "" -> []
-        _ -> [current]
-      }
-    [c, ..rest] ->
-      case is_ident_char(c) {
-        True -> collect_identifiers(rest, current <> c)
-        False ->
-          case current {
-            "" -> collect_identifiers(rest, "")
-            _ -> [current, ..collect_identifiers(rest, "")]
-          }
-      }
+fn is_option(ft: field_type.FieldType) -> Bool {
+  case ft {
+    field_type.OptionOf(_) -> True
+    _ -> False
   }
 }
 
-const ident_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"
-
-fn is_ident_char(c: String) -> Bool {
-  string.contains(ident_chars, c)
-}
-
-fn is_builtin_module(name: String) -> Bool {
-  case name {
-    "Int"
-    | "String"
-    | "Bool"
-    | "Float"
-    | "Nil"
-    | "List"
-    | "Option"
-    | "Result" -> True
+fn is_dict(ft: field_type.FieldType) -> Bool {
+  case ft {
+    field_type.DictOf(_, _) -> True
     _ -> False
   }
 }

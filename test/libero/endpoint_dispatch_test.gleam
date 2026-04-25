@@ -6,38 +6,31 @@ import libero/scanner
 import simplifile
 
 pub fn endpoint_dispatch_generates_client_msg_test() {
+  let todo_params = field_type.UserType("shared/messages", "TodoParams", [])
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_todos",
       return_type: field_type.placeholder(),
       params: [],
-      params_str: [],
-      return_type_str: "Result(List(Todo), TodoError)",
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "create_todo",
       return_type: field_type.placeholder(),
-      params: [#("params", field_type.placeholder())],
-      params_str: [#("params", "TodoParams")],
-      return_type_str: "Result(Todo, TodoError)",
+      params: [#("params", todo_params)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "toggle_todo",
       return_type: field_type.placeholder(),
-      params: [#("id", field_type.placeholder())],
-      params_str: [#("id", "Int")],
-      return_type_str: "Result(Todo, TodoError)",
+      params: [#("id", field_type.IntField)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "delete_todo",
       return_type: field_type.placeholder(),
-      params: [#("id", field_type.placeholder())],
-      params_str: [#("id", "Int")],
-      return_type_str: "Result(Int, TodoError)",
+      params: [#("id", field_type.IntField)],
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch"
@@ -54,7 +47,11 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   // Must have ClientMsg type with all variants
   let assert True = string.contains(content, "pub type ClientMsg {")
   let assert True = string.contains(content, "GetTodos")
-  let assert True = string.contains(content, "CreateTodo(params: TodoParams)")
+  // UserType is qualified by its import's last module segment, matching
+  // what the user wrote: `import shared/messages` makes `TodoParams`
+  // render as `messages.TodoParams` in the generated source.
+  let assert True =
+    string.contains(content, "CreateTodo(params: messages.TodoParams)")
   let assert True = string.contains(content, "ToggleTodo(id: Int)")
   let assert True = string.contains(content, "DeleteTodo(id: Int)")
 
@@ -89,8 +86,6 @@ pub fn endpoint_dispatch_is_server_only_test() {
       fn_name: "get_todos",
       return_type: field_type.placeholder(),
       params: [],
-      params_str: [],
-      return_type_str: "Result(List(Todo), TodoError)",
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_server_only"
@@ -121,26 +116,26 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      return_type: field_type.placeholder(),
-      params: [#("filters", field_type.placeholder())],
-      params_str: [#("filters", "widgets.WidgetFilters")],
-      return_type_str: "Result(widgets.WidgetList, widgets.WidgetError)",
+      // Return type references widget_detail to verify dispatch does
+      // NOT pull return-type-only modules into its imports.
+      return_type: field_type.UserType("shared/widget_detail", "Widget", []),
+      params: [
+        #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
+      ],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
       return_type: field_type.placeholder(),
-      params: [#("params", field_type.placeholder())],
-      params_str: [#("params", "alerts.AlertParams")],
-      return_type_str: "Result(alerts.AlertResult, alerts.AlertError)",
+      params: [
+        #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
+      ],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "get_widget",
       return_type: field_type.placeholder(),
-      params: [#("id", field_type.placeholder())],
-      params_str: [#("id", "Int")],
-      return_type_str: "Result(widget_detail.Widget, String)",
+      params: [#("id", field_type.IntField)],
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_imports"
@@ -176,9 +171,12 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
       module_path: "server/handler",
       fn_name: "echo_dict",
       return_type: field_type.placeholder(),
-      params: [#("value", field_type.placeholder())],
-      params_str: [#("value", "Dict(String, Int)")],
-      return_type_str: "Result(Dict(String, Int), Nil)",
+      params: [
+        #(
+          "value",
+          field_type.DictOf(field_type.StringField, field_type.IntField),
+        ),
+      ],
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_stdlib_imports"
@@ -200,23 +198,24 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
 }
 
 pub fn endpoint_client_stubs_imports_qualified_types_test() {
-  // Same bug applies to generated client stubs (messages.gleam)
+  // Client stubs need imports for both param AND return type modules
+  // (return types appear in RemoteData annotations).
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      return_type: field_type.placeholder(),
-      params: [#("filters", field_type.placeholder())],
-      params_str: [#("filters", "widgets.WidgetFilters")],
-      return_type_str: "Result(widgets.WidgetList, widgets.WidgetError)",
+      return_type: field_type.UserType("shared/widgets", "WidgetList", []),
+      params: [
+        #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
+      ],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      return_type: field_type.placeholder(),
-      params: [#("params", field_type.placeholder())],
-      params_str: [#("params", "alerts.AlertParams")],
-      return_type_str: "Result(alerts.AlertResult, alerts.AlertError)",
+      return_type: field_type.UserType("shared/alerts", "AlertResult", []),
+      params: [
+        #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
+      ],
     ),
   ]
   let output_dir = "build/.test_endpoint_stubs_imports"
@@ -241,10 +240,16 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      return_type: field_type.placeholder(),
-      params: [#("value", field_type.placeholder())],
-      params_str: [#("value", "Dict(String, Int)")],
-      return_type_str: "Result(Dict(String, Int), Nil)",
+      return_type: field_type.ResultOf(
+        field_type.DictOf(field_type.StringField, field_type.IntField),
+        field_type.NilField,
+      ),
+      params: [
+        #(
+          "value",
+          field_type.DictOf(field_type.StringField, field_type.IntField),
+        ),
+      ],
     ),
   ]
   let output_dir = "build/.test_endpoint_stubs_stdlib_imports"
@@ -317,13 +322,6 @@ pub fn create_gadget(
     ok: field_type.UserType("shared/gadgets", "GadgetParams", []),
     err: field_type.UserType("shared/gadgets", "GadgetError", []),
   ) = endpoint.return_type
-
-  // String-form (kept for codegen compatibility) also resolves the alias.
-  let assert [#("params", type_str)] = endpoint.params_str
-  let assert True = string.contains(type_str, "gadgets.GadgetParams")
-  let assert False = string.contains(type_str, "g.GadgetParams")
-  let assert True = string.contains(endpoint.return_type_str, "gadgets.")
-  let assert False = string.contains(endpoint.return_type_str, "g.")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([fixture_dir])

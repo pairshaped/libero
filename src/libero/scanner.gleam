@@ -67,14 +67,6 @@ pub type HandlerEndpoint {
     /// Parameters excluding state, with labels and resolved types.
     /// Each entry is #(label, FieldType).
     params: List(#(String, field_type.FieldType)),
-    /// String form of the parameter types, kept temporarily for
-    /// codegen sites still consuming strings (e.g. import collection
-    /// in `collect_param_type_imports`). Migrate those to use the
-    /// structured form, then drop these fields.
-    params_str: List(#(String, String)),
-    /// The full return type annotation string of the first tuple element.
-    /// e.g. "Result(List(Todo), TodoError)" or "List(Todo)"
-    return_type_str: String,
   )
 }
 
@@ -668,8 +660,6 @@ fn parse_endpoints(
     let module_path = derive_module_path(file_path: file_path)
     let type_imports = build_type_import_map(parsed.imports)
     let alias_map = build_alias_resolution_map(parsed.imports)
-    let type_imports_full = build_type_import_map_full(parsed.imports)
-    let alias_map_full = build_alias_resolution_map_full(parsed.imports)
     Ok(
       list.filter_map(parsed.functions, fn(def) {
         let glance.Definition(_, func) = def
@@ -681,8 +671,6 @@ fn parse_endpoints(
               module_path: module_path,
               type_imports: type_imports,
               alias_map: alias_map,
-              type_imports_full: type_imports_full,
-              alias_map_full: alias_map_full,
               shared_types: shared_types,
             )
         }
@@ -695,46 +683,12 @@ fn parse_endpoints(
   }
 }
 
-/// Build a map from unqualified type names to their module's last segment.
-/// e.g. if the handler has `import shared/messages.{type Todo, type TodoError}`
-/// then this returns {"Todo": "messages", "TodoError": "messages"}.
-/// Always uses the real module path's last segment, not the alias.
+/// Build a map from unqualified type names to the FULL module path of
+/// their import. e.g. `import shared/messages.{type Todo}` produces
+/// {"Todo": "shared/messages"}. Used by structured type resolution
+/// where downstream codegen needs the full path for decoder function
+/// naming (`decoder_fn_name(module_path, type_name)`).
 fn build_type_import_map(
-  imports: List(glance.Definition(glance.Import)),
-) -> dict.Dict(String, String) {
-  list.fold(imports, dict.new(), fn(acc, def) {
-    let glance.Definition(_, imp) = def
-    let last_seg = last_module_segment(module_path: imp.module)
-    // Add each unqualified type import, keyed to the real module segment
-    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
-      dict.insert(inner_acc, uq.name, last_seg)
-    })
-  })
-}
-
-/// Build a map from import aliases to the real module's last path segment.
-/// e.g. `import shared/line_items_report as wire` produces
-/// {"wire": "line_items_report"}. Unaliased imports produce identity
-/// entries like {"line_items_report": "line_items_report"}.
-fn build_alias_resolution_map(
-  imports: List(glance.Definition(glance.Import)),
-) -> dict.Dict(String, String) {
-  list.fold(imports, dict.new(), fn(acc, def) {
-    let glance.Definition(_, imp) = def
-    let last_seg = last_module_segment(module_path: imp.module)
-    let alias = case imp.alias {
-      option.Some(glance.Named(name)) -> name
-      _ -> last_seg
-    }
-    dict.insert(acc, alias, last_seg)
-  })
-}
-
-/// Like `build_type_import_map`, but maps unqualified names to the FULL
-/// module path instead of the last segment. Used by structured type
-/// resolution where downstream codegen needs the full path for decoder
-/// function naming (`decoder_fn_name(module_path, type_name)`).
-fn build_type_import_map_full(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
@@ -745,10 +699,11 @@ fn build_type_import_map_full(
   })
 }
 
-/// Like `build_alias_resolution_map`, but maps aliases (and bare module
-/// names) to the FULL module path. Same rationale as
-/// `build_type_import_map_full`.
-fn build_alias_resolution_map_full(
+/// Build a map from import aliases (and bare module names) to the full
+/// module path. e.g. `import shared/line_items_report as wire` produces
+/// {"wire": "shared/line_items_report"}. Unaliased imports produce
+/// identity entries keyed by the last segment.
+fn build_alias_resolution_map(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
@@ -767,8 +722,6 @@ fn parse_single_endpoint(
   module_path module_path: String,
   type_imports type_imports: dict.Dict(String, String),
   alias_map alias_map: dict.Dict(String, String),
-  type_imports_full type_imports_full: dict.Dict(String, String),
-  alias_map_full alias_map_full: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
@@ -798,23 +751,8 @@ fn parse_single_endpoint(
   // "not an endpoint" so we don't silently emit broken codegen.
   use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
 
-  // Extract non-state parameters with their labels and types
+  // Extract non-state parameters with their labels and structured types.
   let non_state_params = list.take(params, list.length(params) - 1)
-  let param_info =
-    list.filter_map(non_state_params, fn(p) {
-      case p.label, p.type_ {
-        option.Some(label), option.Some(type_) ->
-          Ok(#(
-            label,
-            qualified_type_to_string(
-              type_: type_,
-              imports: type_imports,
-              alias_map: alias_map,
-            ),
-          ))
-        _, _ -> Error(Nil)
-      }
-    })
   let params_typed =
     list.filter_map(non_state_params, fn(p) {
       case p.label, p.type_ {
@@ -823,8 +761,8 @@ fn parse_single_endpoint(
             label,
             glance_type_to_field_type(
               type_: type_,
-              imports_full: type_imports_full,
-              aliases_full: alias_map_full,
+              imports: type_imports,
+              aliases: alias_map,
             ),
           ))
         _, _ -> Error(Nil)
@@ -845,16 +783,10 @@ fn parse_single_endpoint(
     fn_name: func.name,
     return_type: glance_type_to_field_type(
       type_: response_type,
-      imports_full: type_imports_full,
-      aliases_full: alias_map_full,
+      imports: type_imports,
+      aliases: alias_map,
     ),
     params: params_typed,
-    params_str: param_info,
-    return_type_str: qualified_type_to_string(
-      type_: response_type,
-      imports: type_imports,
-      alias_map: alias_map,
-    ),
   ))
 }
 
@@ -889,130 +821,36 @@ fn extract_handler_return(
   }
 }
 
-/// Convert a glance Type AST to a string with fully qualified type names.
-/// Unqualified types are resolved against the handler's import map.
-/// Module-qualified types have their aliases resolved to real module names
-/// via the alias map. Builtins (Int, String, Bool, etc.) are left unqualified.
-fn qualified_type_to_string(
-  type_ t: glance.Type,
-  imports imports: dict.Dict(String, String),
-  alias_map alias_map: dict.Dict(String, String),
-) -> String {
-  case t {
-    glance.NamedType(name:, module: option.None, parameters: [], ..) ->
-      qualify_name(name, imports)
-    glance.NamedType(name:, module: option.Some(m), parameters: [], ..) ->
-      resolve_alias(m, alias_map) <> "." <> name
-    glance.NamedType(name:, module: option.None, parameters: params, ..) ->
-      qualify_name(name, imports)
-      <> "("
-      <> string.join(
-        list.map(params, fn(p) {
-          qualified_type_to_string(
-            type_: p,
-            imports: imports,
-            alias_map: alias_map,
-          )
-        }),
-        ", ",
-      )
-      <> ")"
-    glance.NamedType(name:, module: option.Some(m), parameters: params, ..) ->
-      resolve_alias(m, alias_map)
-      <> "."
-      <> name
-      <> "("
-      <> string.join(
-        list.map(params, fn(p) {
-          qualified_type_to_string(
-            type_: p,
-            imports: imports,
-            alias_map: alias_map,
-          )
-        }),
-        ", ",
-      )
-      <> ")"
-    glance.TupleType(elements:, ..) ->
-      "#("
-      <> string.join(
-        list.map(elements, fn(e) {
-          qualified_type_to_string(
-            type_: e,
-            imports: imports,
-            alias_map: alias_map,
-          )
-        }),
-        ", ",
-      )
-      <> ")"
-    glance.VariableType(name:, ..) -> name
-    glance.FunctionType(parameters:, return:, ..) ->
-      "fn("
-      <> string.join(
-        list.map(parameters, fn(p) {
-          qualified_type_to_string(
-            type_: p,
-            imports: imports,
-            alias_map: alias_map,
-          )
-        }),
-        ", ",
-      )
-      <> ") -> "
-      <> qualified_type_to_string(
-        type_: return,
-        imports: imports,
-        alias_map: alias_map,
-      )
-    glance.HoleType(name:, ..) -> name
-  }
-}
-
-/// Resolve an import alias to the real module's last path segment.
-/// Falls back to the alias itself if not found in the map.
-fn resolve_alias(
-  alias: String,
-  alias_map: dict.Dict(String, String),
-) -> String {
-  case dict.get(alias_map, alias) {
-    Ok(real_name) -> real_name
-    Error(Nil) -> alias
-  }
-}
-
 /// Convert a glance.Type AST into a structured FieldType, resolving
 /// module-qualified types to their full paths via the supplied maps.
-/// Mirrors `qualified_type_to_string` but produces the structured form
-/// codegen pattern-matches on.
 ///
-/// `imports_full` and `aliases_full` map unqualified names and module
-/// aliases (respectively) to FULL module paths (e.g. "shared/types"),
-/// not last segments. See `build_type_import_map_full`.
+/// `imports` and `aliases` map unqualified names and module aliases
+/// (respectively) to FULL module paths (e.g. "shared/types"). See
+/// `build_type_import_map` and `build_alias_resolution_map`.
 fn glance_type_to_field_type(
   type_ t: glance.Type,
-  imports_full imports_full: dict.Dict(String, String),
-  aliases_full aliases_full: dict.Dict(String, String),
+  imports imports: dict.Dict(String, String),
+  aliases aliases: dict.Dict(String, String),
 ) -> field_type.FieldType {
   case t {
     glance.NamedType(name:, module: option.None, parameters: [], ..) ->
-      builtin_or_user(name:, parameters: [], imports_full:, aliases_full:)
+      builtin_or_user(name:, parameters: [], imports:, aliases:)
     glance.NamedType(name:, module: option.None, parameters: params, ..) ->
-      builtin_or_user(name:, parameters: params, imports_full:, aliases_full:)
+      builtin_or_user(name:, parameters: params, imports:, aliases:)
     glance.NamedType(name:, module: option.Some(m), parameters: params, ..) -> {
-      let module_path = dict.get(aliases_full, m) |> result.unwrap(or: m)
+      let module_path = dict.get(aliases, m) |> result.unwrap(or: m)
       field_type.UserType(
         module_path:,
         type_name: name,
         args: list.map(params, fn(p) {
-          glance_type_to_field_type(type_: p, imports_full:, aliases_full:)
+          glance_type_to_field_type(type_: p, imports:, aliases:)
         }),
       )
     }
     glance.TupleType(elements:, ..) ->
       field_type.TupleOf(
         elements: list.map(elements, fn(e) {
-          glance_type_to_field_type(type_: e, imports_full:, aliases_full:)
+          glance_type_to_field_type(type_: e, imports:, aliases:)
         }),
       )
     glance.VariableType(name:, ..) -> field_type.TypeVar(name:)
@@ -1022,7 +860,7 @@ fn glance_type_to_field_type(
 }
 
 /// Resolve a non-module-qualified named type. Builtins return their
-/// FieldType directly. Other names are looked up in `imports_full` to
+/// FieldType directly. Other names are looked up in `imports` to
 /// produce a `UserType` with the import's full module path. Unknown
 /// names fall back to a `UserType` with the bare name as `module_path`
 /// — caller is expected to have validated all types via
@@ -1030,11 +868,11 @@ fn glance_type_to_field_type(
 fn builtin_or_user(
   name name: String,
   parameters parameters: List(glance.Type),
-  imports_full imports_full: dict.Dict(String, String),
-  aliases_full aliases_full: dict.Dict(String, String),
+  imports imports: dict.Dict(String, String),
+  aliases aliases: dict.Dict(String, String),
 ) -> field_type.FieldType {
   let recurse = fn(t) {
-    glance_type_to_field_type(type_: t, imports_full:, aliases_full:)
+    glance_type_to_field_type(type_: t, imports:, aliases:)
   }
   case name, parameters {
     "Int", [] -> field_type.IntField
@@ -1050,7 +888,7 @@ fn builtin_or_user(
     "Dict", [key, val] ->
       field_type.DictOf(key: recurse(key), value: recurse(val))
     _, _ -> {
-      let module_path = dict.get(imports_full, name) |> result.unwrap(or: name)
+      let module_path = dict.get(imports, name) |> result.unwrap(or: name)
       field_type.UserType(
         module_path:,
         type_name: name,
@@ -1087,22 +925,5 @@ fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
       list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
       && is_type_shared(return, shared_types)
     glance.HoleType(..) -> True
-  }
-}
-
-/// Qualify a type name if it's not a builtin.
-/// Looks up unqualified names in the import map.
-fn qualify_name(name: String, imports: dict.Dict(String, String)) -> String {
-  let builtins = [
-    "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option", "Dict",
-    "BitArray", "Dynamic",
-  ]
-  case list.contains(builtins, name) {
-    True -> name
-    False ->
-      case dict.get(imports, name) {
-        Ok(module_alias) -> module_alias <> "." <> name
-        Error(Nil) -> name
-      }
   }
 }

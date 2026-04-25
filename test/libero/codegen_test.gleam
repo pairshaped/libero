@@ -194,8 +194,6 @@ pub fn response_decoder_fallback_emits_transport_failure_test() {
       fn_name: "ping",
       return_type: field_type.ResultOf(field_type.NilField, field_type.NilField),
       params: [],
-      params_str: [],
-      return_type_str: "Result(Nil, Nil)",
     ),
   ]
   let assert Ok(config) =
@@ -251,8 +249,6 @@ pub fn response_decoder_handles_dict_of_custom_type_test() {
           ),
         ),
       ],
-      params_str: [#("value", "Dict(String, types.Item)")],
-      return_type_str: "Result(Dict(String, types.Item), Nil)",
     ),
   ]
   let assert Ok(config) =
