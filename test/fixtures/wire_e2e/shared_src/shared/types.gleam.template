@@ -1,0 +1,35 @@
+import gleam/dict.{type Dict}
+import gleam/option.{type Option}
+
+pub type Status {
+  Pending
+  Active
+  Cancelled
+}
+
+pub type Item {
+  Item(id: Int, name: String, price: Float, in_stock: Bool)
+}
+
+pub type Tree {
+  Leaf
+  Node(value: Int, left: Tree, right: Tree)
+}
+
+pub type ItemError {
+  NotFound
+  ValidationFailed(field: String, reason: String)
+}
+
+pub type WithFloats {
+  WithFloats(x: Float, y: Float, label: String)
+}
+
+pub type NestedRecord {
+  NestedRecord(
+    items: List(Item),
+    primary: Option(Item),
+    statuses: List(Status),
+    by_id: Dict(String, Item),
+  )
+}

@@ -63,6 +63,8 @@ export class DecodeError extends Error {
 
 // --- Primitive decoders ---
 
+const textDecoder = new TextDecoder();
+
 export const decode_int = (term) => {
   // ETF decoder produces BigInt for integers exceeding Number.MAX_SAFE_INTEGER.
   // Coerce to Number since Gleam's JS target uses Number for Int.
@@ -88,6 +90,9 @@ export const decode_float = (term) => {
 };
 
 export const decode_string = (term) => {
+  if (term && term.__liberoRawBinary === true && term.rawBuffer instanceof Uint8Array) {
+    return textDecoder.decode(term.rawBuffer);
+  }
   if (typeof term !== "string") {
     throw new DecodeError("expected String, got " + typeof term);
   }

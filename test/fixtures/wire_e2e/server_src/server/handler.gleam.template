@@ -1,0 +1,160 @@
+import gleam/dict.{type Dict}
+import gleam/option.{type Option}
+import server/handler_context.{type HandlerContext}
+import shared/types.{
+  type Item, type ItemError, type NestedRecord, type Status, type Tree,
+  type WithFloats, ValidationFailed,
+}
+
+pub fn echo_int(
+  value value: Int,
+  state state: HandlerContext,
+) -> #(Result(Int, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_float(
+  value value: Float,
+  state state: HandlerContext,
+) -> #(Result(Float, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_string(
+  value value: String,
+  state state: HandlerContext,
+) -> #(Result(String, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_bool(
+  value value: Bool,
+  state state: HandlerContext,
+) -> #(Result(Bool, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_bit_array(
+  value value: BitArray,
+  state state: HandlerContext,
+) -> #(Result(BitArray, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_unit(
+  state state: HandlerContext,
+) -> #(Result(Nil, Nil), HandlerContext) {
+  #(Ok(Nil), state)
+}
+
+pub fn echo_list_int(
+  value value: List(Int),
+  state state: HandlerContext,
+) -> #(Result(List(Int), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_option_string(
+  value value: Option(String),
+  state state: HandlerContext,
+) -> #(Result(Option(String), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_result_int_string(
+  value value: Result(Int, String),
+  state state: HandlerContext,
+) -> #(Result(Result(Int, String), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_dict_string_int(
+  value value: Dict(String, Int),
+  state state: HandlerContext,
+) -> #(Result(Dict(String, Int), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_tuple_int_string(
+  value value: #(Int, String),
+  state state: HandlerContext,
+) -> #(Result(#(Int, String), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_status(
+  value value: Status,
+  state state: HandlerContext,
+) -> #(Result(Status, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_item(
+  value value: Item,
+  state state: HandlerContext,
+) -> #(Result(Item, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_tree(
+  value value: Tree,
+  state state: HandlerContext,
+) -> #(Result(Tree, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_item_error(
+  value value: ItemError,
+  state state: HandlerContext,
+) -> #(Result(ItemError, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_with_floats(
+  value value: WithFloats,
+  state state: HandlerContext,
+) -> #(Result(WithFloats, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_list_of_items(
+  value value: List(Item),
+  state state: HandlerContext,
+) -> #(Result(List(Item), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_option_item(
+  value value: Option(Item),
+  state state: HandlerContext,
+) -> #(Result(Option(Item), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_dict_string_item(
+  value value: Dict(String, Item),
+  state state: HandlerContext,
+) -> #(Result(Dict(String, Item), Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_nested_record(
+  value value: NestedRecord,
+  state state: HandlerContext,
+) -> #(Result(NestedRecord, Nil), HandlerContext) {
+  #(Ok(value), state)
+}
+
+pub fn echo_typed_err(
+  value _value: Item,
+  state state: HandlerContext,
+) -> #(Result(Item, ItemError), HandlerContext) {
+  #(Error(ValidationFailed(field: "name", reason: "required")), state)
+}
+
+pub fn echo_int_negated(
+  value value: Int,
+  state state: HandlerContext,
+) -> #(Result(Int, Nil), HandlerContext) {
+  #(Ok(0 - value), state)
+}

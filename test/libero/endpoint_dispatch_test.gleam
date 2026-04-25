@@ -120,6 +120,33 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
+pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "echo_dict",
+      params: [#("value", "Dict(String, Int)")],
+      return_type_str: "Result(Dict(String, Int), Nil)",
+    ),
+  ]
+  let output_dir = "build/.test_endpoint_dispatch_stdlib_imports"
+  let assert Ok(Nil) =
+    codegen.write_endpoint_dispatch(
+      endpoints: endpoints,
+      server_generated: output_dir,
+      atoms_module: "app@generated@rpc_atoms",
+      context_module: "server/handler_context",
+      shared_module_path: "shared/types",
+    )
+  let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
+
+  let assert True = string.contains(content, "import gleam/dict.{type Dict}")
+  let assert True =
+    string.contains(content, "EchoDict(value: Dict(String, Int))")
+
+  let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
+
 pub fn endpoint_client_stubs_imports_qualified_types_test() {
   // Same bug applies to generated client stubs (messages.gleam)
   let endpoints = [
@@ -150,6 +177,32 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
   let assert True = string.contains(content, "import shared/alerts")
 
   // Cleanup
+  let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
+
+pub fn endpoint_client_stubs_imports_stdlib_types_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "echo_dict",
+      params: [#("value", "Dict(String, Int)")],
+      return_type_str: "Result(Dict(String, Int), Nil)",
+    ),
+  ]
+  let output_dir = "build/.test_endpoint_stubs_stdlib_imports"
+  let assert Ok(Nil) =
+    codegen.write_endpoint_client_stubs(
+      endpoints: endpoints,
+      client_generated: output_dir,
+      shared_module_path: "shared/types",
+    )
+  let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
+
+  let assert True = string.contains(content, "import gleam/dict.{type Dict}")
+  let assert True =
+    string.contains(content, "EchoDict(value: Dict(String, Int))")
+  let assert True = string.contains(content, "value value: Dict(String, Int),")
+
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 

@@ -94,6 +94,14 @@ assertThrows(() => decode_float("3.14"), "decode_float throws on string");
 // decode_string
 assert.strictEqual(decode_string("foo"), "foo", "decode_string ok");
 assert.strictEqual(decode_string(""), "", "decode_string empty");
+assert.strictEqual(
+  decode_string({
+    __liberoRawBinary: true,
+    rawBuffer: new Uint8Array([99, 97, 102, 195, 169]),
+  }),
+  "café",
+  "decode_string accepts raw binary wrapper",
+);
 assertThrows(() => decode_string(5), "decode_string throws on number");
 assertThrows(() => decode_string(null), "decode_string throws on null");
 
@@ -108,6 +116,12 @@ assertThrows(() => decode_bool(1), "decode_bool throws on number");
 // decode_bit_array (pass-through)
 const ba = new Uint8Array([1, 2, 3]);
 assert.strictEqual(decode_bit_array(ba), ba, "decode_bit_array pass-through");
+const rawBinary = { __liberoRawBinary: true, rawBuffer: new Uint8Array([1, 2, 3]) };
+assert.strictEqual(
+  decode_bit_array(rawBinary),
+  rawBinary,
+  "decode_bit_array accepts raw binary wrapper",
+);
 
 // decode_option_of
 const opt_some = decode_option_of(decode_string, ["some", "x"]);

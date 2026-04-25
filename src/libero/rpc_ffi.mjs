@@ -12,7 +12,10 @@
 import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
 import { Ok, Error as ResultError, CustomType, Empty, NonEmpty, BitArray } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
-import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
+import {
+  from_list as dictFromList,
+  to_list as dictToList,
+} from "../../gleam_stdlib/gleam/dict.mjs";
 import { InternalError, MalformedRequest, UnknownFunction } from "./error.mjs";
 
 // ---------- Error names ----------
@@ -282,8 +285,12 @@ class ETFDecoder {
         return arrayToGleamList(elements);
       }
 
-      case 109: // BINARY_EXT (Gleam string)
-        return this.readString(this.readUint32());
+      case 109: { // BINARY_EXT (Gleam string or byte-aligned BitArray)
+        const len = this.readUint32();
+        const bytes = this.readBytes(len);
+        if (this.raw) return { __liberoRawBinary: true, rawBuffer: bytes };
+        return utf8Decoder.decode(bytes);
+      }
 
       case 110: // SMALL_BIG_EXT
         return this.decodeBigInt(this.readUint8());
@@ -551,12 +558,16 @@ class ETFEncoder {
       return;
     }
 
-    // Gleam Dict (JS Map).
-    // Gleam Dict compiles to JS Map (gleam_stdlib convention).
-    // If gleam_stdlib changes this, the encoder will throw "unsupported type"
-    // which makes the issue immediately visible.
+    // Plain JS Map, useful for tests and low-level interop.
     if (value instanceof Map) {
       this.encodeMap(value);
+      return;
+    }
+
+    // Gleam stdlib Dict (HAMT object). Convert through dict.to_list so the
+    // encoder follows the stdlib representation instead of guessing internals.
+    if (value && typeof value === "object" && "root" in value && "size" in value) {
+      this.encodeMap(new Map(gleamListToArray(dictToList(value))));
       return;
     }
 
@@ -879,6 +890,13 @@ function makeConnectionError(message) {
   return new ResultError(new InternalError("", message));
 }
 
+function decodeRawString(term) {
+  if (term && term.__liberoRawBinary === true && term.rawBuffer instanceof Uint8Array) {
+    return utf8Decoder.decode(term.rawBuffer);
+  }
+  return term;
+}
+
 // Reconstruct a Gleam RpcError class instance from a raw ETF-decoded term.
 // 0-arity variants arrive as a bare atom string; variants with fields
 // arrive as atom-tagged arrays. Wire shape matches libero/error.gleam:
@@ -892,8 +910,11 @@ function decodeRpcError(term) {
   }
   switch (term[0]) {
     case "malformed_request": return new MalformedRequest();
-    case "unknown_function": return new UnknownFunction(term[1]);
-    case "internal_error": return new InternalError(term[1], term[2]);
+    case "unknown_function": return new UnknownFunction(decodeRawString(term[1]));
+    case "internal_error": return new InternalError(
+      decodeRawString(term[1]),
+      decodeRawString(term[2]),
+    );
     default:
       return new InternalError("", "Unknown RpcError variant: " + String(term[0]));
   }
@@ -957,7 +978,7 @@ function ensureSocket(url) {
         const raw = decode_value_raw(payload);
         // raw is a 2-element JS array: [moduleName, rawMsgFromServerTerm]
         if (raw && raw[0] !== undefined && raw[1] !== undefined) {
-          decodedModule = raw[0];
+          decodedModule = decodeRawString(raw[0]);
           decodedValue = typedDecoder(raw[1]);
         }
       } else {

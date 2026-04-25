@@ -1,0 +1,6 @@
+import generated/messages
+
+pub fn main() {
+  let _ = messages.echo_int
+  Nil
+}

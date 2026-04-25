@@ -134,6 +134,89 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
   let assert Ok(Nil) = simplifile.delete_all(["build/.test_decoders_ffi"])
 }
 
+pub fn decoders_ffi_registers_float_fields_test() {
+  let discovered = [
+    walker.DiscoveredType(
+      module_path: "shared/types",
+      type_name: "WithFloats",
+      type_params: [],
+      variants: [
+        walker.DiscoveredVariant(
+          module_path: "shared/types",
+          variant_name: "WithFloats",
+          atom_name: "with_floats",
+          float_field_indices: [0, 1],
+          fields: [walker.FloatField, walker.FloatField, walker.StringField],
+        ),
+      ],
+    ),
+  ]
+  let assert Ok(config) =
+    config.build_config(
+      ws_mode: config.WsFullUrl(url: "ws://localhost:8080/ws"),
+      namespace: option.None,
+      client_root: "build/.test_decoders_float_fields",
+      shared_root: Ok("../shared"),
+      server_root: Ok("."),
+    )
+  let assert Ok(Nil) =
+    codegen.write_decoders_ffi(
+      config: config,
+      discovered: discovered,
+      endpoints: [],
+    )
+  let assert Ok(content) =
+    simplifile.read(
+      "build/.test_decoders_float_fields/src/client/generated/libero/rpc_decoders_ffi.mjs",
+    )
+
+  let assert True = string.contains(content, "registerFloatFields")
+  let assert True =
+    string.contains(content, "registerFloatFields(\"with_floats\", [0, 1])")
+
+  let assert Ok(Nil) =
+    simplifile.delete_all(["build/.test_decoders_float_fields"])
+}
+
+pub fn response_decoder_handles_dict_of_custom_type_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "echo_dict_string_item",
+      params: [#("value", "Dict(String, types.Item)")],
+      return_type_str: "Result(Dict(String, types.Item), Nil)",
+    ),
+  ]
+  let assert Ok(config) =
+    config.build_config(
+      ws_mode: config.WsFullUrl(url: "ws://localhost:8080/ws"),
+      namespace: option.None,
+      client_root: "build/.test_decoders_response_dict",
+      shared_root: Ok("../shared"),
+      server_root: Ok("."),
+    )
+  let assert Ok(Nil) =
+    codegen.write_decoders_ffi(
+      config: config,
+      discovered: [],
+      endpoints: endpoints,
+    )
+  let assert Ok(content) =
+    simplifile.read(
+      "build/.test_decoders_response_dict/src/client/generated/libero/rpc_decoders_ffi.mjs",
+    )
+
+  let assert True =
+    string.contains(
+      content,
+      "decode_dict_of((t0) => decode_string(t0), (t1) => decode_shared_types_item(t1), inner[1])",
+    )
+  let assert False = string.contains(content, "decode_shared_Dict")
+
+  let assert Ok(Nil) =
+    simplifile.delete_all(["build/.test_decoders_response_dict"])
+}
+
 pub fn write_if_missing_preserves_existing_file_test() {
   let dir = "build/.test_write_if_missing_preserve"
   let _ = simplifile.delete(dir)
