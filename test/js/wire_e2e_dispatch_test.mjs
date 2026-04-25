@@ -96,6 +96,7 @@ const expectedRequestIds = {
   "echo_dict_string_item/pairs": 61,
   "echo_nested_record/basic": 62,
   "echo_typed_err/validation_failed": 63,
+  "dispatch/handler_panic": 65,
 };
 
 for (const [name, requestId] of Object.entries(expectedRequestIds)) {
@@ -208,5 +209,12 @@ const malformed = decodeFrame(manifest["dispatch/malformed_envelope"]);
 assert.equal(malformed.requestId, 0);
 assert.equal(malformed.raw[0], "error");
 assert.equal(malformed.raw[1], "malformed_request");
+
+const panic = decodeFrame(manifest["dispatch/handler_panic"]);
+assert.equal(panic.requestId, 65);
+assert.equal(panic.raw[0], "error");
+assert.equal(panic.raw[1][0], "internal_error");
+assert.ok(rawBinaryToString(panic.raw[1][1]).length > 0, "trace_id should be a non-empty binary");
+assert.equal(rawBinaryToString(panic.raw[1][2]), "Internal server error");
 
 console.log(`wire e2e dispatch test passed (${Object.keys(manifest).length} cases)`);

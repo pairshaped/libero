@@ -86,15 +86,25 @@ const item2 = { id: 8, name: "bolt", price: 1.25, in_stock: false };
 
 const cases = [
   ["echo_int/positive", decoders.decode_response_echo_int, (v) => assert.equal(v, 5)],
+  ["echo_int/zero", decoders.decode_response_echo_int, (v) => assert.equal(v, 0)],
+  ["echo_int/negative", decoders.decode_response_echo_int, (v) => assert.equal(v, -7)],
   ["echo_float/fractional", decoders.decode_response_echo_float, (v) => assert.equal(v, 3.5)],
+  ["echo_float/negative", decoders.decode_response_echo_float, (v) => assert.equal(v, -1.5)],
+  ["echo_float/whole", decoders.decode_response_echo_float, (v) => assert.equal(v, 2.0)],
   ["echo_string/ascii", decoders.decode_response_echo_string, (v) => assert.equal(v, "hello")],
+  ["echo_string/empty", decoders.decode_response_echo_string, (v) => assert.equal(v, "")],
+  ["echo_string/null_byte", decoders.decode_response_echo_string, (v) => assert.equal(v, "a\0b")],
   ["echo_string/utf8_cafe", decoders.decode_response_echo_string, (v) => assert.equal(v, "café")],
   ["echo_string/cjk", decoders.decode_response_echo_string, (v) => assert.equal(v, "漢字")],
   ["echo_bool/true", decoders.decode_response_echo_bool, (v) => assert.equal(v, true)],
   ["echo_bool/false", decoders.decode_response_echo_bool, (v) => assert.equal(v, false)],
   ["echo_bit_array/bytes", decoders.decode_response_echo_bit_array, (v) => assert.deepEqual([...v.rawBuffer], [1, 2, 3])],
+  ["echo_bit_array/empty", decoders.decode_response_echo_bit_array, (v) => assert.deepEqual([...v.rawBuffer], [])],
+  ["echo_bit_array/single", decoders.decode_response_echo_bit_array, (v) => assert.deepEqual([...v.rawBuffer], [255])],
   ["echo_unit/nil", decoders.decode_response_echo_unit, (v) => assert.equal(v, undefined)],
   ["echo_list_int/many", decoders.decode_response_echo_list_int, (v) => assert.deepEqual(listToArray(v), [1, 2, 3])],
+  ["echo_list_int/empty", decoders.decode_response_echo_list_int, (v) => assert.deepEqual(listToArray(v), [])],
+  ["echo_list_int/single", decoders.decode_response_echo_list_int, (v) => assert.deepEqual(listToArray(v), [42])],
   ["echo_option_string/some", decoders.decode_response_echo_option_string, (v) => {
     assert.ok(v instanceof option.Some);
     assert.equal(v[0], "hello");
@@ -112,11 +122,26 @@ const cases = [
     assert.equal(dictGet(v, "one"), 1);
     assert.equal(dictGet(v, "two"), 2);
   }],
+  ["echo_dict_string_int/empty", decoders.decode_response_echo_dict_string_int, (v) => {
+    assert.equal(dict.size(v), 0);
+  }],
   ["echo_tuple_int_string/pair", decoders.decode_response_echo_tuple_int_string, (v) => assert.deepEqual(v, [9, "nine"])],
   ["echo_status/active", decoders.decode_response_echo_status, (v) => assert.ok(v instanceof types.Active)],
+  ["echo_status/pending", decoders.decode_response_echo_status, (v) => assert.ok(v instanceof types.Pending)],
+  ["echo_status/cancelled", decoders.decode_response_echo_status, (v) => assert.ok(v instanceof types.Cancelled)],
   ["echo_item/basic", decoders.decode_response_echo_item, (v) => expectItem(v, item)],
   ["echo_tree/leaf", decoders.decode_response_echo_tree, (v) => assert.ok(v instanceof types.Leaf)],
   ["echo_tree/deep", decoders.decode_response_echo_tree, expectDeepTree],
+  ["echo_tree/deep_left", decoders.decode_response_echo_tree, (v) => {
+    assert.ok(v instanceof types.Node);
+    assert.equal(v.value, 1);
+    assert.ok(v.left instanceof types.Node);
+    assert.equal(v.left.value, 2);
+    assert.ok(v.left.left instanceof types.Node);
+    assert.equal(v.left.left.value, 3);
+    assert.ok(v.left.right instanceof types.Leaf);
+    assert.ok(v.right instanceof types.Leaf);
+  }],
   ["echo_item_error/not_found", decoders.decode_response_echo_item_error, (v) => assert.ok(v instanceof types.NotFound)],
   ["echo_item_error/validation_failed", decoders.decode_response_echo_item_error, expectValidationFailed],
   ["echo_with_floats/whole", decoders.decode_response_echo_with_floats, (v) => {
@@ -140,16 +165,18 @@ const cases = [
     expectItem(dictGet(v, "one"), item);
     expectItem(dictGet(v, "two"), item2);
   }],
+  ["echo_dict_string_item/empty", decoders.decode_response_echo_dict_string_item, (v) => {
+    assert.equal(dict.size(v), 0);
+  }],
   ["echo_nested_record/basic", decoders.decode_response_echo_nested_record, (v) => {
     assert.ok(v instanceof types.NestedRecord);
     assert.equal(listToArray(v.items).length, 2);
     assert.ok(v.primary instanceof option.Some);
     expectItem(v.primary[0], item);
-    assert.deepEqual(listToArray(v.statuses).map((status) => status.constructor.name), [
-      "Pending",
-      "Active",
-      "Cancelled",
-    ]);
+    const statuses = listToArray(v.statuses);
+    assert.ok(statuses[0] instanceof types.Pending);
+    assert.ok(statuses[1] instanceof types.Active);
+    assert.ok(statuses[2] instanceof types.Cancelled);
     expectItem(dictGet(v.by_id, "one"), item);
   }],
 ];

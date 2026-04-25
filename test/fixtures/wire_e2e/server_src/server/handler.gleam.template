@@ -158,3 +158,13 @@ pub fn echo_int_negated(
 ) -> #(Result(Int, Nil), HandlerContext) {
   #(Ok(0 - value), state)
 }
+
+pub fn echo_panic(
+  value _value: Int,
+  state state: HandlerContext,
+) -> #(Result(Int, Nil), HandlerContext) {
+  // Deliberate runtime panic caught by trace.try_call in the generated
+  // dispatch. The dispatch returns Error(InternalError(...)), and the
+  // request_id round-trips.
+  panic as "handler panic test"
+}

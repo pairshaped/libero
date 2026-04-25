@@ -270,8 +270,8 @@ Each phase is independently committable. Phase 6 is the highest-value single inc
 
 ## Open questions
 
-- **Which Node version to target?** Existing tests use top-level `import`, no Node-specific features. Node 18+ probably sufficient. Verify before scaffolding.
-- **Float edge cases.** `NaN` and `Infinity` are not Gleam-representable but the decoder might see them from a misbehaving server. Decide whether Pattern A includes these (test that we throw clearly) or excludes them (out of scope).
+- **Which Node version to target?** Resolved: Node 18+ is the minimum. The tests use top-level `import` (ES modules), `assert/strict`, `Buffer`, and `pathToFileURL` — all available since Node 18. CI runs Node 23.
+- **Float edge cases.** Resolved: `NaN`, `Infinity`, `-Infinity`, and `-0.0` are tested JS-to-JS in `etf_codec_test.mjs`. JS encodes them as NEW_FLOAT_EXT (NaN uses a quiet NaN bit pattern). BEAM rejects NaN at `binary_to_term/1`, so cross-runtime float edge cases are JS-only. These are out of scope for the E2E harness because the harness verifies cross-runtime round-trips and the BEAM boundary rejects these values.
 
 ## Out of scope
 
