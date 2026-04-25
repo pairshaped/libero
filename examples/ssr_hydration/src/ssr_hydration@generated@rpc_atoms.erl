@@ -23,21 +23,23 @@ ensure() ->
 do_ensure() ->
     lists:foreach(fun(B) -> binary_to_atom(B) end, [
         <<"app_error">>,
-        <<"counter_updated">>,
+        <<"counter_changed">>,
+        <<"dec_page">>,
         <<"decode_error">>,
-        <<"decrement">>,
         <<"error">>,
         <<"false">>,
-        <<"get_counter">>,
-        <<"increment">>,
+        <<"inc_page">>,
         <<"internal_error">>,
         <<"malformed_request">>,
+        <<"model">>,
+        <<"navigate_to">>,
         <<"nil">>,
         <<"none">>,
         <<"ok">>,
         <<"some">>,
         <<"true">>,
-        <<"unknown_function">>
+        <<"unknown_function">>,
+        <<"user_clicked_action">>
     ]),
     persistent_term:put({?MODULE, done}, true),
     nil.

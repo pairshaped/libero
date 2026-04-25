@@ -8,46 +8,53 @@ import libero/remote_data.{type RemoteData, Failure, Success}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
+import shared/messages
 
 pub type ClientMsg {
-  Increment
-  Decrement
   GetCounter
+  Decrement
+  Increment
 }
 
-pub fn increment(
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_get_counter")
+fn decode_response_get_counter(raw: Dynamic) -> Dynamic
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_decrement")
+fn decode_response_decrement(raw: Dynamic) -> Dynamic
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_increment")
+fn decode_response_increment(raw: Dynamic) -> Dynamic
+
+pub fn get_counter(
   on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
 ) -> Effect(msg) {
-  send(Increment, fn(raw) { on_response(decode_response(raw)) })
+  send(GetCounter, fn(raw) {
+    on_response(wire.coerce(decode_response_get_counter(raw)))
+  })
 }
 
 pub fn decrement(
   on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
 ) -> Effect(msg) {
-  send(Decrement, fn(raw) { on_response(decode_response(raw)) })
+  send(Decrement, fn(raw) {
+    on_response(wire.coerce(decode_response_decrement(raw)))
+  })
 }
 
-pub fn get_counter(
+pub fn increment(
   on_response on_response: fn(RemoteData(Int, Nil)) -> msg,
 ) -> Effect(msg) {
-  send(GetCounter, fn(raw) { on_response(decode_response(raw)) })
+  send(Increment, fn(raw) {
+    on_response(wire.coerce(decode_response_increment(raw)))
+  })
 }
 
 fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
-  let _ = rpc_decoders.decode_msg_from_server
+  let _ = rpc_decoders.ensure_decoders
   rpc.send(
     url: rpc_config.ws_url(),
     module: "shared/messages",
     msg: msg,
     on_response: on_response,
   )
-}
-
-fn decode_response(raw: Dynamic) -> RemoteData(a, e) {
-  let outer: Result(Result(a, e), RpcError) = wire.coerce(raw)
-  case outer {
-    Ok(Ok(value)) -> Success(value)
-    Ok(Error(err)) -> Failure(err)
-    Error(_rpc_err) -> panic as "RPC framework error"
-  }
 }

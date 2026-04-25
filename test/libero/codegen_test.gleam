@@ -74,8 +74,7 @@ pub fn send_function_contains_module_path_test() {
   // Must import rpc_decoders so the typed decoder FFI side-effect runs on load
   let assert True = string.contains(content, "rpc_decoders")
   // Must reference ensure_decoders to trigger FFI side-effect loading
-  let assert True =
-    string.contains(content, "rpc_decoders.ensure_decoders")
+  let assert True = string.contains(content, "rpc_decoders.ensure_decoders")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
@@ -98,7 +97,11 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
       server_root: Ok("."),
     )
   let assert Ok(Nil) =
-    codegen.write_decoders_ffi(config: config, discovered: discovered, endpoints: [])
+    codegen.write_decoders_ffi(
+      config: config,
+      discovered: discovered,
+      endpoints: [],
+    )
   let assert Ok(content) =
     simplifile.read(
       "build/.test_decoders_ffi/src/client/generated/libero/rpc_decoders_ffi.mjs",

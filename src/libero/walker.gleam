@@ -221,13 +221,9 @@ fn walk_shared_files(path: String) -> Result(List(String), GenError) {
 /// Derive a module path from a shared file path.
 /// e.g. "examples/todos/shared/src/shared/types.gleam" -> "shared/types"
 fn derive_shared_module_path(file_path: String) -> String {
-  // Find "shared/src/" and take everything after it, minus ".gleam"
-  case string.split(file_path, "shared/src/") {
-    [_, after] -> string.replace(after, ".gleam", "")
-    _ ->
-      // Fallback: just strip directory prefix and .gleam
-      file_path
-      |> string.replace(".gleam", "")
+  case string.split_once(file_path, "shared/src/") {
+    Ok(#(_, after)) -> string.replace(after, ".gleam", "")
+    Error(Nil) -> string.replace(file_path, ".gleam", "")
   }
 }
 

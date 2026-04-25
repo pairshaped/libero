@@ -8,11 +8,12 @@ import libero/trace
 import libero/wire
 import server/handler as server_handler_handler
 import server/handler_context.{type HandlerContext}
+import shared/messages
 
 pub type ClientMsg {
-  Increment
-  Decrement
   GetCounter
+  Decrement
+  Increment
 }
 
 @external(erlang, "ssr_hydration@generated@rpc_atoms", "ensure")
@@ -26,17 +27,17 @@ pub fn handle(
     Ok(#("shared/messages", request_id, msg)) -> {
       let typed_msg: ClientMsg = wire.coerce(msg)
       case typed_msg {
-        Increment ->
+        GetCounter ->
           dispatch(state, request_id, fn() {
-            server_handler_handler.increment(state:)
+            server_handler_handler.get_counter(state:)
           })
         Decrement ->
           dispatch(state, request_id, fn() {
             server_handler_handler.decrement(state:)
           })
-        GetCounter ->
+        Increment ->
           dispatch(state, request_id, fn() {
-            server_handler_handler.get_counter(state:)
+            server_handler_handler.increment(state:)
           })
       }
     }

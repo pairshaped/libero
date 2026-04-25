@@ -57,7 +57,10 @@ fn run_with_clients(
 
   // 4. Scan shared src dir for message modules
   //    If MsgFromClient/MsgFromServer types exist, use the classic convention.
-  //    If not, use the handler-as-contract convention (per-function endpoints).
+  //    If the scan yields a NoMessageModules error (no MsgFromClient/MsgFromServer
+  //    types found), fall through to the handler-as-contract convention.
+  //    Other errors (e.g. CannotReadDir from a misconfigured shared_src_dir)
+  //    are reported instead of being silently swallowed.
   case scanner.scan_message_modules(shared_src: shared_src) {
     Ok(#(message_modules, module_files)) ->
       run_classic_convention(
@@ -68,15 +71,34 @@ fn run_with_clients(
         message_modules:,
         module_files:,
       )
-    Error(_) ->
-      run_endpoint_convention(
-        project_path:,
-        toml_cfg:,
-        clients:,
-        server_src:,
-        shared_src:,
-      )
+    Error(errors) ->
+      case is_no_message_modules_only(errors) {
+        True ->
+          run_endpoint_convention(
+            project_path:,
+            toml_cfg:,
+            clients:,
+            server_src:,
+            shared_src:,
+          )
+        False -> {
+          list.each(errors, gen_error.print_error)
+          Error("scan_message_modules failed")
+        }
+      }
   }
+}
+
+/// True if the only error from scanning is `NoMessageModules`. Anything else
+/// (e.g. `CannotReadDir`, `ParseFailed`) is a real failure we need to surface
+/// rather than treat as an implicit signal to switch conventions.
+fn is_no_message_modules_only(errors: List(gen_error.GenError)) -> Bool {
+  list.all(errors, fn(err) {
+    case err {
+      gen_error.NoMessageModules(_) -> True
+      _ -> False
+    }
+  })
 }
 
 // nolint: stringly_typed_error

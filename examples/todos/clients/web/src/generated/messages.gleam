@@ -17,49 +17,60 @@ pub type ClientMsg {
   GetTodos
 }
 
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_delete_todo")
+fn decode_response_delete_todo(raw: Dynamic) -> Dynamic
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_toggle_todo")
+fn decode_response_toggle_todo(raw: Dynamic) -> Dynamic
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_create_todo")
+fn decode_response_create_todo(raw: Dynamic) -> Dynamic
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_get_todos")
+fn decode_response_get_todos(raw: Dynamic) -> Dynamic
+
 pub fn delete_todo(
   id id: Int,
   on_response on_response: fn(RemoteData(Int, types.TodoError)) -> msg,
 ) -> Effect(msg) {
-  send(DeleteTodo(id:), fn(raw) { on_response(decode_response(raw)) })
+  send(DeleteTodo(id:), fn(raw) {
+    on_response(wire.coerce(decode_response_delete_todo(raw)))
+  })
 }
 
 pub fn toggle_todo(
   id id: Int,
   on_response on_response: fn(RemoteData(types.Todo, types.TodoError)) -> msg,
 ) -> Effect(msg) {
-  send(ToggleTodo(id:), fn(raw) { on_response(decode_response(raw)) })
+  send(ToggleTodo(id:), fn(raw) {
+    on_response(wire.coerce(decode_response_toggle_todo(raw)))
+  })
 }
 
 pub fn create_todo(
   params params: types.TodoParams,
   on_response on_response: fn(RemoteData(types.Todo, types.TodoError)) -> msg,
 ) -> Effect(msg) {
-  send(CreateTodo(params:), fn(raw) { on_response(decode_response(raw)) })
+  send(CreateTodo(params:), fn(raw) {
+    on_response(wire.coerce(decode_response_create_todo(raw)))
+  })
 }
 
 pub fn get_todos(
   on_response on_response: fn(RemoteData(List(types.Todo), types.TodoError)) ->
     msg,
 ) -> Effect(msg) {
-  send(GetTodos, fn(raw) { on_response(decode_response(raw)) })
+  send(GetTodos, fn(raw) {
+    on_response(wire.coerce(decode_response_get_todos(raw)))
+  })
 }
 
 fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
-  let _ = rpc_decoders.decode_msg_from_server
+  let _ = rpc_decoders.ensure_decoders
   rpc.send(
     url: rpc_config.ws_url(),
     module: "shared/types",
     msg: msg,
     on_response: on_response,
   )
-}
-
-fn decode_response(raw: Dynamic) -> RemoteData(a, e) {
-  let outer: Result(Result(a, e), RpcError) = wire.coerce(raw)
-  case outer {
-    Ok(Ok(value)) -> Success(value)
-    Ok(Error(err)) -> Failure(err)
-    Error(_rpc_err) -> panic as "RPC framework error"
-  }
 }

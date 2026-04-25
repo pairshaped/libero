@@ -206,27 +206,26 @@ pub fn create_gadget(
   let assert Ok(Nil) = simplifile.delete_all([fixture_dir])
 }
 
-pub fn scan_todos_handler_endpoints_test() {
-  // Scan the actual todos example handler
+pub fn scan_fixture_handler_endpoints_test() {
+  // Integration check against the committed fixture handler. Lives separately
+  // from endpoint_filter_test so we exercise the labelled-param shape coming
+  // out of the scanner, not just the names.
   let assert Ok(endpoints) =
     scanner.scan_handler_endpoints(
-      server_src: "examples/todos/src",
-      shared_src: "examples/todos/shared/src/shared",
+      server_src: "test/fixtures/endpoint_scan/server",
+      shared_src: "test/fixtures/endpoint_scan/shared",
     )
-  // Should find 4 endpoints: get_todos, create_todo, toggle_todo, delete_todo
   let names = list.map(endpoints, fn(e) { e.fn_name })
-  let assert True = list.contains(names, "get_todos")
-  let assert True = list.contains(names, "create_todo")
-  let assert True = list.contains(names, "toggle_todo")
-  let assert True = list.contains(names, "delete_todo")
+  let assert True = list.contains(names, "get_items")
+  let assert True = list.contains(names, "create_item")
+  let assert True = list.contains(names, "delete_item")
 
-  // create_todo should have params
+  // create_item should have one labelled param
   let assert Ok(create) =
-    list.find(endpoints, fn(e) { e.fn_name == "create_todo" })
-  let assert True = list.length(create.params) == 1
+    list.find(endpoints, fn(e) { e.fn_name == "create_item" })
   let assert [#("params", _type_str)] = create.params
 
-  // get_todos should have no params (only state)
-  let assert Ok(get) = list.find(endpoints, fn(e) { e.fn_name == "get_todos" })
+  // get_items should have no params (only state)
+  let assert Ok(get) = list.find(endpoints, fn(e) { e.fn_name == "get_items" })
   let assert True = list.is_empty(get.params)
 }

@@ -1,13 +1,14 @@
 import gleam/list
 import libero/scanner
 
-// Four criteria for an RPC endpoint:
+// Five criteria for an RPC endpoint:
 // 1. Public function
 // 2. Last parameter is HandlerContext
 // 3. Return type is #(something, HandlerContext)
 // 4. All types in params and return are shared (or builtins)
+// 5. The "something" in the return tuple is a Result(_, _)
 //
-// Each test below has 3 of 4 criteria met, with one missing.
+// Each test below has all-but-one criteria met, with one missing.
 
 /// Missing criterion 1: private function
 pub fn excludes_private_function_test() {
@@ -45,13 +46,21 @@ pub fn excludes_wrong_return_order_test() {
   let assert False = list.contains(names, "wrong_order")
 }
 
+/// Missing criterion 5: return tuple's first element is not a Result(_, _).
+/// The wire codec assumes Result-shaped responses, so a bare value in this
+/// slot would compile but break serialization. Filter it out at scan time.
+pub fn excludes_non_result_response_test() {
+  let names = scan_fixture_names()
+  let assert False = list.contains(names, "ping")
+}
+
 /// Skips old convention (update_from_client)
 pub fn excludes_update_from_client_test() {
   let names = scan_fixture_names()
   let assert False = list.contains(names, "update_from_client")
 }
 
-/// All 4 criteria met = included
+/// All criteria met = included
 pub fn includes_valid_endpoints_test() {
   let names = scan_fixture_names()
   let assert True = list.contains(names, "get_items")
@@ -59,11 +68,17 @@ pub fn includes_valid_endpoints_test() {
   let assert True = list.contains(names, "delete_item")
 }
 
+/// Dict is a builtin and must not cause valid endpoints to be filtered out.
+pub fn includes_dict_typed_endpoint_test() {
+  let names = scan_fixture_names()
+  let assert True = list.contains(names, "lookup_items")
+}
+
 fn scan_fixture_names() -> List(String) {
   let assert Ok(endpoints) =
     scanner.scan_handler_endpoints(
-      server_src: "build/.test_fixtures/endpoint_scan/server",
-      shared_src: "build/.test_fixtures/endpoint_scan/shared",
+      server_src: "test/fixtures/endpoint_scan/server",
+      shared_src: "test/fixtures/endpoint_scan/shared",
     )
   list.map(endpoints, fn(e) { e.fn_name })
 }

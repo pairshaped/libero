@@ -8,30 +8,79 @@ import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array,
 import { Ok, Error as ResultError, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
-import * as _m_shared_messages from "../../shared/shared/messages.mjs";
+import * as _m_shared_views from "../../shared/shared/views.mjs";
 
 setResultCtors(Ok, ResultError);
 setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
 setDictFromList(dictFromList);
 
-export function decode_shared_messages_msg_from_client(term) {
-  if (term === "increment") return new _m_shared_messages.Increment();
-  if (term === "decrement") return new _m_shared_messages.Decrement();
-  if (term === "get_counter") return new _m_shared_messages.GetCounter();
-  throw new DecodeError("unknown variant: " + String(term));
-}
-
-export function decode_shared_messages_msg_from_server(term) {
-  return new _m_shared_messages.CounterUpdated(
-    decode_result_of((t1) => decode_int(t1), (t2) => decode_nil(t2), term[1])
+export function decode_shared_views_model(term) {
+  return new _m_shared_views.Model(
+    decode_shared_views_route(term[1]),
+    decode_int(term[2])
   );
 }
 
-export function decode_msg_from_server(term) {
-  return decode_shared_messages_msg_from_server(term);
+export function decode_shared_views_route(term) {
+  if (term === "inc_page") return new _m_shared_views.IncPage();
+  if (term === "dec_page") return new _m_shared_views.DecPage();
+  throw new DecodeError("unknown variant: " + String(term));
 }
 
-// Auto-register the typed decoder so push frames bypass the
-// global constructor registry. Called at module load time.
-setMsgFromServerDecoder(decode_msg_from_server);
+export function decode_shared_views_msg(term) {
+  const tag = Array.isArray(term) ? term[0] : term;
+  switch (tag) {
+    case "user_clicked_action":
+      return new _m_shared_views.UserClickedAction();
+    case "navigate_to":
+      return new _m_shared_views.NavigateTo(decode_shared_views_route(term[1]));
+    case "counter_changed":
+      return new _m_shared_views.CounterChanged(decode_int(term[1]));
+    default:
+      throw new DecodeError("unknown variant: " + String(tag));
+  }
+}
+
+export function ensure_decoders() { return true; }
+
+
+// --- Per-endpoint response decoders ---
+
+import { Success as _Success, Failure as _Failure } from "../../libero/libero/remote_data.mjs";
+
+export function decode_response_get_counter(raw) {
+  if (Array.isArray(raw) && raw[0] === "ok") {
+    const inner = raw[1];
+    if (Array.isArray(inner) && inner[0] === "ok") {
+      return new _Success(inner[1]);
+    } else if (Array.isArray(inner) && inner[0] === "error") {
+      return new _Failure(undefined);
+    }
+  }
+  return new _Failure("RPC framework error");
+}
+
+export function decode_response_decrement(raw) {
+  if (Array.isArray(raw) && raw[0] === "ok") {
+    const inner = raw[1];
+    if (Array.isArray(inner) && inner[0] === "ok") {
+      return new _Success(inner[1]);
+    } else if (Array.isArray(inner) && inner[0] === "error") {
+      return new _Failure(undefined);
+    }
+  }
+  return new _Failure("RPC framework error");
+}
+
+export function decode_response_increment(raw) {
+  if (Array.isArray(raw) && raw[0] === "ok") {
+    const inner = raw[1];
+    if (Array.isArray(inner) && inner[0] === "ok") {
+      return new _Success(inner[1]);
+    } else if (Array.isArray(inner) && inner[0] === "error") {
+      return new _Failure(undefined);
+    }
+  }
+  return new _Failure("RPC framework error");
+}

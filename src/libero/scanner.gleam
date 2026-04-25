@@ -298,14 +298,20 @@ fn extract_variant_names(clauses: List(glance.Clause)) -> List(String) {
 /// Skips any subdirectory named `generated`, since libero never reads its
 /// own output, and leaving this convention in place means consumers
 /// don't need to configure scan_excludes as their projects grow.
+///
+/// Results are sorted alphabetically so codegen output is deterministic
+/// across runs and across machines (filesystem order is not stable).
 fn walk_directory(path path: String) -> Result(List(String), GenError) {
   use entries <- result.try(
     simplifile.read_directory(path)
     |> result.map_error(fn(cause) { CannotReadDir(path: path, cause: cause) }),
   )
-  list.try_fold(over: entries, from: [], with: fn(acc, entry) {
-    visit_entry(acc: acc, parent: path, entry: entry)
-  })
+  use files <- result.map(
+    list.try_fold(over: entries, from: [], with: fn(acc, entry) {
+      visit_entry(acc: acc, parent: path, entry: entry)
+    }),
+  )
+  list.sort(files, by: string.compare)
 }
 
 /// Classify a single directory entry and fold it into the accumulator.
@@ -563,8 +569,14 @@ pub fn last_module_segment(module_path module_path: String) -> String {
   |> result.unwrap(or: module_path)
 }
 
-/// Find the module path of the first .gleam file in the shared src directory.
-/// Used by the endpoint convention to determine the wire envelope module path.
+/// Find the module path of the alphabetically first .gleam file in the shared
+/// src directory. Used by the endpoint convention to determine the wire
+/// envelope module path.
+///
+/// The choice is arbitrary but stable (walk_directory sorts its output), which
+/// is what the wire envelope needs. For projects with multiple shared modules,
+/// callers should consider exposing a config knob; today the auto-detection
+/// just picks the first one alphabetically.
 pub fn scan_shared_module_path(
   shared_src shared_src: String,
 ) -> Result(String, Nil) {
@@ -726,6 +738,12 @@ fn parse_single_endpoint(
     return_type,
   ))
 
+  // The response slot must be a Result(_, _). The wire envelope, dispatch,
+  // and client codecs all assume Result-shaped responses; a bare value here
+  // would compile but produce broken serialization at runtime. Treat it as
+  // "not an endpoint" so we don't silently emit broken codegen.
+  use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
+
   // Extract non-state parameters with their labels and types
   let non_state_params = list.take(params, list.length(params) - 1)
   let param_info =
@@ -750,7 +768,11 @@ fn parse_single_endpoint(
     module_path: module_path,
     fn_name: func.name,
     params: param_info,
-    return_type_str: qualified_type_to_string(response_type, type_imports, alias_map),
+    return_type_str: qualified_type_to_string(
+      response_type,
+      type_imports,
+      alias_map,
+    ),
   ))
 }
 
@@ -758,6 +780,14 @@ fn parse_single_endpoint(
 fn is_handler_context_type(t: glance.Type) -> Bool {
   case t {
     glance.NamedType(name: "HandlerContext", ..) -> True
+    _ -> False
+  }
+}
+
+/// Check if a type annotation is a Result(_, _).
+fn is_result_type(t: glance.Type) -> Bool {
+  case t {
+    glance.NamedType(name: "Result", parameters: [_, _], ..) -> True
     _ -> False
   }
 }
@@ -839,10 +869,7 @@ fn qualified_type_to_string(
 
 /// Resolve an import alias to the real module's last path segment.
 /// Falls back to the alias itself if not found in the map.
-fn resolve_alias(
-  alias: String,
-  alias_map: dict.Dict(String, String),
-) -> String {
+fn resolve_alias(alias: String, alias_map: dict.Dict(String, String)) -> String {
   case dict.get(alias_map, alias) {
     Ok(real_name) -> real_name
     Error(Nil) -> alias
@@ -863,7 +890,7 @@ fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
   let builtins =
     set.from_list([
       "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option",
-      "BitArray", "Dynamic",
+      "Dict", "BitArray", "Dynamic",
     ])
   case t {
     glance.NamedType(name:, parameters:, ..) ->
@@ -883,7 +910,7 @@ fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
 /// Looks up unqualified names in the import map.
 fn qualify_name(name: String, imports: dict.Dict(String, String)) -> String {
   let builtins = [
-    "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option",
+    "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option", "Dict",
     "BitArray", "Dynamic",
   ]
   case list.contains(builtins, name) {

@@ -615,10 +615,7 @@ fn extract_module_qualifiers(type_str: String) -> List(String) {
 }
 
 /// Walk characters to collect identifier.identifier sequences.
-fn collect_identifiers(
-  chars: List(String),
-  current: String,
-) -> List(String) {
+fn collect_identifiers(chars: List(String), current: String) -> List(String) {
   case chars {
     [] ->
       case current {
@@ -645,9 +642,8 @@ fn is_ident_char(c: String) -> Bool {
 
 fn is_builtin_module(name: String) -> Bool {
   case name {
-    "Int" | "String" | "Bool" | "Float" | "Nil" | "List" | "Option"
-    | "Result"
-    -> True
+    "Int" | "String" | "Bool" | "Float" | "Nil" | "List" | "Option" | "Result" ->
+      True
     _ -> False
   }
 }
@@ -1296,9 +1292,7 @@ fn emit_ensure_decoders() -> String {
 /// Emit per-endpoint response decoder functions for the FFI file.
 /// Each decoder takes the response handler's output (Ok(raw) or Error(rpc_error)),
 /// decodes the inner Result using per-type decoders, and returns RemoteData.
-fn emit_response_decoders(
-  endpoints: List(scanner.HandlerEndpoint),
-) -> String {
+fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
   case endpoints {
     [] -> ""
     _ -> {

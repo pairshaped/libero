@@ -131,8 +131,7 @@ pub fn record_decoder_constructs_correct_variant_test() {
 
 pub fn ensure_decoders_is_always_exported_test() {
   let js = codegen.emit_typed_decoders(sample_msg_from_server())
-  let assert True =
-    string.contains(js, "export function ensure_decoders()")
+  let assert True = string.contains(js, "export function ensure_decoders()")
 }
 
 pub fn type_decoders_generated_for_msg_from_server_test() {
@@ -161,8 +160,7 @@ pub fn msg_from_server_uses_list_decoder_for_list_field_test() {
 
 pub fn ensure_decoders_emitted_even_without_msg_from_server_test() {
   let js = codegen.emit_typed_decoders(sample_status_enum())
-  let assert True =
-    string.contains(js, "export function ensure_decoders()")
+  let assert True = string.contains(js, "export function ensure_decoders()")
 }
 
 pub fn result_field_uses_result_decoder_test() {
