@@ -151,6 +151,30 @@ pub fn tag_push(module module: String, msg msg: a) -> BitArray {
   <<1, data:bits>>
 }
 
+// ---------- Variant tag ----------
+
+/// Extract the constructor tag (snake_case atom name) from a Gleam variant
+/// value at runtime. Used by generated server dispatch to recognize
+/// unknown variants before the unwitnessed `coerce` + structural pattern
+/// match would crash with `case_clause`.
+///
+/// Returns `Ok(name)` for atoms (zero-arg variants) and tagged tuples
+/// (n-arg variants where the first element is the constructor atom).
+/// Returns `Error(Nil)` for any other shape.
+///
+/// Server-side only. The JS fallback panics because dispatch never
+/// runs on the JavaScript target.
+pub fn variant_tag(value: dynamic.Dynamic) -> Result(String, Nil) {
+  ffi_variant_tag(value)
+}
+
+// nolint: avoid_panic, discarded_result -- Erlang-only @external; JS fallback is unreachable
+@external(erlang, "libero_wire_ffi", "variant_tag")
+fn ffi_variant_tag(value: dynamic.Dynamic) -> Result(String, Nil) {
+  let _ = value
+  panic as "libero/wire.variant_tag is a server-side function, unreachable on JavaScript target"
+}
+
 // ---------- Coerce ----------
 
 /// Cast a Dynamic value to any type.

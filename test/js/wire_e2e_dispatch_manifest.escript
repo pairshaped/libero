@@ -43,7 +43,8 @@ Cases = [
   {"echo_typed_err/validation_failed", 63, {echo_typed_err, Item}},
   {"dispatch/unknown_module", 64, {<<"other/module">>, 64, {echo_int, 5}}},
   {"dispatch/malformed_envelope", 0, malformed},
-  {"dispatch/handler_panic", 65, {echo_panic, 0}}
+  {"dispatch/handler_panic", 65, {echo_panic, 0}},
+  {"dispatch/unknown_variant", 66, {bogus_function, 5}}
 ],
 
 Run = fun

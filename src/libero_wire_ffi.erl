@@ -1,5 +1,5 @@
 -module(libero_wire_ffi).
--export([decode_call/1]).
+-export([decode_call/1, variant_tag/1]).
 
 %% Decode an ETF binary, validate it's a {Binary, Integer, Value} call envelope,
 %% and return a Gleam-shaped Result: {ok, {Name, RequestId, Value}} or
@@ -26,3 +26,19 @@ decode_call(Bin) when is_binary(Bin) ->
     end;
 decode_call(_) ->
     {error, {decode_error, <<"expected a binary (BitArray)">>}}.
+
+%% Extract the variant tag (constructor atom name) from a Gleam variant
+%% value as it lands on Erlang. Zero-arg variants are bare atoms; n-arg
+%% variants are tagged tuples whose first element is the constructor atom.
+%% Used by generated dispatch to detect unrecognized variants before
+%% performing the unwitnessed coerce + structural pattern match.
+variant_tag(Value) when is_atom(Value) ->
+    {ok, atom_to_binary(Value, utf8)};
+variant_tag(Value) when is_tuple(Value), tuple_size(Value) >= 1 ->
+    Tag = element(1, Value),
+    case is_atom(Tag) of
+        true -> {ok, atom_to_binary(Tag, utf8)};
+        false -> {error, nil}
+    end;
+variant_tag(_) ->
+    {error, nil}.

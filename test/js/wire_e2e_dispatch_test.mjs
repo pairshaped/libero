@@ -97,6 +97,7 @@ const expectedRequestIds = {
   "echo_nested_record/basic": 62,
   "echo_typed_err/validation_failed": 63,
   "dispatch/handler_panic": 65,
+  "dispatch/unknown_variant": 66,
 };
 
 for (const [name, requestId] of Object.entries(expectedRequestIds)) {
@@ -216,5 +217,16 @@ assert.equal(panic.raw[0], "error");
 assert.equal(panic.raw[1][0], "internal_error");
 assert.ok(rawBinaryToString(panic.raw[1][1]).length > 0, "trace_id should be a non-empty binary");
 assert.equal(rawBinaryToString(panic.raw[1][2]), "Internal server error");
+
+// Known module path with an unrecognized variant atom must surface as
+// unknown_function with the qualified name, not crash dispatch.
+const unknownVariant = decodeFrame(manifest["dispatch/unknown_variant"]);
+assert.equal(unknownVariant.requestId, 66);
+assert.equal(unknownVariant.raw[0], "error");
+assert.equal(unknownVariant.raw[1][0], "unknown_function");
+assert.equal(
+  rawBinaryToString(unknownVariant.raw[1][1]),
+  "shared/types.bogus_function",
+);
 
 console.log(`wire e2e dispatch test passed (${Object.keys(manifest).length} cases)`);

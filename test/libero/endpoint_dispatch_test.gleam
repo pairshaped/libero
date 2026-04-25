@@ -69,11 +69,11 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
-/// dispatch.gleam contains `@external(erlang, ...)` for ensure_atoms with no
-/// JS fallback, plus uses Erlang-only runtime patterns. Mark the module
-/// `@target(erlang)` so JS compilation fails with a clear, immediate error
-/// instead of an unresolved-external surprise at link time.
-pub fn endpoint_dispatch_is_target_erlang_test() {
+/// dispatch.gleam declares `ensure_atoms` as an Erlang-only external with no
+/// JS fallback. That fails JS compilation at the unresolved-external
+/// boundary, which is the signal that this module is server-only. The doc
+/// comment at the top of the file calls this out so a reader knows why.
+pub fn endpoint_dispatch_is_server_only_test() {
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/handler",
@@ -82,7 +82,7 @@ pub fn endpoint_dispatch_is_target_erlang_test() {
       return_type_str: "Result(List(Todo), TodoError)",
     ),
   ]
-  let output_dir = "build/.test_endpoint_dispatch_target"
+  let output_dir = "build/.test_endpoint_dispatch_server_only"
   let assert Ok(Nil) =
     codegen.write_endpoint_dispatch(
       endpoints: endpoints,
@@ -93,7 +93,11 @@ pub fn endpoint_dispatch_is_target_erlang_test() {
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
-  let assert True = string.contains(content, "@target(erlang)")
+  // Erlang-only external naturally restricts the module to the Erlang target.
+  let assert True = string.contains(content, "@external(erlang,")
+  let assert False = string.contains(content, "@external(javascript,")
+  // Doc comment explains the constraint to readers.
+  let assert True = string.contains(content, "Server-only")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
