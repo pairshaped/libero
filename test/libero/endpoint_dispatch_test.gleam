@@ -69,6 +69,35 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
+/// dispatch.gleam contains `@external(erlang, ...)` for ensure_atoms with no
+/// JS fallback, plus uses Erlang-only runtime patterns. Mark the module
+/// `@target(erlang)` so JS compilation fails with a clear, immediate error
+/// instead of an unresolved-external surprise at link time.
+pub fn endpoint_dispatch_is_target_erlang_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "get_todos",
+      params: [],
+      return_type_str: "Result(List(Todo), TodoError)",
+    ),
+  ]
+  let output_dir = "build/.test_endpoint_dispatch_target"
+  let assert Ok(Nil) =
+    codegen.write_endpoint_dispatch(
+      endpoints: endpoints,
+      server_generated: output_dir,
+      atoms_module: "todos@generated@rpc_atoms",
+      context_module: "server/handler_context",
+      shared_module_path: "shared/messages",
+    )
+  let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
+
+  let assert True = string.contains(content, "@target(erlang)")
+
+  let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
+
 pub fn endpoint_dispatch_imports_qualified_param_types_test() {
   // When handler params reference module-qualified types (e.g.,
   // widgets.WidgetParams), the generated dispatch must import those

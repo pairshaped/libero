@@ -21,6 +21,13 @@ pub type RemoteData(value, error) {
   NotAsked
   Loading
   Failure(error)
+  /// Wire-level failure that can't carry a typed domain error: malformed
+  /// response, version skew between client and server, codegen bug. Kept
+  /// distinct from `Failure(error)` so consumers can render different UX
+  /// (e.g. "connection lost, retry" vs domain validation messaging) and
+  /// so exhaustive `case` matches on `error` don't have to absorb a
+  /// stringly-typed transport message.
+  TransportFailure(message: String)
   Success(value)
 }
 
@@ -46,6 +53,7 @@ pub fn map(
     NotAsked -> NotAsked
     Loading -> Loading
     Failure(error) -> Failure(error)
+    TransportFailure(message) -> TransportFailure(message)
     Success(value) -> Success(transform(value))
   }
 }
@@ -59,6 +67,7 @@ pub fn map_error(
     NotAsked -> NotAsked
     Loading -> Loading
     Failure(error) -> Failure(transform(error))
+    TransportFailure(message) -> TransportFailure(message)
     Success(value) -> Success(value)
   }
 }

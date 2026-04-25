@@ -178,6 +178,51 @@ pub fn decoders_ffi_registers_float_fields_test() {
     simplifile.delete_all(["build/.test_decoders_float_fields"])
 }
 
+/// Wire-shape mismatches must produce a typed `TransportFailure` variant,
+/// not a `Failure(String)`. Generated stubs are typed as
+/// `RemoteData(payload, DomainError)` — a String in the Failure slot would
+/// crash exhaustive case-matches on the domain error in consumer code.
+pub fn response_decoder_fallback_emits_transport_failure_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "ping",
+      params: [],
+      return_type_str: "Result(Nil, Nil)",
+    ),
+  ]
+  let assert Ok(config) =
+    config.build_config(
+      ws_mode: config.WsFullUrl(url: "ws://localhost:8080/ws"),
+      namespace: option.None,
+      client_root: "build/.test_decoders_response_fallback",
+      shared_root: Ok("../shared"),
+      server_root: Ok("."),
+    )
+  let assert Ok(Nil) =
+    codegen.write_decoders_ffi(
+      config: config,
+      discovered: [],
+      endpoints: endpoints,
+    )
+  let assert Ok(content) =
+    simplifile.read(
+      "build/.test_decoders_response_fallback/src/client/generated/libero/rpc_decoders_ffi.mjs",
+    )
+
+  // Fallback must construct TransportFailure, not Failure(String).
+  let assert True =
+    string.contains(content, "new _TransportFailure(\"RPC framework error\")")
+  let assert False =
+    string.contains(content, "new _Failure(\"RPC framework error\")")
+  // TransportFailure must be imported from remote_data.
+  let assert True =
+    string.contains(content, "TransportFailure as _TransportFailure")
+
+  let assert Ok(Nil) =
+    simplifile.delete_all(["build/.test_decoders_response_fallback"])
+}
+
 pub fn response_decoder_handles_dict_of_custom_type_test() {
   let endpoints = [
     scanner.HandlerEndpoint(

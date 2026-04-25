@@ -1,14 +1,16 @@
 import gleam/list
 import libero/scanner
 
-// Five criteria for an RPC endpoint:
+// Four criteria for an RPC endpoint (as documented in the README):
 // 1. Public function
 // 2. Last parameter is HandlerContext
-// 3. Return type is #(something, HandlerContext)
+// 3. Returns #(Result(value, error), HandlerContext)
 // 4. All types in params and return are shared (or builtins)
-// 5. The "something" in the return tuple is a Result(_, _)
 //
-// Each test below has all-but-one criteria met, with one missing.
+// Criterion 3 has two sub-shapes the scanner enforces independently:
+//   3a. Tuple shape: #(_, HandlerContext)
+//   3b. The first slot is a Result(_, _)
+// The tests below split these into separate cases to isolate failures.
 
 /// Missing criterion 1: private function
 pub fn excludes_private_function_test() {
@@ -22,7 +24,7 @@ pub fn excludes_no_handler_context_param_test() {
   let assert False = list.contains(names, "utility_function")
 }
 
-/// Missing criterion 3: doesn't return #(something, HandlerContext)
+/// Missing criterion 3a: doesn't return #(_, HandlerContext)
 pub fn excludes_wrong_return_shape_test() {
   let names = scan_fixture_names()
   let assert False = list.contains(names, "process_items")
@@ -46,7 +48,7 @@ pub fn excludes_wrong_return_order_test() {
   let assert False = list.contains(names, "wrong_order")
 }
 
-/// Missing criterion 5: return tuple's first element is not a Result(_, _).
+/// Missing criterion 3b: return tuple's first element is not a Result(_, _).
 /// The wire codec assumes Result-shaped responses, so a bare value in this
 /// slot would compile but break serialization. Filter it out at scan time.
 pub fn excludes_non_result_response_test() {

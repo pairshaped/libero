@@ -201,15 +201,20 @@ fn read_public_type_pairs(
   file_path: String,
 ) -> List(#(String, String)) {
   let pairs = {
-    use content <- result.try(result.replace_error(simplifile.read(file_path), Nil))
+    use content <- result.try(result.replace_error(
+      simplifile.read(file_path),
+      Nil,
+    ))
     use parsed <- result.try(result.replace_error(glance.module(content), Nil))
-    Ok(list.fold(parsed.custom_types, [], fn(acc, ct) {
-      let glance.Definition(_, t) = ct
-      case t.publicity == glance.Public {
-        True -> [#(module_path, t.name), ..acc]
-        False -> acc
-      }
-    }))
+    Ok(
+      list.fold(parsed.custom_types, [], fn(acc, ct) {
+        let glance.Definition(_, t) = ct
+        case t.publicity == glance.Public {
+          True -> [#(module_path, t.name), ..acc]
+          False -> acc
+        }
+      }),
+    )
   }
   result.unwrap(pairs, or: [])
 }

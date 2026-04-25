@@ -1,6 +1,8 @@
 import generated/messages as rpc
 import gleam/list
-import libero/remote_data.{type RemoteData, Failure, Loading, NotAsked, Success}
+import libero/remote_data.{
+  type RemoteData, Failure, Loading, NotAsked, Success, TransportFailure,
+}
 import lustre
 import lustre/attribute
 import lustre/effect.{type Effect}
@@ -121,6 +123,10 @@ fn view(model: Model) -> Element(Msg) {
         Failure(err) ->
           html.p([attribute.style("color", "red")], [
             html.text(format_error(err)),
+          ])
+        TransportFailure(message) ->
+          html.p([attribute.style("color", "red")], [
+            html.text("Connection error: " <> message),
           ])
         Success(todos) -> view_todo_list(todos)
       },

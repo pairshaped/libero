@@ -626,15 +626,20 @@ fn scan_shared_type_names(shared_src: String) -> set.Set(String) {
 
 fn read_public_type_names(file_path: String) -> List(String) {
   let names = {
-    use content <- result.try(result.replace_error(simplifile.read(file_path), Nil))
+    use content <- result.try(result.replace_error(
+      simplifile.read(file_path),
+      Nil,
+    ))
     use parsed <- result.try(result.replace_error(glance.module(content), Nil))
-    Ok(list.fold(parsed.custom_types, [], fn(acc, ct) {
-      let glance.Definition(_, t) = ct
-      case t.publicity == glance.Public {
-        True -> [t.name, ..acc]
-        False -> acc
-      }
-    }))
+    Ok(
+      list.fold(parsed.custom_types, [], fn(acc, ct) {
+        let glance.Definition(_, t) = ct
+        case t.publicity == glance.Public {
+          True -> [t.name, ..acc]
+          False -> acc
+        }
+      }),
+    )
   }
   result.unwrap(names, or: [])
 }
@@ -751,7 +756,14 @@ fn parse_single_endpoint(
     list.filter_map(non_state_params, fn(p) {
       case p.label, p.type_ {
         option.Some(label), option.Some(type_) ->
-          Ok(#(label, qualified_type_to_string(type_: type_, imports: type_imports, alias_map: alias_map)))
+          Ok(#(
+            label,
+            qualified_type_to_string(
+              type_: type_,
+              imports: type_imports,
+              alias_map: alias_map,
+            ),
+          ))
         _, _ -> Error(Nil)
       }
     })
@@ -827,7 +839,11 @@ fn qualified_type_to_string(
       <> "("
       <> string.join(
         list.map(params, fn(p) {
-          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
+          qualified_type_to_string(
+            type_: p,
+            imports: imports,
+            alias_map: alias_map,
+          )
         }),
         ", ",
       )
@@ -839,7 +855,11 @@ fn qualified_type_to_string(
       <> "("
       <> string.join(
         list.map(params, fn(p) {
-          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
+          qualified_type_to_string(
+            type_: p,
+            imports: imports,
+            alias_map: alias_map,
+          )
         }),
         ", ",
       )
@@ -848,7 +868,11 @@ fn qualified_type_to_string(
       "#("
       <> string.join(
         list.map(elements, fn(e) {
-          qualified_type_to_string(type_: e, imports: imports, alias_map: alias_map)
+          qualified_type_to_string(
+            type_: e,
+            imports: imports,
+            alias_map: alias_map,
+          )
         }),
         ", ",
       )
@@ -858,12 +882,20 @@ fn qualified_type_to_string(
       "fn("
       <> string.join(
         list.map(parameters, fn(p) {
-          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
+          qualified_type_to_string(
+            type_: p,
+            imports: imports,
+            alias_map: alias_map,
+          )
         }),
         ", ",
       )
       <> ") -> "
-      <> qualified_type_to_string(type_: return, imports: imports, alias_map: alias_map)
+      <> qualified_type_to_string(
+        type_: return,
+        imports: imports,
+        alias_map: alias_map,
+      )
     glance.HoleType(name:, ..) -> name
   }
 }

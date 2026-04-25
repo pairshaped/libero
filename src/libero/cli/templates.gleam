@@ -5,7 +5,7 @@
 
 /// Libero version constraint used in generated gleam.toml files.
 /// Update this constant when bumping the libero version.
-const libero_version = "~> 4.2"
+const libero_version = "~> 5.0"
 
 /// Returns gleam.toml content for a new project (the server package).
 /// Libero config lives under the [tools.libero] section.
@@ -122,7 +122,9 @@ pub fn ping_test() {
 /// Returns a starter Lustre SPA app module with a working RPC example.
 pub fn starter_spa(name name: String) -> String {
   "import generated/messages as rpc
-import libero/remote_data.{type RemoteData, Failure, Loading, NotAsked, Success}
+import libero/remote_data.{
+  type RemoteData, Failure, Loading, NotAsked, Success, TransportFailure,
+}
 import lustre
 import lustre/element.{type Element}
 import lustre/element/html
@@ -173,6 +175,7 @@ fn view(model: Model) -> Element(Msg) {
         Loading -> \"Loading...\"
         Success(msg) -> \"Server says: \" <> msg
         Failure(_err) -> \"Ping failed\"
+        TransportFailure(message) -> \"Transport error: \" <> message
       },
     )]),
   ])
