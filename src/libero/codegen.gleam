@@ -121,8 +121,9 @@ pub fn write_dispatch(
     })
 
   let ok_unknown_arm =
-    "    Ok(#(name, _request_id, _)) ->\n      #(wire.tag_response(request_id: 0, data: wire.encode(Error(UnknownFunction(name)))), None, state)"
+    "    Ok(#(name, request_id, _)) ->\n      #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(name)))), None, state)"
 
+  // request_id is unrecoverable when the call decode itself fails
   let error_arm =
     "    Error(_) ->\n      #(wire.tag_response(request_id: 0, data: wire.encode(Error(MalformedRequest))), None, state)"
 
@@ -303,8 +304,8 @@ pub fn handle(
 " <> string.join(case_arms, "\n") <> "
       }
     }
-    Ok(#(name, _request_id, _)) ->
-      #(wire.tag_response(request_id: 0, data: wire.encode(Error(UnknownFunction(name)))), None, state)
+    Ok(#(name, request_id, _)) ->
+      #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(name)))), None, state)
     Error(_) ->
       #(wire.tag_response(request_id: 0, data: wire.encode(Error(MalformedRequest))), None, state)
   }
@@ -461,8 +462,7 @@ pub fn write_endpoint_client_stubs(
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
-import libero/error.{type RpcError}
-import libero/remote_data.{type RemoteData, Failure, Success}
+import libero/remote_data.{type RemoteData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
@@ -1459,8 +1459,8 @@ pub fn write_atoms(
   // Framework atoms that libero's wire protocol uses. These are always
   // needed regardless of which message modules exist.
   let framework_atoms = [
-    "ok", "error", "some", "none", "nil", "true", "false", "app_error",
-    "malformed_request", "unknown_function", "internal_error", "decode_error",
+    "ok", "error", "some", "none", "nil", "true", "false", "malformed_request",
+    "unknown_function", "internal_error", "decode_error",
   ]
   // Collect all unique atom names: framework + discovered variants.
   let discovered_atoms =

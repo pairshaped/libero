@@ -60,6 +60,11 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   let assert False = string.contains(content, "AppError")
   let assert False = string.contains(content, "MsgFromServer")
 
+  // UnknownFunction must pass through the caller's request_id so the
+  // client can correlate the error to its in-flight call.
+  let assert True = string.contains(content, "Ok(#(name, request_id, _))")
+  let assert False = string.contains(content, "Ok(#(name, _request_id, _))")
+
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
