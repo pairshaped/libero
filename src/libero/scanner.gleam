@@ -617,27 +617,26 @@ pub fn scan_handler_endpoints(
 
 /// Scan shared source directory and collect all exported type names.
 fn scan_shared_type_names(shared_src: String) -> set.Set(String) {
-  case walk_directory(path: shared_src) {
-    Error(_) -> set.new()
-    Ok(files) ->
-      list.fold(files, set.new(), fn(acc, file_path) {
-        case simplifile.read(file_path) {
-          Error(_) -> acc
-          Ok(content) ->
-            case glance.module(content) {
-              Error(_) -> acc
-              Ok(parsed) ->
-                list.fold(parsed.custom_types, acc, fn(inner, ct) {
-                  let glance.Definition(_, t) = ct
-                  case t.publicity == glance.Public {
-                    True -> set.insert(inner, t.name)
-                    False -> inner
-                  }
-                })
-            }
-        }
-      })
+  let files = result.unwrap(walk_directory(path: shared_src), or: [])
+  list.fold(files, set.new(), fn(acc, file_path) {
+    let type_names = read_public_type_names(file_path)
+    list.fold(type_names, acc, set.insert)
+  })
+}
+
+fn read_public_type_names(file_path: String) -> List(String) {
+  let names = {
+    use content <- result.try(result.replace_error(simplifile.read(file_path), Nil))
+    use parsed <- result.try(result.replace_error(glance.module(content), Nil))
+    Ok(list.fold(parsed.custom_types, [], fn(acc, ct) {
+      let glance.Definition(_, t) = ct
+      case t.publicity == glance.Public {
+        True -> [t.name, ..acc]
+        False -> acc
+      }
+    }))
   }
+  result.unwrap(names, or: [])
 }
 
 fn parse_endpoints(
@@ -661,11 +660,11 @@ fn parse_endpoints(
           False -> Error(Nil)
           True ->
             parse_single_endpoint(
-              func,
-              module_path,
-              type_imports,
-              alias_map,
-              shared_types,
+              func: func,
+              module_path: module_path,
+              type_imports: type_imports,
+              alias_map: alias_map,
+              shared_types: shared_types,
             )
         }
       }),
@@ -713,11 +712,11 @@ fn build_alias_resolution_map(
 }
 
 fn parse_single_endpoint(
-  func: glance.Function,
-  module_path: String,
-  type_imports: dict.Dict(String, String),
-  alias_map: dict.Dict(String, String),
-  shared_types: set.Set(String),
+  func func: glance.Function,
+  module_path module_path: String,
+  type_imports type_imports: dict.Dict(String, String),
+  alias_map alias_map: dict.Dict(String, String),
+  shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
   use <- bool.guard(when: func.name == "update_from_client", return: Error(Nil))
@@ -727,7 +726,7 @@ fn parse_single_endpoint(
   use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
 
   // Last parameter must be typed as HandlerContext
-  let assert Ok(last_param) = list.last(params)
+  use last_param <- result.try(list.last(params))
   use last_type <- result.try(option.to_result(last_param.type_, Nil))
   use <- bool.guard(
     when: !is_handler_context_type(last_type),
@@ -752,7 +751,7 @@ fn parse_single_endpoint(
     list.filter_map(non_state_params, fn(p) {
       case p.label, p.type_ {
         option.Some(label), option.Some(type_) ->
-          Ok(#(label, qualified_type_to_string(type_, type_imports, alias_map)))
+          Ok(#(label, qualified_type_to_string(type_: type_, imports: type_imports, alias_map: alias_map)))
         _, _ -> Error(Nil)
       }
     })
@@ -771,9 +770,9 @@ fn parse_single_endpoint(
     fn_name: func.name,
     params: param_info,
     return_type_str: qualified_type_to_string(
-      response_type,
-      type_imports,
-      alias_map,
+      type_: response_type,
+      imports: type_imports,
+      alias_map: alias_map,
     ),
   ))
 }
@@ -814,9 +813,9 @@ fn extract_handler_return(
 /// Module-qualified types have their aliases resolved to real module names
 /// via the alias map. Builtins (Int, String, Bool, etc.) are left unqualified.
 fn qualified_type_to_string(
-  t: glance.Type,
-  imports: dict.Dict(String, String),
-  alias_map: dict.Dict(String, String),
+  type_ t: glance.Type,
+  imports imports: dict.Dict(String, String),
+  alias_map alias_map: dict.Dict(String, String),
 ) -> String {
   case t {
     glance.NamedType(name:, module: option.None, parameters: [], ..) ->
@@ -828,7 +827,7 @@ fn qualified_type_to_string(
       <> "("
       <> string.join(
         list.map(params, fn(p) {
-          qualified_type_to_string(p, imports, alias_map)
+          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
         }),
         ", ",
       )
@@ -840,7 +839,7 @@ fn qualified_type_to_string(
       <> "("
       <> string.join(
         list.map(params, fn(p) {
-          qualified_type_to_string(p, imports, alias_map)
+          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
         }),
         ", ",
       )
@@ -849,7 +848,7 @@ fn qualified_type_to_string(
       "#("
       <> string.join(
         list.map(elements, fn(e) {
-          qualified_type_to_string(e, imports, alias_map)
+          qualified_type_to_string(type_: e, imports: imports, alias_map: alias_map)
         }),
         ", ",
       )
@@ -859,12 +858,12 @@ fn qualified_type_to_string(
       "fn("
       <> string.join(
         list.map(parameters, fn(p) {
-          qualified_type_to_string(p, imports, alias_map)
+          qualified_type_to_string(type_: p, imports: imports, alias_map: alias_map)
         }),
         ", ",
       )
       <> ") -> "
-      <> qualified_type_to_string(return, imports, alias_map)
+      <> qualified_type_to_string(type_: return, imports: imports, alias_map: alias_map)
     glance.HoleType(name:, ..) -> name
   }
 }

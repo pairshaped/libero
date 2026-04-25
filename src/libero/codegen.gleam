@@ -1,3 +1,4 @@
+import gleam/bool
 import gleam/dict
 import gleam/int
 import gleam/io
@@ -227,7 +228,7 @@ pub fn write_endpoint_dispatch(
   let shared_type_imports =
     collect_param_type_imports(endpoints:)
     |> list.filter(fn(imp) { imp != shared_module_import })
-  let dict_import = case endpoints_use_type(endpoints, "Dict(") {
+  let dict_import = case endpoints_use_type(endpoints:, type_marker: "Dict(") {
     True -> "\nimport gleam/dict.{type Dict}"
     False -> ""
   }
@@ -460,7 +461,7 @@ pub fn write_endpoint_client_stubs(
     True -> "\nimport gleam/option.{type Option}"
     False -> ""
   }
-  let dict_import = case endpoints_use_type(endpoints, "Dict(") {
+  let dict_import = case endpoints_use_type(endpoints:, type_marker: "Dict(") {
     True -> "\nimport gleam/dict.{type Dict}"
     False -> ""
   }
@@ -505,60 +506,59 @@ fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
 /// "Result(List(Todo), TodoError)" -> #("List(Todo)", "TodoError")
 /// "List(Todo)" -> #("List(Todo)", "Nil")  (bare type, no error)
 fn parse_result_type(type_str: String) -> #(String, String) {
-  case string.starts_with(type_str, "Result(") {
-    True -> {
-      // Strip "Result(" prefix and ")" suffix
-      let inner = string.drop_start(type_str, 7)
-      let inner = string.drop_end(inner, 1)
-      // Split on the top-level comma (not inside nested parens)
-      case split_top_level_comma(inner) {
-        Ok(#(payload, error)) -> #(string.trim(payload), string.trim(error))
-        Error(Nil) -> #(type_str, "Nil")
-      }
-    }
-    False -> #(type_str, "Nil")
+  use <- bool.guard(
+    when: !string.starts_with(type_str, "Result("),
+    return: #(type_str, "Nil"),
+  )
+  // Strip "Result(" prefix and ")" suffix
+  let inner = string.drop_start(type_str, 7)
+  let inner = string.drop_end(inner, 1)
+  // Split on the top-level comma (not inside nested parens)
+  case split_top_level_comma(inner) {
+    Ok(#(payload, error)) -> #(string.trim(payload), string.trim(error))
+    Error(Nil) -> #(type_str, "Nil")
   }
 }
 
 /// Split a string on the first comma that's not inside parentheses.
 fn split_top_level_comma(s: String) -> Result(#(String, String), Nil) {
-  split_at_depth(s, 0, "")
+  split_at_depth(remaining: s, depth: 0, acc: "")
 }
 
 fn split_top_level_commas(s: String) -> List(String) {
-  split_commas_loop(s, 0, "", [])
+  split_commas_loop(remaining: s, depth: 0, current: "", parts: [])
   |> list.map(string.trim)
 }
 
 fn split_commas_loop(
-  remaining: String,
-  depth: Int,
-  current: String,
-  parts: List(String),
+  remaining remaining: String,
+  depth depth: Int,
+  current current: String,
+  parts parts: List(String),
 ) -> List(String) {
   case string.pop_grapheme(remaining) {
     Error(Nil) -> list.reverse([current, ..parts])
     Ok(#("(", rest)) ->
-      split_commas_loop(rest, depth + 1, current <> "(", parts)
+      split_commas_loop(remaining: rest, depth: depth + 1, current: current <> "(", parts: parts)
     Ok(#(")", rest)) ->
-      split_commas_loop(rest, depth - 1, current <> ")", parts)
+      split_commas_loop(remaining: rest, depth: depth - 1, current: current <> ")", parts: parts)
     Ok(#(",", rest)) if depth == 0 ->
-      split_commas_loop(rest, depth, "", [current, ..parts])
-    Ok(#(c, rest)) -> split_commas_loop(rest, depth, current <> c, parts)
+      split_commas_loop(remaining: rest, depth: depth, current: "", parts: [current, ..parts])
+    Ok(#(c, rest)) -> split_commas_loop(remaining: rest, depth: depth, current: current <> c, parts: parts)
   }
 }
 
 fn split_at_depth(
-  remaining: String,
-  depth: Int,
-  acc: String,
+  remaining remaining: String,
+  depth depth: Int,
+  acc acc: String,
 ) -> Result(#(String, String), Nil) {
   case string.pop_grapheme(remaining) {
     Error(Nil) -> Error(Nil)
-    Ok(#("(", rest)) -> split_at_depth(rest, depth + 1, acc <> "(")
-    Ok(#(")", rest)) -> split_at_depth(rest, depth - 1, acc <> ")")
+    Ok(#("(", rest)) -> split_at_depth(remaining: rest, depth: depth + 1, acc: acc <> "(")
+    Ok(#(")", rest)) -> split_at_depth(remaining: rest, depth: depth - 1, acc: acc <> ")")
     Ok(#(",", rest)) if depth == 0 -> Ok(#(acc, rest))
-    Ok(#(c, rest)) -> split_at_depth(rest, depth, acc <> c)
+    Ok(#(c, rest)) -> split_at_depth(remaining: rest, depth: depth, acc: acc <> c)
   }
 }
 
@@ -1434,88 +1434,91 @@ fn type_to_decoder_call(type_str: String, term_expr: String) -> String {
     "Float" -> "decode_float(" <> term_expr <> ")"
     "BitArray" -> "decode_bit_array(" <> term_expr <> ")"
     "Nil" -> "decode_nil(" <> term_expr <> ")"
-    _ ->
-      case string.starts_with(type_str, "List(") {
-        True -> {
-          let inner = unwrap_type_args(type_str, 5)
-          "decode_list_of((t0) => "
-          <> type_to_decoder_call(inner, "t0")
+    _ -> decode_wrapper_or_custom(type_str, term_expr)
+  }
+}
+
+fn decode_wrapper_or_custom(type_str: String, term_expr: String) -> String {
+  use <- bool.guard(
+    when: string.starts_with(type_str, "List("),
+    return: {
+      let inner = unwrap_type_args(type_str, 5)
+      "decode_list_of((t0) => "
+      <> type_to_decoder_call(inner, "t0")
+      <> ", "
+      <> term_expr
+      <> ")"
+    },
+  )
+  use <- bool.guard(
+    when: string.starts_with(type_str, "Option("),
+    return: {
+      let inner = unwrap_type_args(type_str, 7)
+      "decode_option_of((t0) => "
+      <> type_to_decoder_call(inner, "t0")
+      <> ", "
+      <> term_expr
+      <> ")"
+    },
+  )
+  use <- bool.guard(
+    when: string.starts_with(type_str, "Result("),
+    return: {
+      let parts =
+        unwrap_type_args(type_str, 7) |> split_top_level_commas
+      case parts {
+        [ok_type, err_type] ->
+          "decode_result_of((t0) => "
+          <> type_to_decoder_call(ok_type, "t0")
+          <> ", (t1) => "
+          <> type_to_decoder_call(err_type, "t1")
           <> ", "
           <> term_expr
           <> ")"
-        }
-        False ->
-          case string.starts_with(type_str, "Option(") {
-            True -> {
-              let inner = unwrap_type_args(type_str, 7)
-              "decode_option_of((t0) => "
-              <> type_to_decoder_call(inner, "t0")
-              <> ", "
-              <> term_expr
-              <> ")"
-            }
-            False ->
-              case string.starts_with(type_str, "Result(") {
-                True -> {
-                  let parts =
-                    unwrap_type_args(type_str, 7) |> split_top_level_commas
-                  case parts {
-                    [ok_type, err_type] ->
-                      "decode_result_of((t0) => "
-                      <> type_to_decoder_call(ok_type, "t0")
-                      <> ", (t1) => "
-                      <> type_to_decoder_call(err_type, "t1")
-                      <> ", "
-                      <> term_expr
-                      <> ")"
-                    _ -> term_expr
-                  }
-                }
-                False ->
-                  case string.starts_with(type_str, "Dict(") {
-                    True -> {
-                      let parts =
-                        unwrap_type_args(type_str, 5) |> split_top_level_commas
-                      case parts {
-                        [key_type, value_type] ->
-                          "decode_dict_of((t0) => "
-                          <> type_to_decoder_call(key_type, "t0")
-                          <> ", (t1) => "
-                          <> type_to_decoder_call(value_type, "t1")
-                          <> ", "
-                          <> term_expr
-                          <> ")"
-                        _ -> term_expr
-                      }
-                    }
-                    False ->
-                      case string.starts_with(type_str, "#(") {
-                        True -> {
-                          let parts =
-                            unwrap_type_args(type_str, 2)
-                            |> split_top_level_commas
-                          let decoders =
-                            list.index_map(parts, fn(part, i) {
-                              let param = "t" <> int.to_string(i)
-                              "("
-                              <> param
-                              <> ") => "
-                              <> type_to_decoder_call(part, param)
-                            })
-                          "decode_tuple_of(["
-                          <> string.join(decoders, ", ")
-                          <> "], "
-                          <> term_expr
-                          <> ")"
-                        }
-                        False ->
-                          type_to_custom_decoder_call(type_str, term_expr)
-                      }
-                  }
-              }
-          }
+        _ -> term_expr
       }
-  }
+    },
+  )
+  use <- bool.guard(
+    when: string.starts_with(type_str, "Dict("),
+    return: {
+      let parts =
+        unwrap_type_args(type_str, 5) |> split_top_level_commas
+      case parts {
+        [key_type, value_type] ->
+          "decode_dict_of((t0) => "
+          <> type_to_decoder_call(key_type, "t0")
+          <> ", (t1) => "
+          <> type_to_decoder_call(value_type, "t1")
+          <> ", "
+          <> term_expr
+          <> ")"
+        _ -> term_expr
+      }
+    },
+  )
+  use <- bool.guard(
+    when: string.starts_with(type_str, "#("),
+    return: {
+      let parts =
+        unwrap_type_args(type_str, 2)
+        |> split_top_level_commas
+      let decoders =
+        list.index_map(parts, fn(part, i) {
+          let param = "t" <> int.to_string(i)
+          "("
+          <> param
+          <> ") => "
+          <> type_to_decoder_call(part, param)
+        })
+      "decode_tuple_of(["
+      <> string.join(decoders, ", ")
+      <> "], "
+      <> term_expr
+      <> ")"
+    },
+  )
+  type_to_custom_decoder_call(type_str, term_expr)
 }
 
 fn unwrap_type_args(type_str: String, prefix_len: Int) -> String {
@@ -1524,19 +1527,14 @@ fn unwrap_type_args(type_str: String, prefix_len: Int) -> String {
 }
 
 fn type_to_custom_decoder_call(type_str: String, term_expr: String) -> String {
-  case string.contains(type_str, ".") {
-    True -> {
-      // Module-qualified: types.Item -> decode_shared_types_item
-      let assert Ok(#(module, type_name)) = case string.split(type_str, ".") {
-        [m, t] -> Ok(#(m, t))
-        _ -> Error(Nil)
-      }
-      decoder_fn_name("shared/" <> module, type_name) <> "(" <> term_expr <> ")"
-    }
-    False ->
-      // Unqualified custom types should not occur in endpoint-convention
-      // signatures because generated client stubs import the shared module.
-      term_expr
+  use <- bool.guard(
+    when: !string.contains(type_str, "."),
+    return: term_expr,
+  )
+  case string.split(type_str, ".") {
+    [m, t] ->
+      decoder_fn_name("shared/" <> m, t) <> "(" <> term_expr <> ")"
+    _ -> term_expr
   }
 }
 
@@ -1764,10 +1762,7 @@ pub fn write_main(
   // e.g. "server/handler_context" -> "handler_context"
   let context_qualifier = case string.split(context_module, "/") {
     [] -> context_module
-    parts -> {
-      let assert Ok(last) = list.last(parts)
-      last
-    }
+    parts -> result.unwrap(list.last(parts), or: context_module)
   }
 
   // Note: the string below is the GENERATED Gleam file content.

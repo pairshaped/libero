@@ -179,21 +179,8 @@ pub fn walk_shared_types(
   let seed =
     list.fold(files, set.new(), fn(acc, file_path) {
       let module_path = derive_shared_module_path(file_path)
-      case simplifile.read(file_path) {
-        Error(_) -> acc
-        Ok(content) ->
-          case glance.module(content) {
-            Error(_) -> acc
-            Ok(parsed) ->
-              list.fold(parsed.custom_types, acc, fn(inner, ct) {
-                let glance.Definition(_, t) = ct
-                case t.publicity == glance.Public {
-                  True -> set.insert(inner, #(module_path, t.name))
-                  False -> inner
-                }
-              })
-          }
-      }
+      let pairs = read_public_type_pairs(module_path, file_path)
+      list.fold(pairs, acc, set.insert)
     })
     |> set.to_list
 
@@ -207,6 +194,24 @@ pub fn walk_shared_types(
       errors: [],
     ),
   )
+}
+
+fn read_public_type_pairs(
+  module_path: String,
+  file_path: String,
+) -> List(#(String, String)) {
+  let pairs = {
+    use content <- result.try(result.replace_error(simplifile.read(file_path), Nil))
+    use parsed <- result.try(result.replace_error(glance.module(content), Nil))
+    Ok(list.fold(parsed.custom_types, [], fn(acc, ct) {
+      let glance.Definition(_, t) = ct
+      case t.publicity == glance.Public {
+        True -> [#(module_path, t.name), ..acc]
+        False -> acc
+      }
+    }))
+  }
+  result.unwrap(pairs, or: [])
 }
 
 /// Walk a directory for .gleam files (simplified version for shared/)
