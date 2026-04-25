@@ -15,7 +15,7 @@ import libero/field_type.{
 import libero/gen_error.{
   type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
 }
-import libero/scanner.{type MessageModule}
+import libero/scanner
 
 /// A custom type discovered by the walker, grouping all its variants.
 pub type DiscoveredType {
@@ -94,53 +94,6 @@ fn is_skipped_module(module_path: String) -> Bool {
 /// True if a type name is a primitive/builtin that needs no registration.
 fn is_primitive_type(name: String) -> Bool {
   list.contains(registry_primitives, name)
-}
-
-/// Walk the type graph rooted at MsgFromClient/MsgFromServer message types.
-/// Seeds the BFS walker from all variants of MsgFromClient and MsgFromServer custom
-/// types in each message module, then walks their field types transitively.
-///
-/// Both the MsgFromClient/MsgFromServer types themselves (and their constructors) and
-/// all transitively reachable types are included in the discovered list,
-/// since they all need codec registration.
-pub fn walk_message_registry_types(
-  message_modules message_modules: List(MessageModule),
-  module_files module_files: Dict(String, String),
-) -> Result(List(DiscoveredType), List(GenError)) {
-  // Seed the work queue from MsgFromClient and MsgFromServer types in each message module.
-  // We also need to seed the walk with the MsgFromClient/MsgFromServer type names
-  // themselves so their variants get discovered.
-  let seed =
-    list.fold(message_modules, set.new(), fn(acc, message_module) {
-      use <- bool.guard(
-        when: is_skipped_module(message_module.module_path),
-        return: acc,
-      )
-      let with_msg_from_client = case message_module.has_msg_from_client {
-        True -> set.insert(acc, #(message_module.module_path, "MsgFromClient"))
-        False -> acc
-      }
-      case message_module.has_msg_from_server {
-        True ->
-          set.insert(with_msg_from_client, #(
-            message_module.module_path,
-            "MsgFromServer",
-          ))
-        False -> with_msg_from_client
-      }
-    })
-    |> set.to_list
-
-  do_walk(
-    WalkerState(
-      queue: seed,
-      visited: set.new(),
-      discovered: [],
-      module_files: module_files,
-      parsed_cache: dict.new(),
-      errors: [],
-    ),
-  )
 }
 
 /// Walk all exported custom types from a list of shared source files.

@@ -113,15 +113,6 @@ pub fn ping(state state: HandlerContext) -> #(String, HandlerContext) {
   #("pong", state)
 }
 
-// Old-convention handler — must be skipped even though it superficially
-// matches criteria 1-4.
-pub fn update_from_client(
-  msg _msg: ItemError,
-  state state: HandlerContext,
-) -> #(Result(Nil, ItemError), HandlerContext) {
-  #(Ok(Nil), state)
-}
-
 // Touch the unused private helper so Gleam doesn't warn — the helper
 // exists only to test that the scanner skips private fns. This wrapper
 // fails criterion 3 (Nil return), so the scanner ignores it too.

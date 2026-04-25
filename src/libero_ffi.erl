@@ -7,7 +7,7 @@
 %% Erlang term shapes.
 
 -module(libero_ffi).
--export([try_call/1, encode/1, decode/1, decode_safe/1, identity/1, trap_signals/0, peel_msg_wrapper/1]).
+-export([try_call/1, encode/1, decode/1, decode_safe/1, identity/1, trap_signals/0]).
 
 identity(X) -> X.
 
@@ -44,30 +44,6 @@ signal_loop() ->
         {signal, sighup}  -> erlang:halt(1);
         _Other            -> signal_loop()
     end.
-
-%% Extract the single payload field from a MsgFromServer variant.
-%%
-%% In Erlang, Gleam custom type variants compile to tuples of the form
-%% `{atom, Field1, ...}`. Every MsgFromServer variant carries exactly one
-%% field (the response payload), so `element(2, Tuple)` extracts it.
-%% 0-arity variants compile to bare atoms and carry no payload; for those
-%% we return nil (Gleam Nil) as a typed empty acknowledgment.
-%%
-%% The codegen validates that MsgFromServer variants have at most 1 field
-%% (scanner.validate_msg_from_server_fields), so tuple_size == 2 is the
-%% expected case. The >= 2 guard + element(2) is intentional — if a
-%% variant somehow has extra fields, we still extract the first one
-%% rather than crashing, since the codegen is the enforcement point.
-peel_msg_wrapper(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
-    element(2, Tuple);
-peel_msg_wrapper(Atom) when is_atom(Atom) ->
-    nil;
-%% Anything else is a programming error: codegen produces only the two
-%% shapes above. Crash loud and traceable so the bug surfaces in
-%% supervisor logs instead of corrupting downstream typed values via
-%% wire.coerce.
-peel_msg_wrapper(Other) ->
-    erlang:error({peel_msg_wrapper_unexpected_shape, Other}).
 
 try_call(F) ->
     try F() of

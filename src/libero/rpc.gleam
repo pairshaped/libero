@@ -1,8 +1,8 @@
 //// Client-side send machinery.
 ////
 //// `send` is the entry point used by libero-generated client stubs.
-//// It takes the WebSocket URL, the module name, the typed MsgFromClient
-//// message, and a callback to wrap the server's response into a
+//// It takes the WebSocket URL, the module name, the typed `ClientMsg`
+//// variant, and a callback to wrap the server's response into a
 //// Lustre Msg.
 ////
 //// The JS FFI (rpc_ffi.mjs) opens the WebSocket lazily on first call
@@ -17,7 +17,7 @@
 import gleam/dynamic.{type Dynamic}
 import lustre/effect.{type Effect}
 
-/// Send a typed MsgFromClient message to the server via WebSocket and
+/// Send a typed `ClientMsg` value to the server via WebSocket and
 /// deliver the server's response back to the Lustre update loop.
 ///
 /// The `on_response` callback wraps the decoded response (a Dynamic
@@ -37,7 +37,7 @@ pub fn send(
 }
 
 /// Handle server-initiated push messages on a module.
-/// When the server pushes a MsgFromServer without a prior request,
+/// When the server pushes a typed message without a prior request,
 /// the callback wraps it into a Lustre Msg for dispatch.
 pub fn update_from_server(
   module module: String,

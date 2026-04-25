@@ -1,8 +1,8 @@
 //// Server-side push support.
 ////
-//// Allows the server to send MsgFromServer messages to connected
-//// WebSocket clients without a prior request. Uses BEAM pg (process
-//// groups) for topic-based subscriptions.
+//// Allows the server to send typed messages to connected WebSocket
+//// clients without a prior request. Uses BEAM pg (process groups)
+//// for topic-based subscriptions.
 ////
 //// Import this module only if your app needs server push.
 //// If unused, no processes or groups are created.

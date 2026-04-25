@@ -884,8 +884,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const pushHandlers = new Map();
 
 // Build a connection-error value as a proper Gleam Result(_, RpcError)
-// so `wire.coerce` + pattern matching in remote_data.from_response can extract
-// the InternalError and read its .message field.
+// so `wire.coerce` + pattern matching in remote_data.from_response (or the
+// per-endpoint response decoders) can extract the InternalError and read
+// its .message field.
 function makeConnectionError(message) {
   return new ResultError(new InternalError("", message));
 }

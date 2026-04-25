@@ -1,12 +1,10 @@
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{None, Some}
-import gleam/string
 import libero/error
 import libero/remote_data.{
   type RpcData, DomainFailure, Failure, FrameworkFailure, Loading, NotAsked,
   Success,
 }
-import libero/trace
 
 // -- map --
 
@@ -120,11 +118,11 @@ pub fn is_loading_false_for_not_asked_test() {
   let assert False = remote_data.is_loading(NotAsked)
 }
 
-// -- from_response (GH issue #5: response decoding) --
+// -- from_response (response decoding) --
 //
-// Simulates the wire format: Result(MsgFromServer.Variant(Result(payload, err)), RpcError)
-// cast to Dynamic, then fed through from_response. Verifies that the peeled payload
-// is the bare value (e.g. a record), not the MsgFromServer wrapper.
+// Wire shape under handler-as-contract: Result(Result(payload, domain), RpcError)
+// — outer Result is libero's framework envelope, inner Result is the handler's
+// typed return. No MsgFromServer envelope.
 
 pub type Item {
   Item(id: Int, title: String)
@@ -134,13 +132,8 @@ pub type DomainError {
   NotFound
 }
 
-pub type TestMsg {
-  ItemLoaded(Result(Item, DomainError))
-  ItemsLoaded(Result(List(Item), DomainError))
-}
-
 pub fn from_response_success_extracts_payload_test() {
-  let wire: Dynamic = coerce(Ok(ItemLoaded(Ok(Item(1, "Buy milk")))))
+  let wire: Dynamic = coerce(Ok(Ok(Item(1, "Buy milk"))))
   let rd: RpcData(Item) =
     remote_data.from_response(raw: wire, format_domain: format_domain)
   let assert Success(Item(1, "Buy milk")) = rd
@@ -148,14 +141,14 @@ pub fn from_response_success_extracts_payload_test() {
 
 pub fn from_response_success_extracts_list_payload_test() {
   let items = [Item(1, "Buy milk"), Item(2, "Walk dog")]
-  let wire: Dynamic = coerce(Ok(ItemsLoaded(Ok(items))))
+  let wire: Dynamic = coerce(Ok(Ok(items)))
   let rd: RpcData(List(Item)) =
     remote_data.from_response(raw: wire, format_domain: format_domain)
   let assert Success([Item(1, "Buy milk"), Item(2, "Walk dog")]) = rd
 }
 
 pub fn from_response_domain_error_test() {
-  let wire: Dynamic = coerce(Ok(ItemLoaded(Error(NotFound))))
+  let wire: Dynamic = coerce(Ok(Error(NotFound)))
   let rd: RpcData(Item) =
     remote_data.from_response(raw: wire, format_domain: format_domain)
   let assert Failure(DomainFailure(message: "Not found")) = rd
@@ -181,28 +174,6 @@ pub fn from_response_internal_error_test() {
   let rd: RpcData(Item) =
     remote_data.from_response(raw: wire, format_domain: format_domain)
   let assert Failure(FrameworkFailure(message: "Something went wrong")) = rd
-}
-
-// -- peel_msg_wrapper safety contract --
-//
-// A wire payload that isn't a MsgFromServer variant (zero-arg atom or
-// tagged tuple) is a programming error: codegen produces only those
-// shapes. Silently passing the value through would let `wire.coerce`
-// downstream cast garbage into a typed value. Crash loud and early.
-
-pub fn peel_msg_wrapper_crashes_on_non_variant_shape_test() {
-  // wire = Ok(<integer>) — outer Ok decodes, but the wrapped value is
-  // an integer, not a MsgFromServer variant. The peel must raise a
-  // specific tagged exception, not silently pass garbage downstream.
-  let bad_wire: Dynamic = coerce(Ok(42))
-  let result =
-    trace.try_call(fn() {
-      let _: RpcData(Item) =
-        remote_data.from_response(raw: bad_wire, format_domain: format_domain)
-      Nil
-    })
-  let assert Error(reason) = result
-  let assert True = string.contains(reason, "peel_msg_wrapper_unexpected_shape")
 }
 
 // -- helpers --

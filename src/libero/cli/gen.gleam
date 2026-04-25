@@ -1,10 +1,9 @@
 //// `libero gen` — TOML-driven codegen command.
 ////
-//// Reads `gleam.toml` from the project path, scans `shared/src/shared/` for
-//// message modules, validates conventions, and runs the full codegen pipeline
-//// for each declared client.
+//// Reads `gleam.toml` from the project path, scans the server source tree
+//// for handler endpoint functions, and runs the full codegen pipeline for
+//// each declared client.
 
-import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/list
@@ -19,8 +18,8 @@ import simplifile
 
 /// Run the `gen` command from the given project path (usually `"."`).
 ///
-/// Reads `gleam.toml`, discovers message modules under `shared/src/shared/`, validates
-/// conventions, and runs codegen for each declared client.
+/// Reads `gleam.toml`, discovers handler endpoints in the server src dir,
+/// and runs codegen for each declared client.
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Read gleam.toml
@@ -56,137 +55,6 @@ fn run_with_clients(
   let shared_src = project_path <> "/" <> toml_cfg.shared_src_dir
   let server_src = project_path <> "/" <> toml_cfg.server_src_dir
 
-  // 4. Scan shared src dir for message modules
-  //    If MsgFromClient/MsgFromServer types exist, use the classic convention.
-  //    If the scan yields a NoMessageModules error (no MsgFromClient/MsgFromServer
-  //    types found), fall through to the handler-as-contract convention.
-  //    Other errors (e.g. CannotReadDir from a misconfigured shared_src_dir)
-  //    are reported instead of being silently swallowed.
-  case scanner.scan_message_modules(shared_src: shared_src) {
-    Ok(#(message_modules, module_files)) ->
-      run_classic_convention(
-        project_path:,
-        toml_cfg:,
-        clients:,
-        server_src:,
-        message_modules:,
-        module_files:,
-      )
-    Error(errors) ->
-      case is_no_message_modules_only(errors) {
-        True ->
-          run_endpoint_convention(
-            project_path:,
-            toml_cfg:,
-            clients:,
-            server_src:,
-            shared_src:,
-          )
-        False -> {
-          list.each(errors, gen_error.print_error)
-          Error("scan_message_modules failed")
-        }
-      }
-  }
-}
-
-/// True if every error from scanning is `NoMessageModules`. Used by `run`
-/// to switch from the classic convention to the handler-as-contract
-/// convention when the shared dir has no MsgFromClient/MsgFromServer
-/// types. Anything else (e.g. `CannotReadDir`, `ParseFailed`) is a real
-/// failure we need to surface rather than treat as an implicit signal
-/// to switch conventions.
-///
-/// Public so the convention switch logic stays testable: this is the
-/// load-bearing branch in `run`.
-pub fn is_no_message_modules_only(errors: List(gen_error.GenError)) -> Bool {
-  list.all(errors, fn(err) {
-    case err {
-      gen_error.NoMessageModules(_) -> True
-      _ -> False
-    }
-  })
-}
-
-// nolint: stringly_typed_error
-fn run_classic_convention(
-  project_path project_path: String,
-  toml_cfg toml_cfg: toml_config.TomlConfig,
-  clients clients: List(toml_config.ClientConfig),
-  server_src server_src: String,
-  message_modules message_modules: List(scanner.MessageModule),
-  module_files module_files: dict.Dict(String, String),
-) -> Result(Nil, String) {
-  io.println(
-    "libero: found "
-    <> int.to_string(list.length(message_modules))
-    <> " message module(s) in "
-    <> toml_cfg.shared_src_dir,
-  )
-
-  // Validate conventions
-  let context_path = server_src <> "/" <> toml_cfg.context_module <> ".gleam"
-
-  use message_modules <- result.try(
-    scanner.validate_conventions(
-      message_modules: message_modules,
-      server_src: server_src,
-      context_path: context_path,
-    )
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "convention validation failed"
-    }),
-  )
-
-  // Validate MsgFromServer fields
-  use _ <- result.try(
-    scanner.validate_msg_from_server_fields(message_modules: message_modules)
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "MsgFromServer field validation failed"
-    }),
-  )
-
-  use _ <- result.try(codegen.check_segment_collisions(message_modules:))
-
-  // Walk types
-  use discovered <- result.try(
-    walker.walk_message_registry_types(
-      message_modules: message_modules,
-      module_files: module_files,
-    )
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "type walk failed"
-    }),
-  )
-
-  // Run codegen for each client
-  use _ <- result.try(
-    list.try_map(clients, fn(client) {
-      run_client_codegen(
-        project_path:,
-        toml_cfg:,
-        client:,
-        message_modules:,
-        discovered:,
-      )
-    }),
-  )
-
-  // Generate server main entry point
-  generate_main(project_path:, toml_cfg:, clients:)
-}
-
-// nolint: stringly_typed_error
-fn run_endpoint_convention(
-  project_path project_path: String,
-  toml_cfg toml_cfg: toml_config.TomlConfig,
-  clients clients: List(toml_config.ClientConfig),
-  server_src server_src: String,
-  shared_src shared_src: String,
-) -> Result(Nil, String) {
   // Scan for handler endpoints (per-function convention)
   use endpoints <- result.try(
     scanner.scan_handler_endpoints(server_src:, shared_src:)
@@ -220,7 +88,7 @@ fn run_endpoint_convention(
   // Run codegen for each client
   use _ <- result.try(
     list.try_map(clients, fn(client) {
-      run_endpoint_client_codegen(
+      run_client_codegen(
         project_path:,
         toml_cfg:,
         client:,
@@ -268,7 +136,7 @@ fn generate_main(
 }
 
 // nolint: stringly_typed_error
-fn run_endpoint_client_codegen(
+fn run_client_codegen(
   project_path project_path: String,
   toml_cfg toml_cfg: toml_config.TomlConfig,
   client client: toml_config.ClientConfig,
@@ -332,7 +200,7 @@ fn run_endpoint_client_codegen(
     }),
   )
 
-  // WebSocket handler (server-side, convention-independent)
+  // WebSocket handler
   use _ <- result.try(
     codegen.write_websocket(
       server_generated: config.server_generated,
@@ -353,7 +221,7 @@ fn run_endpoint_client_codegen(
     }),
   )
 
-  // Client-side (convention-independent)
+  // Client-side
   use _ <- result.try(
     codegen.write_config(config:)
     |> result.map_error(fn(err) {
@@ -384,137 +252,4 @@ fn run_endpoint_client_codegen(
   )
 
   Ok(Nil)
-}
-
-// nolint: stringly_typed_error
-fn run_client_codegen(
-  project_path project_path: String,
-  toml_cfg toml_cfg: toml_config.TomlConfig,
-  client client: toml_config.ClientConfig,
-  message_modules message_modules: List(scanner.MessageModule),
-  discovered discovered: List(DiscoveredType),
-) -> Result(Nil, String) {
-  let endpoints = []
-  io.println("libero: generating stubs for client: " <> client.name)
-
-  // Convert TomlConfig to codegen Config for this client
-  use raw_config <- result.try(toml_config.to_codegen_config(
-    toml_cfg:,
-    client: client.name,
-    ws_path: "/ws",
-  ))
-  let config = config.prefix_paths(config: raw_config, project_path:)
-
-  // Ensure generated directories exist
-  use _ <- result.try(
-    simplifile.create_directory_all(config.server_generated)
-    |> result.map_error(fn(err) {
-      "cannot create directory "
-      <> config.server_generated
-      <> ": "
-      <> simplifile.describe_error(err)
-    }),
-  )
-  use _ <- result.try(
-    simplifile.create_directory_all(config.client_generated)
-    |> result.map_error(fn(err) {
-      "cannot create directory "
-      <> config.client_generated
-      <> ": "
-      <> simplifile.describe_error(err)
-    }),
-  )
-
-  // Server-side (same for all clients, safe to overwrite)
-  use _ <- result.try(
-    codegen.write_dispatch(
-      message_modules:,
-      server_generated: config.server_generated,
-      atoms_module: config.atoms_module,
-      context_module: toml_cfg.context_module,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_dispatch failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_push_wrappers(
-      message_modules:,
-      server_generated: config.server_generated,
-    )
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "write_push_wrappers failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_websocket(
-      server_generated: config.server_generated,
-      context_module: toml_cfg.context_module,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_websocket failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_atoms(config:, discovered:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_atoms failed"
-    }),
-  )
-
-  // Clean up stale files from previous codegen versions
-  delete_if_exists(config.client_generated <> "/rpc_register.gleam")
-  delete_if_exists(config.client_generated <> "/rpc_register_ffi.mjs")
-
-  // Client-side (unique per client)
-  use _ <- result.try(
-    codegen.write_send_functions(
-      message_modules:,
-      client_generated: config.client_generated,
-    )
-    |> result.map_error(fn(errors) {
-      list.each(errors, gen_error.print_error)
-      "write_send_functions failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_config(config:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_config failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_decoders_gleam(config:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_decoders_gleam failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_decoders_ffi(config:, discovered:, endpoints: endpoints)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_decoders_ffi failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen.write_ssr_flags(client_generated: config.client_generated)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_ssr_flags failed"
-    }),
-  )
-
-  Ok(Nil)
-}
-
-/// Best-effort delete — ignores errors (file may not exist).
-fn delete_if_exists(path: String) -> Nil {
-  simplifile.delete(path)
-  |> result.unwrap(Nil)
 }

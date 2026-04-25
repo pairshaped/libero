@@ -56,12 +56,6 @@ pub fn excludes_non_result_response_test() {
   let assert False = list.contains(names, "ping")
 }
 
-/// Skips old convention (update_from_client)
-pub fn excludes_update_from_client_test() {
-  let names = scan_fixture_names()
-  let assert False = list.contains(names, "update_from_client")
-}
-
 /// All criteria met = included
 pub fn includes_valid_endpoints_test() {
   let names = scan_fixture_names()

@@ -7,10 +7,13 @@
 ////
 //// `from_response` is the bridge from a libero RPC response (a Dynamic value
 //// shipped from the server) to a `RemoteData` value the page stores in
-//// its model. It collapses three wire outcomes - domain success, domain
-//// failure, framework failure - into the two post-response states
-//// (`Success` or `Failure`). The `NotAsked` and `Loading` states are
-//// page-lifecycle concerns the page sets itself in `init` and `update`.
+//// its model. The wire shape is `Result(Result(payload, domain), RpcError)`:
+//// the outer Result is libero's framework envelope, the inner Result is
+//// the handler's typed return. `from_response` collapses the three
+//// outcomes - domain success, domain failure, framework failure - into
+//// the two post-response states (`Success` or `Failure`). The `NotAsked`
+//// and `Loading` states are page-lifecycle concerns the page sets itself
+//// in `init` and `update`.
 
 import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option, None, Some}
@@ -106,10 +109,9 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
 
 /// Convert a libero RPC response (Dynamic) into a `RemoteData` value.
 ///
-/// The server-side dispatch ships the full MsgFromServer envelope so the
-/// wire response is `Result(MsgFromServer.Variant(Result(payload, domain_err)), RpcError)`.
-/// This helper peels the MsgFromServer wrapper and collapses the result
-/// into the two post-response states.
+/// The wire response is `Result(Result(payload, domain_err), RpcError)`:
+/// the outer Result is libero's framework envelope, the inner Result is
+/// the handler's typed return.
 ///
 /// The `format_domain` callback formats domain errors (which the page
 /// owns and pattern-matches on its specific error type). Framework
@@ -124,8 +126,7 @@ pub fn from_response(
   let outer: Result(Dynamic, RpcError) = wire.coerce(raw)
   case outer {
     Error(rpc_err) -> Failure(format_rpc_error(rpc_err))
-    Ok(wrapped) -> {
-      let inner: Dynamic = peel_msg_wrapper(wrapped)
+    Ok(inner) -> {
       let result: Result(payload, domain) = wire.coerce(inner)
       case result {
         Ok(payload) -> Success(payload)
@@ -134,18 +135,6 @@ pub fn from_response(
       }
     }
   }
-}
-
-/// Extract the single payload field from a MsgFromServer variant wrapper.
-/// On Erlang, Gleam variants compile to `{atom, Field}` tuples;
-/// `element(2, Tuple)` extracts the payload.
-/// On JavaScript, variants compile to class instances where the first
-/// field is stored at index `[0]` (i.e. `wrapper[0]`).
-@external(erlang, "libero_ffi", "peel_msg_wrapper")
-@external(javascript, "./remote_data_ffi.mjs", "peelMsgWrapper")
-fn peel_msg_wrapper(wrapper: Dynamic) -> Dynamic {
-  let _ = wrapper
-  panic as "unreachable"
 }
 
 /// Default formatter for framework-level RPC errors.

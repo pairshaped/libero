@@ -107,8 +107,7 @@ pub fn contains(ft: FieldType, predicate: fn(FieldType) -> Bool) -> Bool {
   case ft {
     ListOf(element:) -> contains(element, predicate)
     OptionOf(inner:) -> contains(inner, predicate)
-    ResultOf(ok:, err:) ->
-      contains(ok, predicate) || contains(err, predicate)
+    ResultOf(ok:, err:) -> contains(ok, predicate) || contains(err, predicate)
     DictOf(key:, value:) ->
       contains(key, predicate) || contains(value, predicate)
     TupleOf(elements:) -> list.any(elements, fn(e) { contains(e, predicate) })
