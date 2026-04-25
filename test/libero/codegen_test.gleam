@@ -73,9 +73,9 @@ pub fn send_function_contains_module_path_test() {
   let assert True = string.contains(content, "import libero/rpc")
   // Must import rpc_decoders so the typed decoder FFI side-effect runs on load
   let assert True = string.contains(content, "rpc_decoders")
-  // Must reference decode_msg_from_server to prevent import stripping
+  // Must reference ensure_decoders to trigger FFI side-effect loading
   let assert True =
-    string.contains(content, "rpc_decoders.decode_msg_from_server")
+    string.contains(content, "rpc_decoders.ensure_decoders")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
