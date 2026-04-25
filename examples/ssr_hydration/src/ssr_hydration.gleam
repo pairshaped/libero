@@ -18,6 +18,9 @@ import server/generated/websocket as ws
 import server/handler_context
 import shared/views.{Model}
 
+// Server entry point. Initializes the push system (for server-to-client
+// broadcasts), registers atoms for safe ETF decoding, creates the shared
+// HandlerContext, and starts a mist HTTP server with WebSocket and RPC routes.
 pub fn main() {
   let _ = push.init()
   let _ = dispatch.ensure_atoms()
@@ -90,6 +93,10 @@ fn redirect(to: String) -> response.Response(mist.ResponseData) {
   |> response.set_body(mist.Bytes(bytes_tree.from_string("")))
 }
 
+// HTTP RPC endpoint. Accepts POST requests with ETF-encoded call envelopes,
+// passes them to dispatch.handle (same handler logic as WebSocket), and
+// returns the ETF-encoded response. State changes are not persisted across
+// requests since HTTP is stateless. Use WebSocket for stateful interactions.
 fn handle_rpc(
   req: Request(Connection),
   state: handler_context.HandlerContext,
