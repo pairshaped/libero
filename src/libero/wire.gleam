@@ -136,7 +136,10 @@ pub fn encode_call(
 /// Tag a response frame so the JS client routes it to the correct callback.
 /// Prepends a 0 tag byte and the 32-bit request ID so the client can
 /// correlate the response with the originating call.
-pub fn tag_response(request_id request_id: Int, data data: BitArray) -> BitArray {
+pub fn tag_response(
+  request_id request_id: Int,
+  data data: BitArray,
+) -> BitArray {
   <<0, request_id:32, data:bits>>
 }
 

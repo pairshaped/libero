@@ -170,7 +170,9 @@ fn scan_handlers(
 
 /// Parse a single server source file looking for `pub fn update_from_client`.
 /// If found, resolve the first parameter's type to a shared module path.
-fn parse_handler(file_path file_path: String) -> Result(DiscoveredHandler, Nil) {
+fn parse_handler(
+  file_path file_path: String,
+) -> Result(DiscoveredHandler, Nil) {
   use content <- result.try(
     simplifile.read(file_path)
     |> result.replace_error(Nil),
@@ -869,7 +871,10 @@ fn qualified_type_to_string(
 
 /// Resolve an import alias to the real module's last path segment.
 /// Falls back to the alias itself if not found in the map.
-fn resolve_alias(alias: String, alias_map: dict.Dict(String, String)) -> String {
+fn resolve_alias(
+  alias: String,
+  alias_map: dict.Dict(String, String),
+) -> String {
   case dict.get(alias_map, alias) {
     Ok(real_name) -> real_name
     Error(Nil) -> alias
