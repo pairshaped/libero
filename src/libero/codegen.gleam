@@ -1741,15 +1741,18 @@ export function readFlags() {
 
 // ---------- Server main generator ----------
 
-/// Generate the server entry point at `src/<app_name>.gleam`.
+/// Generate the server entry point at
+/// `<project_path>/src/<app_name>.gleam`.
 pub fn write_main(
   app_name app_name: String,
   port port: Int,
   server_generated server_generated: String,
   context_module context_module: String,
   js_client_names js_client_names: List(String),
+  project_path project_path: String,
 ) -> Result(Nil, GenError) {
-  let output = "src/" <> string.replace(app_name, "-", "_") <> ".gleam"
+  let output =
+    project_path <> "/src/" <> string.replace(app_name, "-", "_") <> ".gleam"
   let dispatch_module = case string.split_once(server_generated, "src/") {
     Ok(#(_, after)) -> after
     Error(Nil) -> server_generated

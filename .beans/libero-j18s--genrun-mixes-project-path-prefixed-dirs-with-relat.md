@@ -1,11 +1,11 @@
 ---
 # libero-j18s
 title: gen.run mixes project_path-prefixed dirs with relative file writes
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-04-25T21:22:02Z
-updated_at: 2026-04-25T21:22:02Z
+updated_at: 2026-04-25T21:27:33Z
 ---
 
 `cli/gen.run(project_path:)` accepts a project path but doesn't apply

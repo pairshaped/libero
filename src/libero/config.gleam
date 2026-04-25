@@ -156,6 +156,37 @@ pub fn build_config(
   ))
 }
 
+/// Return a copy of `config` whose output paths are rooted at `project_path`.
+///
+/// `to_codegen_config` builds a Config with paths relative to the project
+/// root. The codegen functions write at those paths via `simplifile`, which
+/// resolves them against CWD. When the caller (typically `cli/gen.run`) is
+/// driving codegen against a project at a path other than CWD, the writes
+/// land in the wrong place. This helper rewrites the output fields so they
+/// resolve correctly regardless of CWD.
+///
+/// Input paths (`shared_src`, `server_src`) are NOT prefixed: `gen.run`
+/// already resolves those before scanning.
+///
+/// `atoms_module`, `register_relpath_prefix`, `decoders_prelude_import_path`,
+/// and `client_root` are NOT prefixed: they're not filesystem paths the
+/// codegen writes to.
+pub fn prefix_paths(
+  config config: Config,
+  project_path project_path: String,
+) -> Config {
+  let prefix = fn(path) { project_path <> "/" <> path }
+  Config(
+    ..config,
+    atoms_output: prefix(config.atoms_output),
+    config_output: prefix(config.config_output),
+    decoders_ffi_output: prefix(config.decoders_ffi_output),
+    decoders_gleam_output: prefix(config.decoders_gleam_output),
+    server_generated: prefix(config.server_generated),
+    client_generated: prefix(config.client_generated),
+  )
+}
+
 /// Validate that a namespace (if present) contains only lowercase letters,
 /// digits, and underscores, and starts with a letter.
 /// Returns the namespace unchanged on success, or a formatted error string.

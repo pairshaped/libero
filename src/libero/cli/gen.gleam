@@ -10,6 +10,7 @@ import gleam/io
 import gleam/list
 import gleam/result
 import libero/codegen
+import libero/config
 import libero/gen_error
 import libero/scanner
 import libero/toml_config
@@ -236,7 +237,7 @@ fn run_endpoint_convention(
 
 // nolint: stringly_typed_error
 fn generate_main(
-  project_path _project_path: String,
+  project_path project_path: String,
   toml_cfg toml_cfg: toml_config.TomlConfig,
   clients clients: List(toml_config.ClientConfig),
 ) -> Result(Nil, String) {
@@ -251,9 +252,10 @@ fn generate_main(
     codegen.write_main(
       app_name: toml_cfg.name,
       port: toml_cfg.port,
-      server_generated: toml_cfg.server_generated_dir,
+      server_generated: project_path <> "/" <> toml_cfg.server_generated_dir,
       context_module: toml_cfg.context_module,
       js_client_names:,
+      project_path:,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -276,29 +278,27 @@ fn run_endpoint_client_codegen(
 ) -> Result(Nil, String) {
   io.println("libero: generating stubs for client: " <> client.name)
 
-  use config <- result.try(toml_config.to_codegen_config(
+  use raw_config <- result.try(toml_config.to_codegen_config(
     toml_cfg:,
     client: client.name,
     ws_path: "/ws",
   ))
-
-  let server_generated = project_path <> "/" <> config.server_generated
-  let client_generated = project_path <> "/" <> config.client_generated
+  let config = config.prefix_paths(config: raw_config, project_path:)
 
   use _ <- result.try(
-    simplifile.create_directory_all(server_generated)
+    simplifile.create_directory_all(config.server_generated)
     |> result.map_error(fn(err) {
       "cannot create "
-      <> server_generated
+      <> config.server_generated
       <> ": "
       <> simplifile.describe_error(err)
     }),
   )
   use _ <- result.try(
-    simplifile.create_directory_all(client_generated)
+    simplifile.create_directory_all(config.client_generated)
     |> result.map_error(fn(err) {
       "cannot create "
-      <> client_generated
+      <> config.client_generated
       <> ": "
       <> simplifile.describe_error(err)
     }),
@@ -398,30 +398,28 @@ fn run_client_codegen(
   io.println("libero: generating stubs for client: " <> client.name)
 
   // Convert TomlConfig to codegen Config for this client
-  use config <- result.try(toml_config.to_codegen_config(
+  use raw_config <- result.try(toml_config.to_codegen_config(
     toml_cfg:,
     client: client.name,
     ws_path: "/ws",
   ))
+  let config = config.prefix_paths(config: raw_config, project_path:)
 
   // Ensure generated directories exist
-  let server_generated = project_path <> "/" <> config.server_generated
-  let client_generated = project_path <> "/" <> config.client_generated
-
   use _ <- result.try(
-    simplifile.create_directory_all(server_generated)
+    simplifile.create_directory_all(config.server_generated)
     |> result.map_error(fn(err) {
       "cannot create directory "
-      <> server_generated
+      <> config.server_generated
       <> ": "
       <> simplifile.describe_error(err)
     }),
   )
   use _ <- result.try(
-    simplifile.create_directory_all(client_generated)
+    simplifile.create_directory_all(config.client_generated)
     |> result.map_error(fn(err) {
       "cannot create directory "
-      <> client_generated
+      <> config.client_generated
       <> ": "
       <> simplifile.describe_error(err)
     }),
