@@ -341,7 +341,7 @@ fn run_endpoint_client_codegen(
     }),
   )
   use _ <- result.try(
-    codegen.write_decoders_ffi(config:, discovered:)
+    codegen.write_decoders_ffi(config:, discovered:, endpoints: endpoints)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_decoders_ffi failed"
@@ -366,6 +366,7 @@ fn run_client_codegen(
   message_modules message_modules: List(scanner.MessageModule),
   discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, String) {
+  let endpoints = []
   io.println("libero: generating stubs for client: " <> client.name)
 
   // Convert TomlConfig to codegen Config for this client
@@ -469,7 +470,7 @@ fn run_client_codegen(
     }),
   )
   use _ <- result.try(
-    codegen.write_decoders_ffi(config:, discovered:)
+    codegen.write_decoders_ffi(config:, discovered:, endpoints: endpoints)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_decoders_ffi failed"

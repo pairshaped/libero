@@ -98,7 +98,7 @@ pub fn decoders_ffi_imports_stdlib_ctors_and_calls_setters_test() {
       server_root: Ok("."),
     )
   let assert Ok(Nil) =
-    codegen.write_decoders_ffi(config: config, discovered: discovered)
+    codegen.write_decoders_ffi(config: config, discovered: discovered, endpoints: [])
   let assert Ok(content) =
     simplifile.read(
       "build/.test_decoders_ffi/src/client/generated/libero/rpc_decoders_ffi.mjs",

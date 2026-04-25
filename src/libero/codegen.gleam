@@ -386,7 +386,17 @@ pub fn write_endpoint_client_stubs(
       }
     })
 
-  // Generate stub functions
+  // Generate FFI external declarations and stub functions
+  let decoder_externals =
+    list.map(endpoints, fn(e) {
+      "@external(javascript, \"./rpc_decoders_ffi.mjs\", \"decode_response_"
+      <> e.fn_name
+      <> "\")\n"
+      <> "fn decode_response_"
+      <> e.fn_name
+      <> "(raw: Dynamic) -> Dynamic"
+    })
+
   let stub_fns =
     list.map(endpoints, fn(e) {
       let fn_name = e.fn_name
@@ -430,7 +440,9 @@ pub fn write_endpoint_client_stubs(
       <> fn_params
       <> "\n) -> Effect(msg) {\n  send("
       <> msg_construct
-      <> ", fn(raw) { on_response(decode_response(raw)) })\n}"
+      <> ", fn(raw) { on_response(decode_response_"
+      <> fn_name
+      <> "(raw)) })\n}"
     })
 
   // Check if any type string references Option (not a prelude type in Gleam)
@@ -461,6 +473,8 @@ pub type ClientMsg {
 " <> string.join(client_msg_variants, "\n") <> "
 }
 
+" <> string.join(decoder_externals, "\n\n") <> "
+
 " <> string.join(stub_fns, "\n\n") <> "
 
 fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
@@ -471,15 +485,6 @@ fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
     msg: msg,
     on_response: on_response,
   )
-}
-
-fn decode_response(raw: Dynamic) -> RemoteData(a, e) {
-  let outer: Result(Result(a, e), RpcError) = wire.coerce(raw)
-  case outer {
-    Ok(Ok(value)) -> Success(value)
-    Ok(Error(err)) -> Failure(err)
-    Error(_rpc_err) -> panic as \"RPC framework error\"
-  }
 }
 "
 
@@ -979,12 +984,16 @@ pub fn emit_typed_decoders(discovered: List(DiscoveredType)) -> String {
 }
 
 /// Write the typed decoders FFI file for the consumer.
+/// When endpoints are provided (endpoint convention), per-endpoint
+/// response decoders are appended to the FFI output.
 pub fn write_decoders_ffi(
   config config: Config,
   discovered discovered: List(DiscoveredType),
+  endpoints endpoints: List(scanner.HandlerEndpoint),
 ) -> Result(Nil, GenError) {
   let imports = emit_decoder_imports(discovered, config)
   let body = emit_typed_decoders(discovered)
+  let response_decoders = emit_response_decoders(endpoints)
   // Inject stdlib constructor setters at module load time so that
   // decode_result_of / decode_option_of / decode_list_of work correctly.
   // nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
@@ -1012,7 +1021,7 @@ pub fn write_decoders_ffi(
 // Eliminates the global constructor registry - each decoder knows
 // exactly which module's constructor to instantiate.
 
-" <> imports <> "\n\n" <> ctor_setters <> "\n" <> body <> "\n" <> auto_register
+" <> imports <> "\n\n" <> ctor_setters <> "\n" <> body <> "\n" <> auto_register <> "\n" <> response_decoders
   let output = config.decoders_ffi_output
   ensure_parent_dir(path: output)
   write_file(path: output, content: content)
@@ -1282,6 +1291,77 @@ fn field_decoder_call_depth(
 /// constructor registration side effects that run at module scope.
 fn emit_ensure_decoders() -> String {
   "export function ensure_decoders() { return true; }"
+}
+
+/// Emit per-endpoint response decoder functions for the FFI file.
+/// Each decoder takes the response handler's output (Ok(raw) or Error(rpc_error)),
+/// decodes the inner Result using per-type decoders, and returns RemoteData.
+fn emit_response_decoders(
+  endpoints: List(scanner.HandlerEndpoint),
+) -> String {
+  case endpoints {
+    [] -> ""
+    _ -> {
+      let decoders =
+        list.map(endpoints, fn(e) {
+          let #(ok_type, err_type) = parse_result_type(e.return_type_str)
+          let ok_decoder = type_to_decoder_call(ok_type, "inner[1]")
+          let err_decoder = type_to_decoder_call(err_type, "inner[1]")
+          "export function decode_response_"
+          <> e.fn_name
+          <> "(raw) {\n"
+          <> "  if (raw instanceof _Ok) {\n"
+          <> "    const inner = raw[0];\n"
+          <> "    if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
+          <> "      return new _Success("
+          <> ok_decoder
+          <> ");\n"
+          <> "    } else if (Array.isArray(inner) && inner[0] === \"error\") {\n"
+          <> "      return new _Failure("
+          <> err_decoder
+          <> ");\n"
+          <> "    }\n"
+          <> "  }\n"
+          <> "  return new _Failure(\"RPC framework error\");\n"
+          <> "}"
+        })
+      "\n// --- Per-endpoint response decoders ---\n\n"
+      <> "import { Ok as _Ok } from \""
+      <> "../../gleam_stdlib/gleam.mjs\";\n"
+      <> "import { Success as _Success, Failure as _Failure } from \""
+      <> "../../libero/libero/remote_data.mjs\";\n\n"
+      <> string.join(decoders, "\n\n")
+      <> "\n"
+    }
+  }
+}
+
+/// Convert a type string to the JS decoder call for that type.
+/// Builtins (Int, String, Bool, Nil, Float) pass through as-is.
+/// Module-qualified types call their per-type decoder.
+/// List(X) recursively decodes elements.
+fn type_to_decoder_call(type_str: String, term_expr: String) -> String {
+  case type_str {
+    "Int" | "String" | "Bool" | "Float" -> term_expr
+    "Nil" -> "undefined"
+    _ ->
+      case string.contains(type_str, ".") {
+        True -> {
+          // Module-qualified type: discount.Discount -> decode_shared_discount_discount
+          let assert Ok(#(module, type_name)) = case
+            string.split(type_str, ".")
+          {
+            [m, t] -> Ok(#(m, t))
+            _ -> Error(Nil)
+          }
+          decoder_fn_name("shared/" <> module, type_name) <> "(" <> term_expr <> ")"
+        }
+        False ->
+          // Unqualified shared type - shouldn't normally appear in endpoint convention
+          // since the scanner fully qualifies types, but handle gracefully
+          term_expr
+      }
+  }
 }
 
 // ---------- Config file ----------
