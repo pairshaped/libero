@@ -106,8 +106,10 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
   // Must NOT import builtins (Int, String, List, Option, Bool)
   let assert False = string.contains(content, "import shared/Int")
 
-  // Modules only referenced in return types also need imports
-  let assert True = string.contains(content, "import shared/widget_detail")
+  // Dispatch does NOT import modules only referenced in return types
+  // (return types flow through wire.encode at runtime, not static references).
+  // Client stubs DO import them for RemoteData annotations.
+  let assert False = string.contains(content, "import shared/widget_detail")
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
@@ -144,6 +146,64 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
+
+pub fn scanner_resolves_import_aliases_in_type_annotations_test() {
+  // When a handler file uses `import shared/widgets as w`, the scanner
+  // should emit types as "widgets.WidgetParams", not "w.WidgetParams".
+  // This test creates a fixture handler with an aliased import and verifies
+  // the scanner resolves it.
+  let fixture_dir = "build/.test_alias_resolution"
+  let server_dir = fixture_dir <> "/server"
+  let shared_dir = fixture_dir <> "/shared"
+  let assert Ok(Nil) = simplifile.create_directory_all(server_dir)
+  let assert Ok(Nil) = simplifile.create_directory_all(shared_dir)
+
+  // Shared type module
+  let assert Ok(Nil) =
+    simplifile.write(
+      shared_dir <> "/gadgets.gleam",
+      "pub type GadgetParams { GadgetParams(name: String) }
+pub type GadgetError { GadgetNotFound }
+",
+    )
+
+  // Handler that uses an alias
+  let assert Ok(Nil) =
+    simplifile.write(
+      server_dir <> "/store.gleam",
+      "import server/handler_context.{type HandlerContext}
+import shared/gadgets as g
+
+pub fn create_gadget(
+  params params: g.GadgetParams,
+  state state: HandlerContext,
+) -> #(Result(g.GadgetParams, g.GadgetError), HandlerContext) {
+  #(Ok(params), state)
+}
+",
+    )
+
+  let assert Ok(endpoints) =
+    scanner.scan_handler_endpoints(
+      server_src: server_dir,
+      shared_src: shared_dir,
+    )
+
+  let assert [endpoint] = endpoints
+  let assert "create_gadget" = endpoint.fn_name
+
+  // Param type should use the real module name, not the alias
+  let assert [#("params", type_str)] = endpoint.params
+  let assert True = string.contains(type_str, "gadgets.GadgetParams")
+  let assert False = string.contains(type_str, "g.GadgetParams")
+
+  // Return type should also use real module name
+  let assert True = string.contains(endpoint.return_type_str, "gadgets.")
+  let assert False = string.contains(endpoint.return_type_str, "g.")
+
+  // Cleanup
+  let assert Ok(Nil) = simplifile.delete_all([fixture_dir])
 }
 
 pub fn scan_todos_handler_endpoints_test() {

@@ -220,8 +220,8 @@ pub fn write_endpoint_dispatch(
       "import " <> mod <> " as " <> alias
     })
 
-  // Collect shared type imports from parameter and return type annotations
-  let shared_type_imports = collect_shared_type_imports(endpoints:)
+  // Collect shared type imports for parameter types used in ClientMsg variants
+  let shared_type_imports = collect_param_type_imports(endpoints:)
 
   // Generate ClientMsg variants from endpoints
   let client_msg_variants =
@@ -536,12 +536,24 @@ fn message_alias(module_path: String) -> String {
   string.replace(module_path, "/", "_") <> "_msg"
 }
 
-/// Extract module qualifiers from type strings used in endpoint signatures.
-/// Scans parameter types and return types for "module.Type" references and
-/// returns unique "shared/<module>" import paths. Skips builtins (Int, String,
-/// Bool, List, Option, Nil, Result) which have no module qualifier.
-///
-/// Example: "broadcast_admin.SendBroadcastParams" -> "shared/broadcast_admin"
+/// Extract module qualifiers from parameter type strings in endpoint signatures.
+/// Returns unique "import shared/<module>" lines for types used in ClientMsg
+/// variant fields. Skips builtins and return types (dispatch doesn't reference
+/// return types statically).
+fn collect_param_type_imports(
+  endpoints endpoints: List(scanner.HandlerEndpoint),
+) -> List(String) {
+  endpoints
+  |> list.flat_map(fn(e) { list.map(e.params, fn(p) { p.1 }) })
+  |> list.flat_map(fn(s) { extract_module_qualifiers(s) })
+  |> list.unique()
+  |> list.sort(string.compare)
+  |> list.map(fn(mod) { "import shared/" <> mod })
+}
+
+/// Extract module qualifiers from both parameter and return type strings.
+/// Used by client stubs which reference both param types (in ClientMsg and stub
+/// function params) and return types (in RemoteData annotations).
 fn collect_shared_type_imports(
   endpoints endpoints: List(scanner.HandlerEndpoint),
 ) -> List(String) {

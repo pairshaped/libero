@@ -639,13 +639,20 @@ fn parse_endpoints(
     )
     let module_path = derive_module_path(file_path: file_path)
     let type_imports = build_type_import_map(parsed.imports)
+    let alias_map = build_alias_resolution_map(parsed.imports)
     Ok(
       list.filter_map(parsed.functions, fn(def) {
         let glance.Definition(_, func) = def
         case func.publicity == glance.Public {
           False -> Error(Nil)
           True ->
-            parse_single_endpoint(func, module_path, type_imports, shared_types)
+            parse_single_endpoint(
+              func,
+              module_path,
+              type_imports,
+              alias_map,
+              shared_types,
+            )
         }
       }),
     )
@@ -656,23 +663,38 @@ fn parse_endpoints(
   }
 }
 
-/// Build a map from unqualified type names to their module alias.
+/// Build a map from unqualified type names to their module's last segment.
 /// e.g. if the handler has `import shared/messages.{type Todo, type TodoError}`
 /// then this returns {"Todo": "messages", "TodoError": "messages"}.
+/// Always uses the real module path's last segment, not the alias.
 fn build_type_import_map(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
     let glance.Definition(_, imp) = def
-    // Determine the alias: explicit alias or last segment of module path
+    let last_seg = last_module_segment(module_path: imp.module)
+    // Add each unqualified type import, keyed to the real module segment
+    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
+      dict.insert(inner_acc, uq.name, last_seg)
+    })
+  })
+}
+
+/// Build a map from import aliases to the real module's last path segment.
+/// e.g. `import shared/line_items_report as wire` produces
+/// {"wire": "line_items_report"}. Unaliased imports produce identity
+/// entries like {"line_items_report": "line_items_report"}.
+fn build_alias_resolution_map(
+  imports: List(glance.Definition(glance.Import)),
+) -> dict.Dict(String, String) {
+  list.fold(imports, dict.new(), fn(acc, def) {
+    let glance.Definition(_, imp) = def
+    let last_seg = last_module_segment(module_path: imp.module)
     let alias = case imp.alias {
       option.Some(glance.Named(name)) -> name
-      _ -> last_module_segment(module_path: imp.module)
+      _ -> last_seg
     }
-    // Add each unqualified type import
-    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
-      dict.insert(inner_acc, uq.name, alias)
-    })
+    dict.insert(acc, alias, last_seg)
   })
 }
 
@@ -680,6 +702,7 @@ fn parse_single_endpoint(
   func: glance.Function,
   module_path: String,
   type_imports: dict.Dict(String, String),
+  alias_map: dict.Dict(String, String),
   shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Skip update_from_client (old convention)
@@ -709,7 +732,7 @@ fn parse_single_endpoint(
     list.filter_map(non_state_params, fn(p) {
       case p.label, p.type_ {
         option.Some(label), option.Some(type_) ->
-          Ok(#(label, qualified_type_to_string(type_, type_imports)))
+          Ok(#(label, qualified_type_to_string(type_, type_imports, alias_map)))
         _, _ -> Error(Nil)
       }
     })
@@ -727,7 +750,7 @@ fn parse_single_endpoint(
     module_path: module_path,
     fn_name: func.name,
     params: param_info,
-    return_type_str: qualified_type_to_string(response_type, type_imports),
+    return_type_str: qualified_type_to_string(response_type, type_imports, alias_map),
   ))
 }
 
@@ -756,39 +779,46 @@ fn extract_handler_return(
 
 /// Convert a glance Type AST to a string with fully qualified type names.
 /// Unqualified types are resolved against the handler's import map.
-/// Builtins (Int, String, Bool, Float, Nil, List, Result, Option, BitArray)
-/// are left unqualified.
+/// Module-qualified types have their aliases resolved to real module names
+/// via the alias map. Builtins (Int, String, Bool, etc.) are left unqualified.
 fn qualified_type_to_string(
   t: glance.Type,
   imports: dict.Dict(String, String),
+  alias_map: dict.Dict(String, String),
 ) -> String {
   case t {
     glance.NamedType(name:, module: option.None, parameters: [], ..) ->
       qualify_name(name, imports)
     glance.NamedType(name:, module: option.Some(m), parameters: [], ..) ->
-      m <> "." <> name
+      resolve_alias(m, alias_map) <> "." <> name
     glance.NamedType(name:, module: option.None, parameters: params, ..) ->
       qualify_name(name, imports)
       <> "("
       <> string.join(
-        list.map(params, fn(p) { qualified_type_to_string(p, imports) }),
+        list.map(params, fn(p) {
+          qualified_type_to_string(p, imports, alias_map)
+        }),
         ", ",
       )
       <> ")"
     glance.NamedType(name:, module: option.Some(m), parameters: params, ..) ->
-      m
+      resolve_alias(m, alias_map)
       <> "."
       <> name
       <> "("
       <> string.join(
-        list.map(params, fn(p) { qualified_type_to_string(p, imports) }),
+        list.map(params, fn(p) {
+          qualified_type_to_string(p, imports, alias_map)
+        }),
         ", ",
       )
       <> ")"
     glance.TupleType(elements:, ..) ->
       "#("
       <> string.join(
-        list.map(elements, fn(e) { qualified_type_to_string(e, imports) }),
+        list.map(elements, fn(e) {
+          qualified_type_to_string(e, imports, alias_map)
+        }),
         ", ",
       )
       <> ")"
@@ -796,12 +826,26 @@ fn qualified_type_to_string(
     glance.FunctionType(parameters:, return:, ..) ->
       "fn("
       <> string.join(
-        list.map(parameters, fn(p) { qualified_type_to_string(p, imports) }),
+        list.map(parameters, fn(p) {
+          qualified_type_to_string(p, imports, alias_map)
+        }),
         ", ",
       )
       <> ") -> "
-      <> qualified_type_to_string(return, imports)
+      <> qualified_type_to_string(return, imports, alias_map)
     glance.HoleType(name:, ..) -> name
+  }
+}
+
+/// Resolve an import alias to the real module's last path segment.
+/// Falls back to the alias itself if not found in the map.
+fn resolve_alias(
+  alias: String,
+  alias_map: dict.Dict(String, String),
+) -> String {
+  case dict.get(alias_map, alias) {
+    Ok(real_name) -> real_name
+    Error(Nil) -> alias
   }
 }
 
