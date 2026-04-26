@@ -7,3 +7,4 @@ gleam_stdlib = ">= 0.69.0 and < 2.0.0"
 shared = { path = "../../shared" }
 libero = { path = "../../../../" }
 lustre = "~> 5.6"
+modem = "~> 2.1"
