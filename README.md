@@ -44,7 +44,7 @@ my_app/
             └── generated/           # client RPC stubs (auto-generated)
 ```
 
-Three peer Gleam packages (`server/`, `shared/`, `clients/web/`), each with its own `gleam.toml`. Matches Lustre's recommended fullstack shape with one extension: `clients/` is plural so libero supports multi-client apps.
+Three peer Gleam packages (`server/`, `shared/`, `clients/web/`), each with its own `gleam.toml`. Matches Lustre's recommended fullstack shape with one extension: `clients/` is plural because most real apps grow more than one client. See [Multiple Clients](#multiple-clients) for the typical shapes.
 
 `shared/` is target-agnostic: it compiles to both Erlang (used by the server) and JavaScript (used by the client). All types crossing the wire and all view functions live here.
 
@@ -252,9 +252,27 @@ The client sends a typed message over the WebSocket. The server dispatch decodes
 
 ## Multiple Clients
 
-Add as many clients as you need. Each is a name + a target. To add a client manually: create `clients/<name>/gleam.toml`, add `[tools.libero.clients.<name>]` to `server/gleam.toml`, then run `bin/dev` to generate its stubs.
+`clients/` is plural because most real apps end up with more than one. Common shapes:
 
-The same handlers serve all clients. Each client gets typed stubs for its target.
+- **`clients/web/` + `clients/admin/`**: a public-facing SPA and a separate admin SPA, both compiled to JavaScript. Different routes, different views, often different bundle sizes (you don't ship the admin code to every visitor).
+- **`clients/web/` + `clients/cli/`**: a web SPA plus a BEAM-target CLI that talks to the same server. Useful for ops tools, scripted workflows, or letting power users hit the same RPC endpoints from a terminal.
+- **`clients/web/` + `clients/native/`**: a web client plus a Lustre-driven native client (e.g. iOS or Android via embedded JS), or any other JavaScript target with different dependencies.
+
+The handlers don't change. Each client gets typed stubs generated from the same `handler.gleam` signatures, so the contract stays consistent across surfaces. You can't accidentally drift the admin client's idea of `Item` from the web client's, because both decode the same `shared/types.Item`.
+
+To add a client: create `clients/<name>/gleam.toml`, add `[tools.libero.clients.<name>]` to `server/gleam.toml`, then run `bin/gen` to generate its stubs.
+
+### Two SSR-hydrated SPAs (admin + public)
+
+This is the question every two-app team hits: how does adding a second SPA affect the rest of the code? Here's what changes per peer.
+
+**`server/` stays mostly intact.** `handler.gleam` is still one set of RPC endpoints; both SPAs call whichever they need. `handler_context.gleam` doesn't change. `page.gleam` splits per role into `admin_page.gleam` and `public_page.gleam`, each with its own `load_page` and `render_page` pair. The server entry routes `/admin/*` to the admin pair and `/*` to the public pair, and serves both client bundles via static-file routes (`/web/admin/app.mjs`, `/web/public/app.mjs`).
+
+**`shared/` splits along the UI seam.** Domain types in `shared/types.gleam` stay unified: both SPAs decode the same `Item`, so wire compatibility is automatic and free. View modules and routers split per role into `shared/admin/{router,views}.gleam` and `shared/public/{router,views}.gleam`. Each gets its own `Route`, `Model`, `Msg`, `view`. Reusable widgets (a date picker, a table component) extract into `shared/ui/` and get imported by both.
+
+**Why split the views?** Bundle-bleed protection. Cram both UIs into one `shared/views.gleam` and every public visitor downloads your admin code. Splitting keeps `clients/admin/`'s output to admin code and `clients/public/`'s output to public code, with shared types and shared widgets as the bridge.
+
+The wire contract is shared. The UI surface stays per-client.
 
 ## HTTP Clients
 
