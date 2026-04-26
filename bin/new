@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NAME="${1:-}"
+TEMPLATE="${2:-default}"
+
+if [ -z "$NAME" ]; then
+  echo "usage: curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s <project_name> [template]"
+  echo ""
+  echo "Examples:"
+  echo "  ... | sh -s my_app           # uses examples/default"
+  echo "  ... | sh -s my_todos todos   # uses examples/todos"
+  exit 1
+fi
+
+if [ -e "$NAME" ]; then
+  echo "error: $NAME already exists"
+  exit 1
+fi
+
+TARBALL="https://github.com/pairshaped/libero/archive/main.tar.gz"
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+echo "Downloading libero/examples/$TEMPLATE ..."
+curl -fsSL "$TARBALL" | tar xz -C "$TMPDIR"
+
+SRC="$TMPDIR/libero-main/examples/$TEMPLATE"
+if [ ! -d "$SRC" ]; then
+  echo "error: examples/$TEMPLATE not found in libero"
+  exit 1
+fi
+
+cp -r "$SRC" "$NAME"
+
+echo "Renaming $TEMPLATE → $NAME in gleam.toml files ..."
+find "$NAME" -name 'gleam.toml' -exec \
+  sed -i.bak "s/name = \"$TEMPLATE\"/name = \"$NAME\"/g" {} \;
+find "$NAME" -name '*.bak' -delete
+
+# Rename the server entry file: server/src/<template>.gleam → server/src/<name>.gleam
+if [ -f "$NAME/server/src/$TEMPLATE.gleam" ]; then
+  mv "$NAME/server/src/$TEMPLATE.gleam" "$NAME/server/src/$NAME.gleam"
+fi
+
+# Rename the test: server/test/<template>_test.gleam → server/test/<name>_test.gleam
+if [ -f "$NAME/server/test/${TEMPLATE}_test.gleam" ]; then
+  mv "$NAME/server/test/${TEMPLATE}_test.gleam" "$NAME/server/test/${NAME}_test.gleam"
+fi
+
+# Drop libero path-dep, replace with hex dep
+# (the example uses a path dep so it builds inside the libero repo;
+# scaffolded apps get libero from hex)
+find "$NAME" -name 'gleam.toml' -exec \
+  sed -i.bak 's|libero = { path = "[^"]*" }|libero = "~> 5.0"|g' {} \;
+find "$NAME" -name '*.bak' -delete
+
+cd "$NAME"
+git init -q
+git add .
+git commit -q -m "Initial commit from libero/examples/$TEMPLATE"
+
+echo ""
+echo "Created $NAME from libero/examples/$TEMPLATE"
+echo ""
+echo "Next steps:"
+echo "  cd $NAME"
+echo "  bin/dev"
