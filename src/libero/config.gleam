@@ -2,7 +2,6 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import libero/cli/validation
 
 // ---------- Types ----------
 
@@ -200,10 +199,10 @@ fn validate_namespace(
       let is_valid = case graphemes {
         [] -> False
         [first, ..rest] ->
-          validation.is_lowercase_letter(first)
+          string.contains("abcdefghijklmnopqrstuvwxyz", first)
           && list.all(rest, fn(ch) {
-            validation.is_lowercase_letter(ch)
-            || validation.is_digit(ch)
+            string.contains("abcdefghijklmnopqrstuvwxyz", ch)
+            || string.contains("0123456789", ch)
             || ch == "_"
           })
       }

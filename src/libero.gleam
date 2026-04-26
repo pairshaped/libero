@@ -1,75 +1,20 @@
-//// Libero v4 framework CLI.
+//// Libero — typed RPC framework for Gleam.
 ////
-//// Usage: gleam run -m libero -- <command> [args]
-//// Commands: new, add, gen, build
+//// Usage: gleam run -m libero
+////
+//// Reads `gleam.toml` from the current directory and regenerates
+//// dispatch, websocket, and client stubs based on handler signatures.
 
 import gleam/io
-import libero/cli
-import libero/cli/add as cli_add
-import libero/cli/build as cli_build
 import libero/cli/gen as cli_gen
-import libero/cli/new as cli_new
 
 pub fn main() -> Nil {
   let Nil = trap_signals()
-  case cli.parse_command() {
-    cli.New(name:, database:, web:) -> {
-      case cli_new.scaffold(path: name, database:, web:) {
-        Ok(Nil) -> io.println("Created " <> name <> ". Happy hacking!")
-        Error(reason) -> {
-          io.println_error(reason)
-          let _halt = halt(1)
-          Nil
-        }
-      }
-      Nil
-    }
-    cli.Add(name:, target:) -> {
-      case cli_add.add_client(project_path: ".", name:, target:) {
-        Ok(Nil) ->
-          io.println("Added client " <> name <> " (target: " <> target <> ")")
-        Error(reason) -> {
-          io.println_error(reason)
-          let _halt = halt(1)
-          Nil
-        }
-      }
-      Nil
-    }
-    cli.Gen -> {
-      case cli_gen.run(project_path: ".") {
-        Ok(Nil) -> Nil
-        Error(msg) -> {
-          io.println_error(msg)
-          let _halt = halt(1)
-          Nil
-        }
-      }
-    }
-    cli.Build -> {
-      case cli_build.run(project_path: ".") {
-        Ok(Nil) -> Nil
-        Error(msg) -> {
-          io.println_error(msg)
-          let _halt = halt(1)
-          Nil
-        }
-      }
-    }
-    cli.Unknown -> {
-      io.println("Libero — typed RPC framework for Gleam")
-      io.println("")
-      io.println("Usage: gleam run -m libero -- <command>")
-      io.println("")
-      io.println("Commands:")
-      io.println(
-        "  new <name> [--database pg|sqlite] [--web]  Create a new project",
-      )
-      io.println("  add <name> --target <target>  Add a client")
-      io.println("  gen                           Regenerate stubs")
-      io.println(
-        "  build                         Gen + build server + all clients",
-      )
+  case cli_gen.run(project_path: ".") {
+    Ok(Nil) -> Nil
+    Error(msg) -> {
+      io.println_error(msg)
+      let _halt = halt(1)
       Nil
     }
   }
