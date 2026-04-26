@@ -6,57 +6,63 @@ Libero is a full-stack Gleam framework with typed RPC. Write handler functions w
 
 ```
 my_app/
-  gleam.toml                       # server package (erlang) + [tools.libero] config
-  src/
-    server/
-      handler.gleam                # pub functions = RPC endpoints
-      handler_context.gleam        # server context type
-      generated/                   # dispatch, websocket (auto-generated)
-    my_app.gleam                   # server entry point (auto-generated)
-  shared/
-    gleam.toml                     # target-agnostic package
-    src/shared/
-      types.gleam                  # domain types (shared between server + client)
-  clients/
-    web/
-      gleam.toml                   # client package (javascript), generated if missing
-      src/
-        app.gleam                  # Lustre SPA
-        generated/                 # client stubs (auto-generated)
-  test/
-    my_app_test.gleam
+├── bin/
+│   ├── dev                          # codegen + run server
+│   └── test                         # run server tests
+├── server/
+│   ├── gleam.toml                   # target=erlang, [tools.libero] config
+│   └── src/
+│       ├── my_app.gleam             # server entry (auto-generated, customizable)
+│       ├── handler.gleam            # pub functions = RPC endpoints
+│       ├── handler_context.gleam    # server context type
+│       ├── page.gleam               # SSR load_page + render_page
+│       └── generated/               # dispatch, websocket (auto-generated)
+├── shared/
+│   ├── gleam.toml                   # target-agnostic package
+│   └── src/shared/
+│       ├── router.gleam             # Route, parse_route, route_to_path
+│       ├── types.gleam              # domain types (shared between server + client)
+│       └── views.gleam              # Model, Msg, view function (cross-target)
+└── clients/
+    └── web/
+        ├── gleam.toml               # target=javascript
+        └── src/
+            ├── app.gleam            # Lustre SPA (hydrates SSR HTML)
+            └── generated/           # client stubs (auto-generated)
 ```
 
-The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. Gleam compiles to a single target per package, so `shared/` and `clients/` are separate nested packages (each with their own `gleam.toml`). `shared/` has no target, so it compiles to both Erlang and JavaScript. This lets both the server and JS clients import the same domain types without the client pulling in Erlang-only dependencies.
+Three peer Gleam packages (`server/`, `shared/`, `clients/web/`), each with its own `gleam.toml`. `shared/` has no target, so it compiles to both Erlang and JavaScript. This lets both the server and JS clients import the same domain types without the client pulling in Erlang-only dependencies.
 
 ```
-root (server)     -> shared, libero, mist     [target: erlang]
-clients/web       -> shared, libero, lustre   [target: javascript]
+server/           -> shared, libero, mist     [target: erlang]
+clients/web/      -> shared, libero, lustre   [target: javascript]
 ```
 
 Rules:
-- `src/server/` is server code. Handlers, context, and business logic live here.
-- `shared/src/shared/` holds domain types shared across targets.
+- `server/src/` is server code. Handlers, context, and business logic live here.
+- `shared/src/shared/` holds domain types and views shared across targets.
 - `clients/<name>/` are consumer apps, each a separate Gleam package.
 - Never edit files in `generated/` directories.
-- Each client's `gleam.toml` is generated once by `libero add`, never overwritten.
+- Each client's `gleam.toml` is written once during scaffold, never overwritten.
 
-## CLI
+## Commands
+
+Scaffold a new project:
 
 ```bash
-gleam run -m libero -- new <name> [--database pg|sqlite] [--web]  # scaffold project
-gleam run -m libero -- add <name> --target <target>   # add a client
-gleam run -m libero -- gen                            # regenerate stubs
-gleam run -m libero -- build                          # gen + build server + all clients
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_app
+cd my_app
+bin/dev
 ```
 
-The `--database` flag adds database dependencies and a connection module:
-- `--database pg`: adds [pog](https://hexdocs.pm/pog/) + [squirrel](https://hexdocs.pm/squirrel/) for type-safe Postgres queries
-- `--database sqlite`: adds [sqlight](https://hexdocs.pm/sqlight/) + [marmot](https://hexdocs.pm/marmot/) for type-safe SQLite queries
+From the project root:
 
-Both options scaffold `src/server/db.gleam` (connection setup) and `src/server/sql/` (directory for `.sql` query files). The database connection is included in `HandlerContext` so handlers have access via `state.db`.
+- `bin/dev` — regenerate code, build, and start the server
+- `bin/test` — run server tests
 
-The `--web` flag adds the default JavaScript client named `web` during scaffold.
+`bin/dev` runs in order: `cd server && gleam run -m libero` (codegen), then `cd clients/web && gleam build --target javascript`, then `cd server && gleam run`.
+
+To add a client manually: create `clients/<name>/gleam.toml`, add `[tools.libero.clients.<name>]` to `server/gleam.toml`, then run `bin/dev`.
 
 ## Configuration
 
@@ -93,7 +99,7 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 4. All types in the signature come from `shared/` or are builtins
 
 ```gleam
-// src/server/handler.gleam
+// server/src/handler.gleam
 
 import server/handler_context.{type HandlerContext}
 import shared/types.{type Todo, type TodoParams, type TodoError, TitleRequired}
@@ -288,15 +294,15 @@ shared/src/shared/
   views.gleam        # view functions, Model, Msg, Route types
 ```
 
-The server entry point (`src/<app>.gleam`) is generated once and never overwritten, so it can be customized to add SSR routes.
+The server entry point (`server/src/<app>.gleam`) is generated once and never overwritten, so it can be customized to add SSR routes.
 
 ## What Gets Generated
 
-**Server dispatch (`src/server/generated/`):**
+**Server dispatch (`server/src/generated/`):**
 - `dispatch.gleam` -- `ClientMsg` type + per-function routing to handlers
 - `websocket.gleam` -- Mist WebSocket handler with push (pure Gleam, no FFI)
 
-**Server entry point (`src/<app_name>.gleam`):**
+**Server entry point (`server/src/<app_name>.gleam`):**
 - Boots Mist with WebSocket on `/ws`, HTTP RPC on `/rpc`
 - Serves HTML shell at `/` loading the first JS client
 - Serves client JS bundles at `/<client_name>/*`
@@ -307,7 +313,7 @@ The server entry point (`src/<app>.gleam`) is generated once and never overwritt
 - `rpc_decoders.gleam` + `.mjs` -- typed decoder for ETF decoding
 - `ssr.gleam` + `.mjs` -- SSR flag reader
 
-**Atom registration (`src/<app>@generated@rpc_atoms.erl`):**
+**Atom registration (`server/src/<app>@generated@rpc_atoms.erl`):**
 - Pre-registers Erlang atoms for safe ETF decoding
 
 ## Wire Protocol

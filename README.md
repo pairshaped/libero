@@ -8,49 +8,64 @@ Like server components, but your client is a real SPA with typed RPC, and the sa
 
 ## Getting Started
 
+Create a new project from the default starter:
+
 ```bash
-gleam run -m libero -- new my_app --web
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_app
 cd my_app
-gleam run -m libero -- build
-gleam run
+bin/dev
 # Server running on http://localhost:8080
+```
+
+The starter is `examples/default/` from this repo. Pick a different example by passing its name:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_todos todos
+```
+
+Don't want to pipe a remote script to your shell? View the script first:
+[`bin/new`](bin/new). It's bash, ~80 lines. Or download and inspect:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new -o new
+less new
+sh new my_app
 ```
 
 ## Project Structure
 
 ```
 my_app/
-  gleam.toml                         # server package + [tools.libero] config
-  src/
-    server/
-      handler.gleam                  # your business logic (RPC endpoints)
-      handler_context.gleam          # server context type
-      generated/                     # dispatch, websocket (auto-generated)
-    my_app.gleam                     # server entry point (auto-generated)
-  shared/
-    gleam.toml                       # target-agnostic package
-    src/shared/
-      types.gleam                    # your domain types (shared between server + client)
-  clients/
-    web/
-      gleam.toml                     # client package (auto-generated if missing)
-      src/
-        app.gleam                    # your Lustre SPA
-        generated/                   # client stubs (auto-generated)
-  test/
-    my_app_test.gleam                # handler test
+├── bin/
+│   ├── dev                          # codegen + run server
+│   └── test                         # run server tests
+├── server/
+│   ├── gleam.toml                   # target=erlang, [tools.libero] config
+│   └── src/
+│       ├── my_app.gleam             # server entry (auto-generated, customizable)
+│       ├── handler.gleam            # your RPC endpoints
+│       ├── handler_context.gleam    # server context type
+│       ├── page.gleam               # SSR load_page + render_page
+│       └── generated/               # dispatch, websocket (auto-generated)
+├── shared/
+│   ├── gleam.toml                   # cross-target shared types + views
+│   └── src/shared/
+│       ├── router.gleam             # Route, parse_route, route_to_path
+│       ├── types.gleam              # domain types used in handlers
+│       └── views.gleam              # Model, Msg, view function (cross-target)
+└── clients/
+    └── web/
+        ├── gleam.toml               # target=javascript
+        └── src/
+            ├── app.gleam            # Lustre client (hydrates SSR HTML)
+            └── generated/           # client RPC stubs (auto-generated)
 ```
 
-The root `gleam.toml` is the **server package** (target: erlang). It also holds the `[tools.libero]` config that declares clients and settings. `src/server/` is where your handlers and business logic live.
+Three peer Gleam packages (`server/`, `shared/`, `clients/web/`), each with its own `gleam.toml`. Matches Lustre's recommended fullstack shape with one extension: `clients/` is plural so libero supports multi-client apps.
 
-`shared/` and `clients/` are **separate Gleam packages** nested inside the project, each with their own `gleam.toml`. This is necessary because Gleam compiles to a single target per package: the server targets Erlang while JS clients target JavaScript. They can't live in the same package.
+`shared/` is target-agnostic: it compiles to both Erlang (used by the server) and JavaScript (used by the client). All types crossing the wire and all view functions live here.
 
-`shared/` exists so both sides can import the same domain types. It has no target specified, so it compiles to both Erlang and JavaScript. Without it, JS clients would need to depend on the server package and pull in Erlang-only dependencies (mist, ETS, etc.).
-
-```
-root (server)     -> shared, libero, mist     [target: erlang]
-clients/web       -> shared, libero, lustre   [target: javascript]
-```
+`server/` runs `gleam run -m libero` to regenerate dispatch and client stubs. The `bin/dev` script wraps that plus `gleam build` and `gleam run` so you don't have to think about it.
 
 ## Handler-as-Contract
 
@@ -62,7 +77,7 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 4. **All types in the signature come from `shared/` or are builtins**
 
 ```gleam
-// src/server/handler.gleam
+// server/src/handler.gleam
 
 import server/handler_context.{type HandlerContext}
 import shared/types.{type Todo, type TodoParams, type TodoError}
@@ -192,7 +207,7 @@ fn init(_flags) -> #(Model, Effect(Msg)) {
 
 ## Configuration
 
-All config lives in `gleam.toml` under the `[tools.libero]` section:
+All config lives in `server/gleam.toml` under the `[tools.libero]` section:
 
 ```toml
 name = "my_app"
@@ -200,59 +215,44 @@ version = "0.1.0"
 target = "erlang"
 
 [dependencies]
-gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
 gleam_erlang = "~> 1.0"
 gleam_http = "~> 4.0"
 mist = "~> 6.0"
 lustre = "~> 5.6"
-shared = { path = "shared" }
-libero = { path = "../libero" }
+shared = { path = "../shared" }
+libero = { path = "../../libero" }
 
 [tools.libero]
 port = 8080
 
 [tools.libero.clients.web]
 target = "javascript"
-
-[tools.libero.clients.cli]
-target = "erlang"
+path = "../clients/web"
 ```
 
-## CLI
+## Commands
 
-```
-gleam run -m libero -- <command>
+From the project root:
 
-Commands:
-  new <name> [--database pg|sqlite] [--web]  Create a new project
-  add <name> --target <target>  Add a client
-  gen                           Regenerate stubs
-  build                         Gen + build server + all clients
-```
+- `bin/dev` — regenerate code, build, and start the server
+- `bin/test` — run server tests
 
-### `libero new <name> [--database pg|sqlite] [--web]`
-Scaffolds a project with `src/server/` (skeleton handler), `shared/` (skeleton types), `test/` (handler test), `README.md`, and `gleam.toml`.
+The `bin/dev` script does three things in order:
 
-Pass `--database pg` to include [pog](https://hexdocs.pm/pog/) and [squirrel](https://hexdocs.pm/squirrel/) for type-safe Postgres queries. Pass `--database sqlite` to include [sqlight](https://hexdocs.pm/sqlight/) and [marmot](https://hexdocs.pm/marmot/) for type-safe SQLite queries. Both options add a `src/server/db.gleam` connection module and a `src/server/sql/` directory for query files.
+1. `cd server && gleam run -m libero` — regenerates dispatch, websocket, and client RPC stubs from your handler signatures.
+2. `cd clients/web && gleam build --target javascript` — compiles the client SPA so the server can serve it from `/web/web/app.mjs`.
+3. `cd server && gleam run` — starts the mist HTTP server on port 8080.
 
-Pass `--web` to add the default JavaScript client named `web` during scaffold. It is the same result as running `gleam run -m libero -- add web --target javascript` after `new`.
-
-### `libero add <name> --target <target>`
-Adds a client. Creates `clients/<name>/` with its own `gleam.toml` (generated once, never overwritten) and a starter app.
-
-### `libero gen`
-Scans handler functions and generates dispatch, stubs, and server entry point. Run after changing handler signatures.
-
-### `libero build`
-Runs `gen`, then builds the server and each client package.
+To run any step manually, the commands are above. Adding clients, editing routes, etc. — see `examples/default/README.md` for the per-task playbook.
 
 ## What Gets Generated
 
-**Server-side (`src/server/generated/`):**
+**Server-side (`server/src/generated/`):**
 - `dispatch.gleam` -- `ClientMsg` type + per-function routing to handlers
 - `websocket.gleam` -- Mist WebSocket handler with push support
 
-**Server entry point (`src/<app_name>.gleam`):**
+**Server entry point (`server/src/<app_name>.gleam`):**
 - Boots Mist with WebSocket, HTTP RPC, and static file serving
 - Serves HTML shell at `/` that loads the first JS client
 
@@ -263,7 +263,7 @@ Runs `gen`, then builds the server and each client package.
 
 Generation rules:
 - Starter apps and client `gleam.toml`: generated once, never overwritten
-- Everything in `generated/`: regenerated every `libero gen` or `libero build`
+- Everything in `generated/`: regenerated on every `gleam run -m libero` run
 
 ## How It Works
 
@@ -273,13 +273,7 @@ The client sends a typed message over the WebSocket. The server dispatch decodes
 
 ## Multiple Clients
 
-Add as many clients as you need. Each is a name + a target:
-
-```bash
-gleam run -m libero -- add web --target javascript      # Lustre SPA
-gleam run -m libero -- add cli --target erlang           # BEAM CLI
-gleam run -m libero -- add admin --target javascript     # separate admin SPA
-```
+Add as many clients as you need. Each is a name + a target. To add a client manually: create `clients/<name>/gleam.toml`, add `[tools.libero.clients.<name>]` to `server/gleam.toml`, then run `bin/dev` to generate its stubs.
 
 The same handlers serve all clients. Each client gets typed stubs for its target.
 
