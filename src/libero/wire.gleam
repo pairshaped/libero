@@ -7,10 +7,10 @@
 //// needed because ETF is the BEAM's native serialization format.
 ////
 //// **Wire shape:**
-//// - The call envelope is `{module_name_binary, request_id, msg_from_client_value}` -
+//// - The call envelope is `{module_name_binary, request_id, client_msg_value}` -
 ////   a 3-tuple where the first element is a UTF-8 binary (Gleam String)
-////   naming the shared module, the second is an integer request ID for
-////   correlating responses, and the third is the typed MsgFromClient
+////   carrying the wire envelope, the second is an integer request ID for
+////   correlating responses, and the third is the generated `ClientMsg`
 ////   value serialized as a native ETF term.
 //// - The response is the Gleam value directly (e.g. `Ok(value)` or
 ////   `Error(MalformedRequest)`), serialized as ETF.
@@ -21,7 +21,8 @@
 //// libero's own ETF encoder/decoder in `rpc_ffi.mjs`, which requires
 //// that any custom-type constructors in the value have been registered
 //// via `register_all()` at boot (libero's generator emits that
-//// registration for every type reachable from the MsgFromClient/MsgFromServer type graph).
+//// registration for every type reachable from a handler's params or
+//// return type).
 
 import gleam/dynamic.{type Dynamic}
 
@@ -46,10 +47,10 @@ pub fn encode(value: a) -> BitArray
 /// flags on client boot. For decoding incoming RPC call envelopes
 /// specifically, use `decode_call` instead.
 ///
-/// Any custom types in the decoded value must be reachable from the
-/// MsgFromClient/MsgFromServer type graph so their constructors are registered with the
-/// JavaScript codec (via `register_all()` at boot). On Erlang this
-/// is automatic because atoms are pre-registered by the generated
+/// Any custom types in the decoded value must be reachable from a
+/// handler's params or return type so their constructors are registered
+/// with the JavaScript codec (via `register_all()` at boot). On Erlang
+/// this is automatic because atoms are pre-registered by the generated
 /// `rpc_atoms` module.
 ///
 /// **Warning: type safety is the caller's responsibility.** The return
@@ -121,7 +122,7 @@ fn ffi_decode_call(
 // ---------- Call envelope encoder ----------
 
 /// Encode a call envelope: `{module_name, request_id, msg}` as ETF binary.
-/// Used by generated client send_to_server functions to pack a MsgFromClient value
+/// Used by generated client stub functions to pack a `ClientMsg` value
 /// for transport to the server.
 pub fn encode_call(
   module module: String,
@@ -179,7 +180,7 @@ fn ffi_variant_tag(value: dynamic.Dynamic) -> Result(String, Nil) {
 
 /// Cast a Dynamic value to any type.
 /// Used by generated server dispatch code to coerce the decoded
-/// MsgFromClient value to its typed form. Safe when client and server are
+/// `ClientMsg` value to its typed form. Safe when client and server are
 /// built from the same source (the generator guarantees the types match).
 ///
 /// **Warning: unwitnessed cast.** Same safety model as `decode` —

@@ -32,14 +32,14 @@ fn sample_status_enum() -> List(walker.DiscoveredType) {
 fn sample_record_type() -> List(walker.DiscoveredType) {
   [
     walker.DiscoveredType(
-      module_path: "shared/todo",
-      type_name: "Todo",
+      module_path: "shared/item",
+      type_name: "Item",
       type_params: [],
       variants: [
         walker.DiscoveredVariant(
-          module_path: "shared/todo",
-          variant_name: "Todo",
-          atom_name: "todo",
+          module_path: "shared/item",
+          variant_name: "Item",
+          atom_name: "item",
           float_field_indices: [],
           fields: [
             field_type.StringField,
@@ -52,15 +52,15 @@ fn sample_record_type() -> List(walker.DiscoveredType) {
   ]
 }
 
-fn sample_msg_from_server() -> List(walker.DiscoveredType) {
+fn sample_notification_type() -> List(walker.DiscoveredType) {
   [
     walker.DiscoveredType(
-      module_path: "shared/messages",
-      type_name: "MsgFromServer",
+      module_path: "shared/notification",
+      type_name: "Notification",
       type_params: [],
       variants: [
         walker.DiscoveredVariant(
-          module_path: "shared/messages",
+          module_path: "shared/notification",
           variant_name: "ItemsLoaded",
           atom_name: "items_loaded",
           float_field_indices: [],
@@ -75,21 +75,21 @@ fn sample_msg_from_server() -> List(walker.DiscoveredType) {
           ],
         ),
         walker.DiscoveredVariant(
-          module_path: "shared/messages",
+          module_path: "shared/notification",
           variant_name: "StatusChanged",
           atom_name: "status_changed",
           float_field_indices: [],
           fields: [field_type.StringField],
         ),
         walker.DiscoveredVariant(
-          module_path: "shared/messages",
+          module_path: "shared/notification",
           variant_name: "Disconnected",
           atom_name: "disconnected",
           float_field_indices: [],
           fields: [],
         ),
         walker.DiscoveredVariant(
-          module_path: "shared/messages",
+          module_path: "shared/notification",
           variant_name: "Refreshed",
           atom_name: "refreshed",
           float_field_indices: [],
@@ -123,7 +123,7 @@ pub fn enum_decoder_throws_on_unknown_test() {
 pub fn record_decoder_calls_primitive_decoders_test() {
   let js = codegen.emit_typed_decoders(sample_record_type())
   let assert True =
-    string.contains(js, "export function decode_shared_todo_todo(term)")
+    string.contains(js, "export function decode_shared_item_item(term)")
   let assert True = string.contains(js, "decode_string(term[1])")
   let assert True = string.contains(js, "decode_int(term[2])")
   let assert True = string.contains(js, "decode_bool(term[3])")
@@ -131,39 +131,39 @@ pub fn record_decoder_calls_primitive_decoders_test() {
 
 pub fn record_decoder_constructs_correct_variant_test() {
   let js = codegen.emit_typed_decoders(sample_record_type())
-  let assert True = string.contains(js, "return new _m_shared_todo.Todo(")
+  let assert True = string.contains(js, "return new _m_shared_item.Item(")
 }
 
 pub fn ensure_decoders_is_always_exported_test() {
-  let js = codegen.emit_typed_decoders(sample_msg_from_server())
+  let js = codegen.emit_typed_decoders(sample_notification_type())
   let assert True = string.contains(js, "export function ensure_decoders()")
 }
 
-pub fn type_decoders_generated_for_msg_from_server_test() {
-  let js = codegen.emit_typed_decoders(sample_msg_from_server())
+pub fn type_decoders_generated_for_tagged_union_test() {
+  let js = codegen.emit_typed_decoders(sample_notification_type())
   let assert True =
-    string.contains(js, "decode_shared_messages_msg_from_server")
+    string.contains(js, "decode_shared_notification_notification")
 }
 
-pub fn msg_from_server_dispatches_all_four_variants_test() {
-  let js = codegen.emit_typed_decoders(sample_msg_from_server())
+pub fn tagged_union_dispatches_all_four_variants_test() {
+  let js = codegen.emit_typed_decoders(sample_notification_type())
   let assert True =
-    string.contains(js, "return new _m_shared_messages.ItemsLoaded(")
+    string.contains(js, "return new _m_shared_notification.ItemsLoaded(")
   let assert True =
-    string.contains(js, "return new _m_shared_messages.StatusChanged(")
+    string.contains(js, "return new _m_shared_notification.StatusChanged(")
   let assert True =
-    string.contains(js, "return new _m_shared_messages.Disconnected()")
+    string.contains(js, "return new _m_shared_notification.Disconnected()")
   let assert True =
-    string.contains(js, "return new _m_shared_messages.Refreshed()")
+    string.contains(js, "return new _m_shared_notification.Refreshed()")
 }
 
-pub fn msg_from_server_uses_list_decoder_for_list_field_test() {
-  let js = codegen.emit_typed_decoders(sample_msg_from_server())
+pub fn tagged_union_uses_list_decoder_for_list_field_test() {
+  let js = codegen.emit_typed_decoders(sample_notification_type())
   let assert True = string.contains(js, "decode_list_of(")
   let assert True = string.contains(js, "decode_shared_item_item(t0)")
 }
 
-pub fn ensure_decoders_emitted_even_without_msg_from_server_test() {
+pub fn ensure_decoders_emitted_for_simple_enum_test() {
   let js = codegen.emit_typed_decoders(sample_status_enum())
   let assert True = string.contains(js, "export function ensure_decoders()")
 }

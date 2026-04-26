@@ -4,9 +4,9 @@ import libero/scanner
 // -- derive_module_path tests --
 
 pub fn derive_module_path_standard_test() {
-  let assert "shared/messages" =
+  let assert "shared/items" =
     scanner.derive_module_path(
-      file_path: "test/fixtures/shared/src/shared/messages.gleam",
+      file_path: "test/fixtures/shared/src/shared/items.gleam",
     )
 }
 

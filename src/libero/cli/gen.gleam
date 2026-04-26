@@ -71,10 +71,10 @@ fn run_with_clients(
     <> toml_cfg.server_src_dir,
   )
 
-  // Determine shared module path from the shared_src dir
-  let shared_module_path =
-    scanner.scan_shared_module_path(shared_src: shared_src)
-    |> result.unwrap("shared/messages")
+  // The wire envelope is a stable string both ends agree on; it has no
+  // semantic meaning beyond routing. A constant keeps it predictable and
+  // legible in error messages and wire logs.
+  let shared_module_path = "rpc"
 
   // Walk shared types for atom registration and decoder generation
   use discovered <- result.try(

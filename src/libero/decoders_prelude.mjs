@@ -6,22 +6,6 @@
 // injected via setters at module load time - same pattern as rpc_ffi.mjs.
 // The generated register file calls these setters before any RPC arrives.
 
-// --- Typed MsgFromServer decoder hook ---
-//
-// The generated rpc_decoders_ffi.mjs calls setMsgFromServerDecoder at
-// module load time. rpc_ffi.mjs calls getMsgFromServerDecoder to check
-// whether to use the typed path when decoding incoming push frames.
-
-let _msgFromServerDecoder = null;
-
-export function setMsgFromServerDecoder(fn) {
-  _msgFromServerDecoder = fn;
-}
-
-export function getMsgFromServerDecoder() {
-  return _msgFromServerDecoder;
-}
-
 // --- Gleam stdlib types (set via setters, no direct imports) ---
 
 let _Ok = null;

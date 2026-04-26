@@ -32,11 +32,13 @@ pub type TomlConfig {
     /// Path to the atoms .erl file. Default:
     /// "src/<name>@generated@rpc_atoms.erl".
     server_atoms_path: String,
-    /// Directory containing shared source (where message modules live).
-    /// Libero scans this directory for MsgFromClient/MsgFromServer types.
+    /// Directory containing shared source (types referenced by handler
+    /// signatures). Libero walks every public type here so it can emit
+    /// decoders for anything reachable from a handler's params or return
+    /// type.
     /// Default: "../shared/src/shared" (relative to server package root) - a separate target-agnostic package.
     /// Required for projects with both an Erlang server and a JS client:
-    /// if messages lived in the server package, the JS client couldn't
+    /// if shared types lived in the server package, the JS client couldn't
     /// import them without pulling in wisp/sqlight (Erlang-only FFI).
     shared_src_dir: String,
     /// Gleam module path to the HandlerContext type used by libero dispatch.

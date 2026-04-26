@@ -5,10 +5,11 @@
 %% and return a Gleam-shaped Result: {ok, {Name, RequestId, Value}} or
 %% {error, {decode_error, Message}}.
 %%
-%% The wire envelope is {module_name_binary, request_id, msg_from_client_value} -
-%% a 3-tuple where the first element is a UTF-8 binary naming the shared module,
-%% the second is an integer request ID, and the third is the typed MsgFromClient
-%% value. The request ID lets the client correlate responses to calls.
+%% The wire envelope is {module_name_binary, request_id, client_msg_value} -
+%% a 3-tuple where the first element is a UTF-8 binary carrying the wire
+%% envelope, the second is an integer request ID, and the third is the
+%% generated ClientMsg value. The request ID lets the client correlate
+%% responses to calls.
 %%
 %% Note: binary_to_term/2 is called with [safe] to prevent atom
 %% exhaustion attacks. All legitimate constructor atoms are pre-

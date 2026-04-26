@@ -244,10 +244,10 @@ let assert Ok(counter) =
   ssr.call(
     handle: dispatch.handle,
     handler_ctx:,
-    module: "shared/messages",
+    module: "rpc",
     msg: GetCounter,
     expect: fn(resp) {
-      let assert CounterUpdated(Ok(n)) = resp
+      let assert Ok(n) = resp
       n
     },
   )

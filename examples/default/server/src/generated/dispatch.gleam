@@ -25,7 +25,7 @@ pub fn handle(
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
-    Ok(#("shared/router", request_id, msg)) -> {
+    Ok(#("rpc", request_id, msg)) -> {
       case wire.variant_tag(msg) {
         Ok("ping") -> {
           let typed_msg: ClientMsg = wire.coerce(msg)
@@ -39,7 +39,7 @@ pub fn handle(
         Ok(tag) -> #(
           wire.tag_response(
             request_id:,
-            data: wire.encode(Error(UnknownFunction("shared/router." <> tag))),
+            data: wire.encode(Error(UnknownFunction("rpc." <> tag))),
           ),
           None,
           handler_ctx,

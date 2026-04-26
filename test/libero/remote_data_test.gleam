@@ -120,9 +120,9 @@ pub fn is_loading_false_for_not_asked_test() {
 
 // -- from_response (response decoding) --
 //
-// Wire shape under handler-as-contract: Result(Result(payload, domain), RpcError)
-// — outer Result is libero's framework envelope, inner Result is the handler's
-// typed return. No MsgFromServer envelope.
+// Wire shape: Result(Result(payload, domain), RpcError) — outer Result
+// is libero's framework envelope, inner Result is the handler's typed
+// return.
 
 pub type Item {
   Item(id: Int, title: String)

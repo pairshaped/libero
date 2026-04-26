@@ -127,32 +127,11 @@ pub fn derive_module_path(file_path file_path: String) -> String {
 }
 
 /// Extract the last path segment from a module path.
-/// E.g. `shared/todos` -> `todos`, `todos` -> `todos`.
+/// E.g. `shared/items` -> `items`, `items` -> `items`.
 pub fn last_module_segment(module_path module_path: String) -> String {
   string.split(module_path, "/")
   |> list.last
   |> result.unwrap(or: module_path)
-}
-
-/// Find the module path of the alphabetically first .gleam file in the shared
-/// src directory. Used by the endpoint convention to determine the wire
-/// envelope module path.
-///
-/// The choice is arbitrary but stable (walk_directory sorts its output), which
-/// is what the wire envelope needs. For projects with multiple shared modules,
-/// callers should consider exposing a config knob; today the auto-detection
-/// just picks the first one alphabetically.
-pub fn scan_shared_module_path(
-  shared_src shared_src: String,
-) -> Result(String, Nil) {
-  case walk_directory(path: shared_src) {
-    Ok(files) ->
-      case list.first(files) {
-        Ok(file_path) -> Ok(derive_module_path(file_path: file_path))
-        Error(Nil) -> Error(Nil)
-      }
-    Error(_) -> Error(Nil)
-  }
 }
 
 // ---------- Handler endpoint scanning ----------
@@ -245,8 +224,8 @@ fn parse_endpoints(
 }
 
 /// Build a map from unqualified type names to the FULL module path of
-/// their import. e.g. `import shared/messages.{type Todo}` produces
-/// {"Todo": "shared/messages"}. Used by structured type resolution
+/// their import. e.g. `import shared/items.{type Item}` produces
+/// {"Item": "shared/items"}. Used by structured type resolution
 /// where downstream codegen needs the full path for decoder function
 /// naming (`decoder_fn_name(module_path, type_name)`).
 fn build_type_import_map(

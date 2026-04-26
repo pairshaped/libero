@@ -9,14 +9,13 @@
 // work on them. Custom type decoding is handled by the typed decoder
 // generated per consumer (rpc_decoders_ffi.mjs).
 
-import { getMsgFromServerDecoder } from "./decoders_prelude.mjs";
 import { Ok, Error as ResultError, CustomType, Empty, NonEmpty, BitArray } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import {
   from_list as dictFromList,
   to_list as dictToList,
 } from "../../gleam_stdlib/gleam/dict.mjs";
-import { InternalError, MalformedRequest, UnknownFunction } from "./error.mjs";
+import { InternalError } from "./error.mjs";
 
 // ---------- Error names ----------
 //
@@ -941,36 +940,6 @@ function makeConnectionError(message) {
   return new ResultError(new InternalError("", message));
 }
 
-function decodeRawString(term) {
-  if (term && term.__liberoRawBinary === true && term.rawBuffer instanceof Uint8Array) {
-    return utf8Decoder.decode(term.rawBuffer);
-  }
-  return term;
-}
-
-// Reconstruct a Gleam RpcError class instance from a raw ETF-decoded term.
-// 0-arity variants arrive as a bare atom string; variants with fields
-// arrive as atom-tagged arrays. Wire shape matches libero/error.gleam:
-//   "malformed_request"                -> MalformedRequest
-//   ["unknown_function", name]         -> UnknownFunction(name)
-//   ["internal_error", traceId, msg]   -> InternalError(traceId, msg)
-function decodeRpcError(term) {
-  if (term === "malformed_request") return new MalformedRequest();
-  if (!Array.isArray(term)) {
-    return new InternalError("", "Malformed RpcError: " + String(term));
-  }
-  switch (term[0]) {
-    case "malformed_request": return new MalformedRequest();
-    case "unknown_function": return new UnknownFunction(decodeRawString(term[1]));
-    case "internal_error": return new InternalError(
-      decodeRawString(term[1]),
-      decodeRawString(term[2]),
-    );
-    default:
-      return new InternalError("", "Unknown RpcError variant: " + String(term[0]));
-  }
-}
-
 function clearAllPending(reason) {
   const error = makeConnectionError(reason);
   for (const entry of pendingSends) {
@@ -1060,28 +1029,13 @@ function ensureSocket(url) {
     const payload = bytes.slice(1);
 
     if (tag === 0x01) {
-      // Push frame: payload is ETF-encoded {module, MsgFromServer_value}.
-      // The typed decoder (registered by rpc_decoders_ffi.mjs at module load)
-      // decodes raw bytes and resolves the correct constructor per type.
-      const typedDecoder = getMsgFromServerDecoder();
-      let decodedModule, decodedValue;
-      if (typedDecoder) {
-        const raw = decode_value_raw(payload);
-        // raw is a 2-element JS array: [moduleName, rawMsgFromServerTerm]
-        if (raw && raw[0] !== undefined && raw[1] !== undefined) {
-          decodedModule = decodeRawString(raw[0]);
-          decodedValue = typedDecoder(raw[1]);
-        }
-      } else {
-        const decoded = decode_value(payload);
-        if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
-          decodedModule = decoded[0];
-          decodedValue = decoded[1];
-        }
-      }
-      if (decodedModule !== undefined && decodedValue !== undefined) {
-        const handler = pushHandlers.get(decodedModule);
-        if (handler) handler(decodedValue);
+      // Push frame: payload is ETF-encoded {module, value}. The handler
+      // registered via rpc.update_from_server receives the decoded value
+      // through the global ctor registry.
+      const decoded = decode_value(payload);
+      if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
+        const handler = pushHandlers.get(decoded[0]);
+        if (handler) handler(decoded[1]);
       }
       return;
     }
@@ -1096,23 +1050,9 @@ function ensureSocket(url) {
     const requestId = view.getUint32(1);
     const responsePayload = bytes.slice(5);
 
-    let decoded;
-    const typedDecoder = getMsgFromServerDecoder();
-    if (typedDecoder) {
-      const raw = decode_value_raw(responsePayload);
-      if (Array.isArray(raw) && raw[0] === "ok" && raw[1] !== undefined) {
-        const typedVariant = typedDecoder(raw[1]);
-        decoded = new Ok(typedVariant);
-      } else if (Array.isArray(raw) && raw[0] === "error" && raw[1] !== undefined) {
-        decoded = new ResultError(decodeRpcError(raw[1]));
-      } else {
-        decoded = decode_value(responsePayload);
-      }
-    } else {
-      // Endpoint convention: per-endpoint decoders expect fully raw ETF
-      // (atoms as strings, tuples as arrays, no Gleam constructors).
-      decoded = decode_value_raw(responsePayload);
-    }
+    // Per-endpoint decoders expect fully raw ETF (atoms as strings,
+    // tuples as arrays, no Gleam constructors).
+    const decoded = decode_value_raw(responsePayload);
 
     const entry = responseCallbacks.get(requestId);
     if (entry) {
@@ -1173,8 +1113,8 @@ export function registerOnDisconnect(callback) {
  * timeout — if no response arrives, the callback receives an
  * InternalError so the UI doesn't hang indefinitely.
  * @param {string} url WebSocket URL (typically from rpc_config)
- * @param {string} module shared module path (e.g. "shared/messages")
- * @param {any} msg the typed MsgFromClient value to encode and send
+ * @param {string} module wire envelope string (codegen emits "rpc")
+ * @param {any} msg the typed ClientMsg value to encode and send
  * @param {(result: any) => void} callback invoked with the decoded Result
  */
 export function send(url, module, msg, callback) {

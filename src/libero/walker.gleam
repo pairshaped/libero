@@ -97,8 +97,9 @@ fn is_primitive_type(name: String) -> Bool {
 }
 
 /// Walk all exported custom types from a list of shared source files.
-/// Used by the endpoint convention where there's no MsgFromClient/MsgFromServer
-/// to seed from. Instead, we walk all exported types in shared/.
+/// Seeds from every public type in shared/, since the codegen pipeline
+/// needs decoders for any type that may appear in a handler's params or
+/// return type.
 pub fn walk_shared_types(
   shared_src shared_src: String,
 ) -> Result(List(DiscoveredType), List(GenError)) {

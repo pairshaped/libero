@@ -33,14 +33,13 @@ pub type SsrError {
 /// strips the wire framing, and passes the response through the
 /// `expect` function to extract the desired value.
 ///
-/// With handler-as-contract, the response is the handler's return
-/// type (e.g. `Result(Int, Nil)`), not a wrapped MsgFromServer.
+/// The response is the handler's return type (e.g. `Result(Int, Nil)`).
 ///
 /// ```gleam
 /// ssr.call(
 ///   handle: dispatch.handle,
 ///   handler_ctx:,
-///   module: "shared/messages",
+///   module: "rpc",
 ///   msg: GetCounter,
 ///   expect: fn(resp) {
 ///     let assert Ok(n) = resp

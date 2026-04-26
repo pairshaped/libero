@@ -1213,7 +1213,7 @@ test("FloatRegistry", "registry roundtrip: whole-number floats preserved BEAM â†
 // RpcError envelope cross-runtime tests
 // ============================================================
 //
-// Response frame wire shape: Result(MsgFromServer, RpcError).
+// Response frame wire shape: Result(handler_return, RpcError).
 // Error variants per libero/error.gleam:
 //   malformed_request                 -> MalformedRequest (bare atom)
 //   {unknown_function, name}          -> UnknownFunction(name)
@@ -1236,7 +1236,7 @@ testDecode("Error(InternalError) envelope",
     assert.deepEqual(r, ["error", ["internal_error", "trace-123", "boom"]]);
   });
 
-testDecode("Ok(MsgFromServer) envelope (custom type payload)",
+testDecode("Ok(custom_type) envelope (handler return payload)",
   "{ok, {items_loaded, [{item, 1, <<\"apple\">>}]}}", r => {
     assert.deepEqual(r, ["ok", ["items_loaded", [["item", 1, "apple"]]]]);
   });

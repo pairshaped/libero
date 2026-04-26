@@ -47,11 +47,7 @@ pub fn join_and_receive_push_test() {
   push.join(topic: "test_push_join")
 
   send_from_other_process(fn() {
-    push.send_to_clients(
-      topic: "test_push_join",
-      module: "shared/messages",
-      msg: "hello",
-    )
+    push.send_to_clients(topic: "test_push_join", module: "rpc", msg: "hello")
   })
 
   let assert Ok(_frame) = receive_push(500)
@@ -67,7 +63,7 @@ pub fn leave_stops_receiving_test() {
   send_from_other_process(fn() {
     push.send_to_clients(
       topic: "test_push_leave",
-      module: "shared/messages",
+      module: "rpc",
       msg: "should not arrive",
     )
   })
@@ -82,7 +78,7 @@ pub fn register_and_send_to_client_test() {
   send_from_other_process(fn() {
     push.send_to_client(
       client_id: "test_push_user_1",
-      module: "shared/messages",
+      module: "rpc",
       msg: "direct",
     )
   })

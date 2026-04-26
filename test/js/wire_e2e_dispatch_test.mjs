@@ -226,7 +226,7 @@ assert.equal(unknownVariant.raw[0], "error");
 assert.equal(unknownVariant.raw[1][0], "unknown_function");
 assert.equal(
   rawBinaryToString(unknownVariant.raw[1][1]),
-  "shared/types.bogus_function",
+  "rpc.bogus_function",
 );
 
 console.log(`wire e2e dispatch test passed (${Object.keys(manifest).length} cases)`);

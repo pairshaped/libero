@@ -6,29 +6,29 @@ import libero/scanner
 import simplifile
 
 pub fn endpoint_dispatch_generates_client_msg_test() {
-  let todo_params = field_type.UserType("shared/messages", "TodoParams", [])
+  let item_params = field_type.UserType("shared/items", "ItemParams", [])
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/handler",
-      fn_name: "get_todos",
+      fn_name: "get_items",
       return_type: field_type.placeholder(),
       params: [],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
-      fn_name: "create_todo",
+      fn_name: "create_item",
       return_type: field_type.placeholder(),
-      params: [#("params", todo_params)],
+      params: [#("params", item_params)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
-      fn_name: "toggle_todo",
+      fn_name: "toggle_item",
       return_type: field_type.placeholder(),
       params: [#("id", field_type.IntField)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
-      fn_name: "delete_todo",
+      fn_name: "delete_item",
       return_type: field_type.placeholder(),
       params: [#("id", field_type.IntField)],
     ),
@@ -38,31 +38,31 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
     codegen.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
-      atoms_module: "todos@generated@rpc_atoms",
+      atoms_module: "checklist@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "shared/messages",
+      shared_module_path: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
   // Must have ClientMsg type with all variants
   let assert True = string.contains(content, "pub type ClientMsg {")
-  let assert True = string.contains(content, "GetTodos")
+  let assert True = string.contains(content, "GetItems")
   // UserType is qualified by its import's last module segment, matching
-  // what the user wrote: `import shared/messages` makes `TodoParams`
-  // render as `messages.TodoParams` in the generated source.
+  // what the user wrote: `import shared/items` makes `ItemParams`
+  // render as `items.ItemParams` in the generated source.
   let assert True =
-    string.contains(content, "CreateTodo(params: messages.TodoParams)")
-  let assert True = string.contains(content, "ToggleTodo(id: Int)")
-  let assert True = string.contains(content, "DeleteTodo(id: Int)")
+    string.contains(content, "CreateItem(params: items.ItemParams)")
+  let assert True = string.contains(content, "ToggleItem(id: Int)")
+  let assert True = string.contains(content, "DeleteItem(id: Int)")
 
   // Must route to handler functions
-  let assert True = string.contains(content, "handler.get_todos(handler_ctx:)")
+  let assert True = string.contains(content, "handler.get_items(handler_ctx:)")
   let assert True =
-    string.contains(content, "handler.create_todo(params:, handler_ctx:)")
+    string.contains(content, "handler.create_item(params:, handler_ctx:)")
   let assert True =
-    string.contains(content, "handler.toggle_todo(id:, handler_ctx:)")
+    string.contains(content, "handler.toggle_item(id:, handler_ctx:)")
   let assert True =
-    string.contains(content, "handler.delete_todo(id:, handler_ctx:)")
+    string.contains(content, "handler.delete_item(id:, handler_ctx:)")
 
   // Must NOT reference AppError or MsgFromServer
   let assert False = string.contains(content, "AppError")
@@ -85,7 +85,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/handler",
-      fn_name: "get_todos",
+      fn_name: "get_items",
       return_type: field_type.placeholder(),
       params: [],
     ),
@@ -95,9 +95,9 @@ pub fn endpoint_dispatch_is_server_only_test() {
     codegen.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
-      atoms_module: "todos@generated@rpc_atoms",
+      atoms_module: "checklist@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "shared/messages",
+      shared_module_path: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 

@@ -68,7 +68,7 @@ fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
   let _ = rpc_decoders.ensure_decoders
   rpc.send(
     url: rpc_config.ws_url(),
-    module: "shared/router",
+    module: "rpc",
     msg: msg,
     on_response: on_response,
   )

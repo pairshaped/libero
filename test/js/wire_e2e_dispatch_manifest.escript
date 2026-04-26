@@ -7,7 +7,7 @@
 %%   erl -noshell -pa <ebin_dirs> -eval "$(cat dispatch_manifest.erl)" > manifest.json
 
 EncodeCall = fun(RequestId, Msg) ->
-  libero_ffi:encode({<<"shared/types">>, RequestId, Msg})
+  libero_ffi:encode({<<"rpc">>, RequestId, Msg})
 end,
 EncodeFrame = fun(Frame) -> binary_to_list(base64:encode(Frame)) end,
 
