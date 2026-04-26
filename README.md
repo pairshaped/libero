@@ -8,7 +8,7 @@ Like server components, but your client is a real SPA with typed RPC, and the sa
 
 ## Getting started
 
-Read the [Getting Started guide](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md). It walks from an empty directory to a working checklist app, with every command and file shown.
+Read the [Getting Started guide](https://github.com/pairshaped/libero/blob/master/docs/getting_started/step_1.md). It walks from an empty directory to a working checklist app, with every command and file shown. When you want persistent storage, follow [Step 2: SQLite](https://github.com/pairshaped/libero/blob/master/docs/getting_started/step_2.md).
 
 The rest of this README explains what libero is and how it works.
 
@@ -294,7 +294,7 @@ Libero is a good fit when:
 
 ## Examples
 
-- [`examples/checklist`](examples/checklist) -- SSR-hydrated Lustre SPA with CRUD over WebSocket. Output of the [Getting Started guide](GETTING_STARTED.md).
+- [`examples/checklist`](examples/checklist) -- SSR-hydrated Lustre SPA with CRUD over WebSocket. Output of the [Getting Started guide](docs/getting_started/step_1.md).
 - [`examples/default`](examples/default) -- Bare SSR scaffold with one ping handler. The starting point `bin/new` clones.
 
 ## Prior Art & Credits

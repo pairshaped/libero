@@ -1,35 +1,30 @@
-# Getting Started with Libero + SQLite
+# Getting Started with Libero
 
-This guide picks up where [Getting Started](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md) left off. The same checklist app, but with state stored in SQLite instead of an in-memory list. Same handler signatures, same client code, persistent data. The Getting Started guide is recommended reading first; this one assumes you've seen the basic shape and now want a real database.
-
-You can also start fresh from this guide if you've used libero before.
-
-This guide walks from an empty directory to a working checklist app: SQLite on the server, typed RPC over WebSocket, and a Lustre SPA in the browser. Every command and every file is shown.
+This guide walks you from an empty directory to a working checklist app: typed RPC over WebSocket and a Lustre SPA in the browser, with state held in memory on the server. Every command and every file is shown.
 
 By the end you will have:
 
 - A scaffolded libero project using the three-peer layout (`server/`, `shared/`, `clients/web/`).
-- Marmot generating Gleam query functions from `.sql` files.
-- Four RPC endpoints (`get_items`, `create_item`, `toggle_item`, `delete_item`) backed by SQLite.
+- Four RPC endpoints (`get_items`, `create_item`, `toggle_item`, `delete_item`) backed by an in-memory list.
 - A Lustre client that hydrates from server-rendered HTML and updates over WebSocket.
-- A handler test that exercises the database in memory.
+- A handler test that exercises the in-memory state.
 
-This guide assumes you've worked through the [Gleam tour](https://tour.gleam.run) so syntax like `pub fn`, `Result`, and labelled arguments looks familiar. Libero and marmot are explained as they appear.
+This guide assumes you've worked through the [Gleam tour](https://tour.gleam.run) so syntax like `pub fn`, `Result`, and labelled arguments looks familiar. Libero is explained as it appears.
+
+> Want persistent storage? Finish this guide, then continue with [Step 2: Persistent Storage with SQLite](step_2.md). It swaps the in-memory list for SQLite + marmot-generated queries without changing your handler signatures or client code.
 
 ## Prerequisites
 
-You need three tools installed:
+You need two tools installed:
 
 - **Gleam** (1.5 or newer): the language compiler. Install from [gleam.run/getting-started](https://gleam.run/getting-started/installing/).
 - **Erlang/OTP** (27 or newer): the BEAM runtime that gleam compiles to for the server. The Gleam install instructions cover this.
-- **sqlite3 CLI**: the command-line tool for creating the database file. On macOS it is preinstalled; on Linux install via your package manager (`apt install sqlite3` or similar).
 
 Confirm each tool:
 
 ```bash
 gleam --version
 erl -version
-sqlite3 --version
 ```
 
 ## 1. Scaffold the project
@@ -100,128 +95,7 @@ The four scripts in `bin/` are composable:
 
 Use `bin/dev` when you've changed handler signatures or shared types. Use `bin/server` alone when you've only changed handler bodies.
 
-## 3. Add marmot to the server
-
-Marmot reads SQL files at build time and generates typed Gleam query functions. It needs sqlight at runtime to talk to SQLite. Add both:
-
-```bash
-cd server
-gleam add marmot --dev
-gleam add sqlight
-cd ..
-```
-
-Marmot is a dev dependency because it's only needed to generate code, not to run the server. Sqlight ships in your release because the server opens connections at runtime.
-
-Open `server/gleam.toml` and append a marmot config block at the end:
-
-```toml
-[tools.marmot]
-database = "data.db"
-```
-
-Marmot uses this path to introspect column types when generating decoders. The same file becomes the runtime database in step 5.
-
-## 4. Create the SQLite database
-
-In `server/`, write the schema:
-
-```bash
-cd server
-cat > schema.sql <<'EOF'
-CREATE TABLE items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  completed BOOLEAN NOT NULL DEFAULT 0
-);
-EOF
-sqlite3 data.db ".read schema.sql"
-sqlite3 data.db ".tables"   # should print: items
-```
-
-`data.db` now sits in `server/`. The runtime server opens it from this same path, so leave it where it is.
-
-## 5. Write the SQL queries
-
-Marmot looks for `.sql` files at `server/src/<dir>/sql/<name>.sql` and writes Gleam to `server/src/generated/sql/<dir>_sql.gleam`. The middle directory becomes part of the generated module name. Use `server` so the generated module is called `server_sql`:
-
-```bash
-mkdir -p src/server/sql
-
-cat > src/server/sql/list_items.sql <<'EOF'
--- returns: ItemRow
-SELECT id, title, completed
-FROM items
-ORDER BY id;
-EOF
-
-cat > src/server/sql/create_item.sql <<'EOF'
--- returns: ItemRow
-INSERT INTO items (title, completed)
-VALUES (@title, 0)
-RETURNING id, title, completed;
-EOF
-
-cat > src/server/sql/toggle_item.sql <<'EOF'
--- returns: ItemRow
-UPDATE items
-SET completed = NOT completed
-WHERE id = @id
-RETURNING id, title, completed;
-EOF
-
-cat > src/server/sql/delete_item.sql <<'EOF'
--- returns: DeletedRow
-DELETE FROM items
-WHERE id = @id
-RETURNING id;
-EOF
-```
-
-Three things worth noting about the annotations and parameters:
-
-- The `-- returns: <Name>Row` comment must end in `Row`. Marmot enforces this so generated row types are recognisable at a glance.
-- Named parameters use `@name` syntax. Marmot maps these to labelled arguments in the generated function.
-- `delete_item` returns just `id`, so its row type is different from the other three. Hence `DeletedRow`.
-
-## 6. Generate query code
-
-Still in `server/`, run marmot:
-
-```bash
-gleam run -m marmot
-```
-
-You'll see:
-
-```
-  wrote src/generated/sql/server_sql.gleam
-Generated 2 module(s)
-```
-
-Look at what marmot generated:
-
-```bash
-cat src/generated/sql/server_sql.gleam | head -25
-```
-
-You'll see two row types and four query functions. The shape of `list_items`:
-
-```gleam
-pub fn list_items(
-  db db: sqlight.Connection,
-) -> Result(List(ItemRow), sqlight.Error)
-```
-
-Every query function takes `db` as its first labelled argument and returns `Result(List(<RowType>), sqlight.Error)`. Inserts and updates that use `RETURNING` give you back the affected rows in the same shape. Now you can call them from handlers.
-
-Return to the project root:
-
-```bash
-cd ..
-```
-
-## 7. Define the shared types
+## 3. Define the shared types
 
 Domain types live in `shared/` because both the server (in handler signatures) and the client (in view code) reference them. Replace `shared/src/shared/types.gleam`:
 
@@ -237,13 +111,12 @@ pub type ItemParams {
 pub type ItemError {
   NotFound
   TitleRequired
-  DatabaseError
 }
 ```
 
 `Item` is the domain object. `ItemParams` is the input shape for `create_item`. `ItemError` is the typed error returned when something goes wrong. Libero uses these directly: `ItemError` shows up on the client as `Failure(NotFound)`, no string parsing required.
 
-## 8. Update the shared views
+## 4. Update the shared views
 
 The view function lives in `shared/` so the server can render it during SSR and the client can render it during hydration. Replace `shared/src/shared/views.gleam`:
 
@@ -257,9 +130,7 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import shared/router.{type Route, Home}
-import shared/types.{
-  type Item, type ItemError, DatabaseError, NotFound, TitleRequired,
-}
+import shared/types.{type Item, type ItemError, NotFound, TitleRequired}
 
 pub type Model {
   Model(
@@ -387,68 +258,47 @@ fn format_error(err: ItemError) -> String {
   case err {
     NotFound -> "That item is gone."
     TitleRequired -> "Title is required."
-    DatabaseError -> "Database error. Try again."
   }
 }
 ```
 
 `Model` holds the current route, the item list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
 
-## 9. Open the database in handler_context
+## 5. Wire the in-memory store into handler_context
 
-Every libero handler receives a `HandlerContext`. It's the type you use to share things across handlers, like a database connection. Replace `server/src/handler_context.gleam`:
+Every libero handler receives a `HandlerContext`. It's the type you use to share things across handlers. For this guide that's just a list of items and a counter for the next id. Replace `server/src/handler_context.gleam`:
 
 ```gleam
-import sqlight
+import shared/types.{type Item}
 
 pub type HandlerContext {
-  HandlerContext(db: sqlight.Connection)
+  HandlerContext(items: List(Item), next_id: Int)
 }
 
-pub fn new(db db: sqlight.Connection) -> HandlerContext {
-  HandlerContext(db:)
+pub fn new() -> HandlerContext {
+  HandlerContext(items: [], next_id: 1)
 }
 ```
 
-Now the server entry must open the connection and pass it in. Edit `server/src/my_checklist.gleam`. Find this line:
+A note on lifetime: this state lives per WebSocket connection. Refresh the page or open a second tab and you start with an empty list. That's fine for a getting-started, and [Step 2](step_2.md) shows how to make state persist across reloads.
 
-```gleam
-let handler_ctx = handler_context.new()
-```
-
-Change it to:
-
-```gleam
-let assert Ok(db) = sqlight.open("file:data.db")
-let handler_ctx = handler_context.new(db:)
-```
-
-And add `import sqlight` to the imports near the top of the file (the imports are alphabetised; insert it after `import shared/router`).
-
-`sqlight.open` returns `Result(Connection, Error)`. The `let assert` panics with a clear message if the database can't be opened. For a single-process server this is fine. A production app would handle the error and exit cleanly.
-
-## 10. Write the RPC handlers
+## 6. Write the RPC handlers
 
 This is where libero's "handler as contract" pattern shows up: every public function in `server/src/handler.gleam` whose last parameter is `HandlerContext` and whose return type is `#(Result(value, error), HandlerContext)` becomes an RPC endpoint automatically. No registration, no routing tables.
 
 Replace `server/src/handler.gleam`:
 
 ```gleam
-import generated/sql/server_sql
 import gleam/list
-import handler_context.{type HandlerContext}
+import handler_context.{type HandlerContext, HandlerContext}
 import shared/types.{
-  type Item, type ItemError, type ItemParams, DatabaseError, Item, NotFound,
-  TitleRequired,
+  type Item, type ItemError, type ItemParams, Item, NotFound, TitleRequired,
 }
 
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  case server_sql.list_items(db: handler_ctx.db) {
-    Ok(rows) -> #(Ok(list.map(rows, row_to_item)), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
-  }
+  #(Ok(handler_ctx.items), handler_ctx)
 }
 
 pub fn create_item(
@@ -457,12 +307,15 @@ pub fn create_item(
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
     "" -> #(Error(TitleRequired), handler_ctx)
-    title ->
-      case server_sql.create_item(db: handler_ctx.db, title:) {
-        Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
-        Ok(_) -> #(Error(DatabaseError), handler_ctx)
-        Error(_) -> #(Error(DatabaseError), handler_ctx)
-      }
+    title -> {
+      let item = Item(id: handler_ctx.next_id, title:, completed: False)
+      let new_state =
+        HandlerContext(
+          items: list.append(handler_ctx.items, [item]),
+          next_id: handler_ctx.next_id + 1,
+        )
+      #(Ok(item), new_state)
+    }
   }
 }
 
@@ -470,11 +323,22 @@ pub fn toggle_item(
   id id: Int,
   handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  case server_sql.toggle_item(db: handler_ctx.db, id:) {
-    Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
-    Ok([]) -> #(Error(NotFound), handler_ctx)
-    Ok(_) -> #(Error(DatabaseError), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
+    Ok(item) -> {
+      let toggled = Item(..item, completed: !item.completed)
+      let new_state =
+        HandlerContext(
+          ..handler_ctx,
+          items: list.map(handler_ctx.items, fn(t) {
+            case t.id == id {
+              True -> toggled
+              False -> t
+            }
+          }),
+        )
+      #(Ok(toggled), new_state)
+    }
   }
 }
 
@@ -482,26 +346,25 @@ pub fn delete_item(
   id id: Int,
   handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  case server_sql.delete_item(db: handler_ctx.db, id:) {
-    Ok([row]) -> #(Ok(row.id), handler_ctx)
-    Ok([]) -> #(Error(NotFound), handler_ctx)
-    Ok(_) -> #(Error(DatabaseError), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
+    Ok(_) -> {
+      let new_state =
+        HandlerContext(
+          ..handler_ctx,
+          items: list.filter(handler_ctx.items, fn(t) { t.id != id }),
+        )
+      #(Ok(id), new_state)
+    }
   }
-}
-
-fn row_to_item(row: server_sql.ItemRow) -> Item {
-  Item(id: row.id, title: row.title, completed: row.completed)
 }
 ```
 
-Note the separation: marmot row types stay inside `server/`, while domain types in `shared/` are what cross the wire. `row_to_item` is the small adapter between the two.
+Each handler returns a new `HandlerContext` with the updated state. Libero threads that new state into the next call, so consecutive WebSocket messages from the same client see the cumulative list.
 
-The `Ok([])` arms on toggle and delete handle the case where the SQL `WHERE id = @id` matches nothing. SQLite returns an empty result set, libero translates that into the typed `NotFound` error.
+## 7. Pre-fetch items during SSR
 
-## 11. Pre-fetch items during SSR
-
-The page renderer can call handlers directly to load data for server-side rendering. The user's first paint then includes the items, no client round-trip needed.
+The page renderer can call handlers directly to build the model for server-side rendering. The user's first paint then includes whatever items exist, no client round-trip needed.
 
 Replace `server/src/page.gleam`:
 
@@ -550,11 +413,11 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
 }
 ```
 
-`load_page` runs on every full-page request. It calls `handler.get_items` directly, threads the resulting `RemoteData` into the model, and returns it. `render_page` wraps the shared view in an HTML shell and embeds the model as base64-encoded ETF for the client to pick up via `read_flags()`.
+`load_page` runs on every full-page request. It calls `handler.get_items` directly using the boot-time state (always empty in this version), threads the resulting `RemoteData` into the model, and returns it. `render_page` wraps the shared view in an HTML shell and embeds the model as base64-encoded ETF for the client to pick up via `read_flags()`.
 
 The `<title>` comes from `views.title(model)` rather than being hardcoded in `render_page`. As you add routes, `views.title` grows alongside `views.view`, and `page.gleam` stays the route-agnostic shell.
 
-## 12. Update the client app
+## 8. Update the client app
 
 The client has two jobs: hydrate from the SSR flags, and handle user actions by calling RPCs and updating the model. Replace `clients/web/src/app.gleam`:
 
@@ -680,47 +543,33 @@ fn view_wrap(model: Model) -> element.Element(ClientMsg) {
 
 `ClientMsg` wraps the shared `Msg` (so user actions from the view reach the update function) plus the four `Got*` variants for RPC responses. `rpc.create_item`, `rpc.toggle_item`, and `rpc.delete_item` are the typed stubs libero generates from your handler signatures. They take an `on_response` callback that receives a `RemoteData(value, error)`.
 
-`remote_data.map` is the helper for updating the loaded list when a single-item response arrives. It is a no-op when the list is in `NotAsked`, `Loading`, `Failure`, or `TransportFailure` states. The trailing `_ -> ` arms for `GotCreated`, `GotToggled`, and `GotDeleted` swallow non-success responses; a real app would surface the error in the UI.
+`remote_data.map` is the helper for updating the loaded list when a single-item response arrives. It is a no-op when the list is in `NotAsked`, `Loading`, `Failure`, or `TransportFailure` states. The trailing arms for `GotCreated`, `GotToggled`, and `GotDeleted` swallow non-success responses; a real app would surface the error in the UI.
 
-## 13. Replace the starter test
+## 9. Replace the starter test
 
-The scaffold ships with a `my_checklist_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler against an in-memory database. Open `server/test/my_checklist_test.gleam`:
+The scaffold ships with a `my_checklist_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler:
 
 ```gleam
 import gleeunit
 import handler
 import handler_context
 import shared/types.{ItemParams}
-import sqlight
 
 pub fn main() {
   gleeunit.main()
 }
 
-pub fn create_item_persists_test() {
-  let assert Ok(db) = sqlight.open(":memory:")
-  let assert Ok(_) =
-    sqlight.exec(
-      "CREATE TABLE items (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         title TEXT NOT NULL,
-         completed BOOLEAN NOT NULL DEFAULT 0
-       )",
-      on: db,
-    )
-  let handler_ctx = handler_context.new(db:)
+pub fn create_item_returns_item_test() {
+  let handler_ctx = handler_context.new()
   let #(result, _) =
-    handler.create_item(
-      params: ItemParams(title: "Buy milk"),
-      handler_ctx:,
-    )
+    handler.create_item(params: ItemParams(title: "Buy milk"), handler_ctx:)
   let assert Ok(item) = result
   let assert "Buy milk" = item.title
   let assert False = item.completed
 }
 ```
 
-`sqlight.open(":memory:")` opens a fresh in-memory database. `sqlight.exec` runs the schema. From there you call the handler exactly as the dispatch layer would. Run it:
+Run it:
 
 ```bash
 bin/test
@@ -728,7 +577,7 @@ bin/test
 
 You'll see one passing test. The point: handlers are plain functions you can test without spinning up the server, the WebSocket, or anything else.
 
-## 14. Run it
+## 10. Run it
 
 You're done editing. Regenerate code, build the client, and start the server:
 
@@ -736,16 +585,15 @@ You're done editing. Regenerate code, build the client, and start the server:
 bin/dev
 ```
 
-Open `http://localhost:8080`. Add an item, toggle it, delete one. Refresh the page and the items are still there because they live in `server/data.db`.
+Open `http://localhost:8080`. Add an item, toggle it, delete one. Items live in memory for as long as the WebSocket stays open. Refresh the page and you start over.
 
 Stop the server with `Ctrl-C`. Restart it with `bin/server` (no codegen or build needed; you didn't change handler signatures or shared types).
 
 ## Where to go next
 
-- The simpler [Getting Started](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md) guide if you want the same app without the database, useful as a reference for the bits that don't change.
-- `examples/checklist` in the libero repo: the same shape with in-memory storage. Good for side-by-side comparison.
+- **Make it persistent**: continue with [Step 2: Persistent Storage with SQLite](step_2.md). It swaps the in-memory list for SQLite storage, with marmot generating typed query functions from `.sql` files. The handler signatures and client code stay the same.
+- `examples/checklist` in the libero repo: the same shape this guide produces, useful as a reference.
 - `examples/default`: the bare scaffold this guide started from.
 - The libero README covers the connection lifecycle (auto-reconnect, push handlers, on_connect/on_disconnect hooks) and the wire format.
-- The marmot docs at `hexdocs.pm/marmot` cover advanced features: positional parameters, custom output paths, and connection configuration via env vars.
 
-You now have the shape every libero+marmot app shares. Adding tables, queries, and routes is more of the same. Welcome aboard.
+You now have the shape every libero app shares. Adding tables, queries, and routes is more of the same. Welcome aboard.

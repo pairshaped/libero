@@ -32,8 +32,8 @@ gleam_erlang = "~> 1.0"
 
 [documentation]
 pages = [
-  { title = "Getting Started", path = "guides/getting-started.html", source = "./GETTING_STARTED.md" },
-  { title = "Getting Started with SQLite", path = "guides/getting-started-with-sqlite.html", source = "./GETTING_STARTED_WITH_SQLITE.md" },
+  { title = "Getting Started", path = "guides/getting-started.html", source = "./docs/getting_started/step_1.md" },
+  { title = "Getting Started, Step 2: SQLite", path = "guides/getting-started-step-2.html", source = "./docs/getting_started/step_2.md" },
 ]
 
 [tools.glinter]
