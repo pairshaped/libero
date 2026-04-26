@@ -1,0 +1,13 @@
+name = "web"
+version = "0.1.0"
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
+shared = { path = "../../shared" }
+lustre = "~> 5.6"
+modem = "~> 2.1"
+libero = { path = "../../../.." }
+
+[dev-dependencies]
+gleeunit = "~> 1.0"

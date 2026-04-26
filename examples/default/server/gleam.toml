@@ -1,0 +1,23 @@
+name = "default"
+version = "0.1.0"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
+gleam_erlang = "~> 1.0"
+gleam_http = "~> 4.0"
+mist = "~> 6.0"
+lustre = "~> 5.6"
+simplifile = "~> 2.0"
+shared = { path = "../shared" }
+libero = { path = "../../.." }
+
+[dev-dependencies]
+gleeunit = "~> 1.0"
+
+[tools.libero]
+port = 8080
+
+[tools.libero.clients.web]
+target = "javascript"
+path = "../clients/web"
