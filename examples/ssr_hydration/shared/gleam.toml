@@ -1,9 +1,0 @@
-name = "shared"
-version = "0.1.0"
-
-# No target specified - compiles to both Erlang and JavaScript.
-
-[dependencies]
-gleam_stdlib = ">= 0.69.0 and < 2.0.0"
-lustre = "~> 5.6"
-libero = { path = "../../../" }

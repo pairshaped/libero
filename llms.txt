@@ -288,7 +288,7 @@ shared/src/shared/
   views.gleam        # view functions, Model, Msg, Route types
 ```
 
-The server entry point (`src/<app>.gleam`) is generated once and never overwritten, so it can be customized to add SSR routes. See `examples/ssr_hydration/` for a working example.
+The server entry point (`src/<app>.gleam`) is generated once and never overwritten, so it can be customized to add SSR routes.
 
 ## What Gets Generated
 
