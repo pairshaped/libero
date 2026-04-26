@@ -11,7 +11,7 @@
 %% because the Erlang compiler optimizes away pure BIF calls whose
 %% results are discarded.
 
--module(todos@generated@rpc_atoms).
+-module(checklist@generated@rpc_atoms).
 -export([ensure/0]).
 
 ensure() ->
@@ -25,18 +25,26 @@ do_ensure() ->
         <<"decode_error">>,
         <<"error">>,
         <<"false">>,
+        <<"home">>,
         <<"internal_error">>,
+        <<"item">>,
+        <<"item_params">>,
         <<"malformed_request">>,
+        <<"model">>,
+        <<"navigate_to">>,
         <<"nil">>,
+        <<"no_op">>,
         <<"none">>,
         <<"not_found">>,
         <<"ok">>,
         <<"some">>,
         <<"title_required">>,
-        <<"todo">>,
-        <<"todo_params">>,
         <<"true">>,
-        <<"unknown_function">>
+        <<"unknown_function">>,
+        <<"user_deleted">>,
+        <<"user_submitted_title">>,
+        <<"user_toggled">>,
+        <<"user_typed">>
     ]),
     persistent_term:put({?MODULE, done}, true),
     nil.

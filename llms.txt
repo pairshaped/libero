@@ -105,43 +105,43 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 // server/src/handler.gleam
 
 import server/handler_context.{type HandlerContext}
-import shared/types.{type Todo, type TodoParams, type TodoError, TitleRequired}
+import shared/types.{type Item, type ItemParams, type ItemError, TitleRequired}
 
-pub fn get_todos(
+pub fn get_items(
   state state: HandlerContext,
-) -> #(Result(List(Todo), TodoError), HandlerContext) {
+) -> #(Result(List(Item), ItemError), HandlerContext) {
   #(Ok(ets_store.all()), state)
 }
 
-pub fn create_todo(
-  params params: TodoParams,
+pub fn create_item(
+  params params: ItemParams,
   state state: HandlerContext,
-) -> #(Result(Todo, TodoError), HandlerContext) {
+) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
     "" -> #(Error(TitleRequired), state)
     title -> #(Ok(insert(title)), state)
   }
 }
 
-pub fn toggle_todo(
+pub fn toggle_item(
   id id: Int,
   state state: HandlerContext,
-) -> #(Result(Todo, TodoError), HandlerContext) {
+) -> #(Result(Item, ItemError), HandlerContext) {
   // ...
 }
 
-pub fn delete_todo(
+pub fn delete_item(
   id id: Int,
   state state: HandlerContext,
-) -> #(Result(Int, TodoError), HandlerContext) {
+) -> #(Result(Int, ItemError), HandlerContext) {
   // ...
 }
 ```
 
 From these signatures, codegen produces:
-- `ClientMsg` type: `GetTodos`, `CreateTodo(params: TodoParams)`, `ToggleTodo(id: Int)`, `DeleteTodo(id: Int)`
+- `ClientMsg` type: `GetItems`, `CreateItem(params: ItemParams)`, `ToggleItem(id: Int)`, `DeleteItem(id: Int)`
 - Dispatch module routing each variant to its handler function
-- Typed client stubs: `rpc.get_todos(on_response: GotTodos)`, `rpc.create_todo(params: .., on_response: GotCreated)`
+- Typed client stubs: `rpc.get_items(on_response: GotItems)`, `rpc.create_item(params: .., on_response: GotCreated)`
 
 The return type `Result(a, e)` maps directly to `RemoteData` on the client:
 - `Ok(value)` becomes `Success(value)`
@@ -154,15 +154,15 @@ Define domain types in `shared/src/shared/`. These are the types used in handler
 ```gleam
 // shared/src/shared/types.gleam
 
-pub type Todo {
-  Todo(id: Int, title: String, completed: Bool)
+pub type Item {
+  Item(id: Int, title: String, completed: Bool)
 }
 
-pub type TodoParams {
-  TodoParams(title: String)
+pub type ItemParams {
+  ItemParams(title: String)
 }
 
-pub type TodoError {
+pub type ItemError {
   NotFound
   TitleRequired
 }
@@ -180,21 +180,21 @@ Rules:
 
 import generated/messages as rpc
 import libero/remote_data.{type RemoteData, Loading, Success, Failure}
-import shared/types.{type Todo, type TodoError, TodoParams}
+import shared/types.{type Item, type ItemError, ItemParams}
 
 pub type Model {
-  Model(todos: RemoteData(List(Todo), TodoError), input: String)
+  Model(items: RemoteData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
-  GotTodos(RemoteData(List(Todo), TodoError))
-  GotCreated(RemoteData(Todo, TodoError))
+  GotItems(RemoteData(List(Item), ItemError))
+  GotCreated(RemoteData(Item, ItemError))
   UserToggled(id: Int)
   UserDeleted(id: Int)
 }
 
 pub fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(todos: Loading, input: ""), rpc.get_todos(on_response: GotTodos))
+  #(Model(items: Loading, input: ""), rpc.get_items(on_response: GotItems))
 }
 ```
 
@@ -202,8 +202,8 @@ Key patterns:
 - Generated stubs return a Lustre `Effect`. Wire encoding handled internally.
 - Each stub takes an `on_response` callback that wraps the decoded `RemoteData` in your `Msg` type.
 - `RemoteData(value, error)` carries typed domain errors: `Failure(NotFound)` not `Failure("string")`.
-- Store `RemoteData` in your model. Assign load responses directly: `GotTodos(rd) -> Model(..model, todos: rd)`.
-- Use `remote_data.map` to update loaded data: `remote_data.map(data: model.todos, transform: fn(todos) { ... })`.
+- Store `RemoteData` in your model. Assign load responses directly: `GotItems(rd) -> Model(..model, items: rd)`.
+- Use `remote_data.map` to update loaded data: `remote_data.map(data: model.items, transform: fn(items) { ... })`.
 - Pattern match all states in the view: `Success`, `Loading`, `Failure`, `NotAsked`.
 
 ### Connection lifecycle
@@ -220,7 +220,7 @@ Pending requests at disconnect time reject with a connection-lost error rather t
 Any BEAM process can call the server over HTTP POST with native ETF:
 
 ```gleam
-let payload = term_to_binary(#("shared/types", GetTodos))
+let payload = term_to_binary(#("shared/types", GetItems))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```

@@ -1,6 +1,6 @@
 # Getting Started with Libero
 
-This guide walks you from an empty directory to a working todo app: typed RPC over WebSocket and a Lustre SPA in the browser, with state held in memory on the server. Every command and every file is shown.
+This guide walks you from an empty directory to a working checklist app: typed RPC over WebSocket and a Lustre SPA in the browser, with state held in memory on the server. Every command and every file is shown.
 
 By the end you will have:
 
@@ -32,24 +32,24 @@ erl -version
 `bin/new` is a small bash script that downloads libero's `examples/default` template and renames it. Run it from anywhere:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s my_todos
-cd my_todos
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s my_checklist
+cd my_checklist
 ```
 
 You now have this layout:
 
 ```
-my_todos/
+my_checklist/
 ├── bin/                 dev/build/server/test scripts
 ├── server/              Erlang server package
 │   ├── gleam.toml
 │   ├── src/
-│   │   ├── my_todos.gleam       server entry (mist + libero wiring)
+│   │   ├── my_checklist.gleam       server entry (mist + libero wiring)
 │   │   ├── handler.gleam        RPC endpoints
 │   │   ├── handler_context.gleam state passed to every handler
 │   │   ├── page.gleam           SSR loader and renderer
 │   │   └── generated/           libero codegen output
-│   └── test/my_todos_test.gleam
+│   └── test/my_checklist_test.gleam
 ├── shared/              cross-target package (compiles to Erlang and JS)
 │   ├── gleam.toml
 │   └── src/shared/
@@ -135,7 +135,7 @@ import shared/types.{type Item, type ItemError, NotFound, TitleRequired}
 pub type Model {
   Model(
     route: Route,
-    todos: RemoteData(List(Item), ItemError),
+    items: RemoteData(List(Item), ItemError),
     input: String,
   )
 }
@@ -165,9 +165,9 @@ fn home_view(model: Model) -> Element(Msg) {
       ]),
     ],
     [
-      html.h1([], [html.text("Todos")]),
+      html.h1([], [html.text("Checklist")]),
       view_form(model.input),
-      view_todos(model.todos),
+      view_items(model.items),
     ],
   )
 }
@@ -191,8 +191,8 @@ fn view_form(input: String) -> Element(Msg) {
   )
 }
 
-fn view_todos(todos: RemoteData(List(Item), ItemError)) -> Element(Msg) {
-  case todos {
+fn view_items(items: RemoteData(List(Item), ItemError)) -> Element(Msg) {
+  case items {
     NotAsked -> element.none()
     Loading -> html.p([], [html.text("Loading…")])
     Failure(err) ->
@@ -256,7 +256,7 @@ fn format_error(err: ItemError) -> String {
 }
 ```
 
-`Model` holds the current route, the todo list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
+`Model` holds the current route, the item list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
 
 ## 5. Wire the in-memory store into handler_context
 
@@ -266,11 +266,11 @@ Every libero handler receives a `HandlerContext`. It's the type you use to share
 import shared/types.{type Item}
 
 pub type HandlerContext {
-  HandlerContext(todos: List(Item), next_id: Int)
+  HandlerContext(items: List(Item), next_id: Int)
 }
 
 pub fn new() -> HandlerContext {
-  HandlerContext(todos: [], next_id: 1)
+  HandlerContext(items: [], next_id: 1)
 }
 ```
 
@@ -292,7 +292,7 @@ import shared/types.{
 pub fn get_items(
   state state: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(state.todos), state)
+  #(Ok(state.items), state)
 }
 
 pub fn create_item(
@@ -305,7 +305,7 @@ pub fn create_item(
       let item = Item(id: state.next_id, title:, completed: False)
       let new_state =
         HandlerContext(
-          todos: list.append(state.todos, [item]),
+          items: list.append(state.items, [item]),
           next_id: state.next_id + 1,
         )
       #(Ok(item), new_state)
@@ -317,14 +317,14 @@ pub fn toggle_item(
   id id: Int,
   state state: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  case list.find(state.todos, fn(t) { t.id == id }) {
+  case list.find(state.items, fn(t) { t.id == id }) {
     Error(_) -> #(Error(NotFound), state)
     Ok(item) -> {
       let toggled = Item(..item, completed: !item.completed)
       let new_state =
         HandlerContext(
           ..state,
-          todos: list.map(state.todos, fn(t) {
+          items: list.map(state.items, fn(t) {
             case t.id == id {
               True -> toggled
               False -> t
@@ -340,13 +340,13 @@ pub fn delete_item(
   id id: Int,
   state state: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  case list.find(state.todos, fn(t) { t.id == id }) {
+  case list.find(state.items, fn(t) { t.id == id }) {
     Error(_) -> #(Error(NotFound), state)
     Ok(_) -> {
       let new_state =
         HandlerContext(
           ..state,
-          todos: list.filter(state.todos, fn(t) { t.id != id }),
+          items: list.filter(state.items, fn(t) { t.id != id }),
         )
       #(Ok(id), new_state)
     }
@@ -356,9 +356,9 @@ pub fn delete_item(
 
 Each handler returns a new `HandlerContext` with the updated state. Libero threads that new state into the next call, so consecutive WebSocket messages from the same client see the cumulative list.
 
-## 7. Pre-fetch todos during SSR
+## 7. Pre-fetch items during SSR
 
-The page renderer can call handlers directly to build the model for server-side rendering. The user's first paint then includes whatever todos exist, no client round-trip needed.
+The page renderer can call handlers directly to build the model for server-side rendering. The user's first paint then includes whatever items exist, no client round-trip needed.
 
 Replace `server/src/page.gleam`:
 
@@ -382,11 +382,11 @@ pub fn load_page(
   state: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
   let #(result, _) = handler.get_items(state:)
-  let todos = case result {
+  let items = case result {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
   }
-  Ok(Model(route:, todos:, input: ""))
+  Ok(Model(route:, items:, input: ""))
 }
 
 pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
@@ -397,7 +397,7 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
         attribute.name("viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
       ]),
-      html.title([], "Todos"),
+      html.title([], "Checklist"),
     ]),
     html.body([], [
       html.div([attribute.id("app")], [views.view(model)]),
@@ -489,11 +489,11 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
       model,
       rpc.delete_item(id:, on_response: GotDeleted),
     )
-    GotItems(rd) -> #(Model(..model, todos: rd), effect.none())
+    GotItems(rd) -> #(Model(..model, items: rd), effect.none())
     GotCreated(Success(item)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.append(items, [item])
         }),
       ),
@@ -502,7 +502,7 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
     GotToggled(Success(updated)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.map(items, fn(it) {
             case it.id == updated.id {
               True -> updated
@@ -516,7 +516,7 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
     GotDeleted(Success(id)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.filter(items, fn(it) { it.id != id })
         }),
       ),
@@ -539,7 +539,7 @@ fn view_wrap(model: Model) -> element.Element(ClientMsg) {
 
 ## 9. Replace the starter test
 
-The scaffold ships with a `my_todos_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler:
+The scaffold ships with a `my_checklist_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler:
 
 ```gleam
 import gleeunit
@@ -577,14 +577,14 @@ You're done editing. Regenerate code, build the client, and start the server:
 bin/dev
 ```
 
-Open `http://localhost:8080`. Add a todo, toggle it, delete one. Items live in memory for as long as the WebSocket stays open. Refresh the page and you start over.
+Open `http://localhost:8080`. Add an item, toggle it, delete one. Items live in memory for as long as the WebSocket stays open. Refresh the page and you start over.
 
 Stop the server with `Ctrl-C`. Restart it with `bin/server` (no codegen or build needed; you didn't change handler signatures or shared types).
 
 ## Where to go next
 
 - **Make it persistent**: follow the [SQLite follow-up guide](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED_WITH_SQLITE.md). It swaps the in-memory list for SQLite storage, with marmot generating typed query functions from `.sql` files. Same handler signatures, same client code, persistent data.
-- `examples/todos` in the libero repo: the same shape this guide produces, useful as a reference.
+- `examples/checklist` in the libero repo: the same shape this guide produces, useful as a reference.
 - `examples/default`: the bare scaffold this guide started from.
 - The libero README covers the connection lifecycle (auto-reconnect, push handlers, on_connect/on_disconnect hooks) and the wire format.
 

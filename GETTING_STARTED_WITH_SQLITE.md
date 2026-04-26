@@ -1,10 +1,10 @@
 # Getting Started with Libero + SQLite
 
-This guide picks up where [Getting Started](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md) left off. The same todo app, but with state stored in SQLite instead of an in-memory list. Same handler signatures, same client code, persistent data. The Getting Started guide is recommended reading first; this one assumes you've seen the basic shape and now want a real database.
+This guide picks up where [Getting Started](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md) left off. The same checklist app, but with state stored in SQLite instead of an in-memory list. Same handler signatures, same client code, persistent data. The Getting Started guide is recommended reading first; this one assumes you've seen the basic shape and now want a real database.
 
 You can also start fresh from this guide if you've used libero before.
 
-This guide walks from an empty directory to a working todo app: SQLite on the server, typed RPC over WebSocket, and a Lustre SPA in the browser. Every command and every file is shown.
+This guide walks from an empty directory to a working checklist app: SQLite on the server, typed RPC over WebSocket, and a Lustre SPA in the browser. Every command and every file is shown.
 
 By the end you will have:
 
@@ -37,24 +37,24 @@ sqlite3 --version
 `bin/new` is a small bash script that downloads libero's `examples/default` template and renames it. Run it from anywhere:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s my_todos
-cd my_todos
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s my_checklist
+cd my_checklist
 ```
 
 You now have this layout:
 
 ```
-my_todos/
+my_checklist/
 ├── bin/                 dev/build/server/test scripts
 ├── server/              Erlang server package
 │   ├── gleam.toml
 │   ├── src/
-│   │   ├── my_todos.gleam       server entry (mist + libero wiring)
+│   │   ├── my_checklist.gleam       server entry (mist + libero wiring)
 │   │   ├── handler.gleam        RPC endpoints
 │   │   ├── handler_context.gleam state passed to every handler
 │   │   ├── page.gleam           SSR loader and renderer
 │   │   └── generated/           libero codegen output
-│   └── test/my_todos_test.gleam
+│   └── test/my_checklist_test.gleam
 ├── shared/              cross-target package (compiles to Erlang and JS)
 │   ├── gleam.toml
 │   └── src/shared/
@@ -264,7 +264,7 @@ import shared/types.{
 pub type Model {
   Model(
     route: Route,
-    todos: RemoteData(List(Item), ItemError),
+    items: RemoteData(List(Item), ItemError),
     input: String,
   )
 }
@@ -294,9 +294,9 @@ fn home_view(model: Model) -> Element(Msg) {
       ]),
     ],
     [
-      html.h1([], [html.text("Todos")]),
+      html.h1([], [html.text("Checklist")]),
       view_form(model.input),
-      view_todos(model.todos),
+      view_items(model.items),
     ],
   )
 }
@@ -320,8 +320,8 @@ fn view_form(input: String) -> Element(Msg) {
   )
 }
 
-fn view_todos(todos: RemoteData(List(Item), ItemError)) -> Element(Msg) {
-  case todos {
+fn view_items(items: RemoteData(List(Item), ItemError)) -> Element(Msg) {
+  case items {
     NotAsked -> element.none()
     Loading -> html.p([], [html.text("Loading…")])
     Failure(err) ->
@@ -386,7 +386,7 @@ fn format_error(err: ItemError) -> String {
 }
 ```
 
-`Model` holds the current route, the todo list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
+`Model` holds the current route, the item list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
 
 ## 9. Open the database in handler_context
 
@@ -404,7 +404,7 @@ pub fn new(db db: sqlight.Connection) -> HandlerContext {
 }
 ```
 
-Now the server entry must open the connection and pass it in. Edit `server/src/my_todos.gleam`. Find this line:
+Now the server entry must open the connection and pass it in. Edit `server/src/my_checklist.gleam`. Find this line:
 
 ```gleam
 let state = handler_context.new()
@@ -493,9 +493,9 @@ Note the separation: marmot row types stay inside `server/`, while domain types 
 
 The `Ok([])` arms on toggle and delete handle the case where the SQL `WHERE id = @id` matches nothing. SQLite returns an empty result set, libero translates that into the typed `NotFound` error.
 
-## 11. Pre-fetch todos during SSR
+## 11. Pre-fetch items during SSR
 
-The page renderer can call handlers directly to load data for server-side rendering. The user's first paint then includes the todo list, no client round-trip needed.
+The page renderer can call handlers directly to load data for server-side rendering. The user's first paint then includes the items, no client round-trip needed.
 
 Replace `server/src/page.gleam`:
 
@@ -519,11 +519,11 @@ pub fn load_page(
   state: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
   let #(result, _) = handler.get_items(state:)
-  let todos = case result {
+  let items = case result {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
   }
-  Ok(Model(route:, todos:, input: ""))
+  Ok(Model(route:, items:, input: ""))
 }
 
 pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
@@ -534,7 +534,7 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
         attribute.name("viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
       ]),
-      html.title([], "Todos"),
+      html.title([], "Checklist"),
     ]),
     html.body([], [
       html.div([attribute.id("app")], [views.view(model)]),
@@ -626,11 +626,11 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
       model,
       rpc.delete_item(id:, on_response: GotDeleted),
     )
-    GotItems(rd) -> #(Model(..model, todos: rd), effect.none())
+    GotItems(rd) -> #(Model(..model, items: rd), effect.none())
     GotCreated(Success(item)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.append(items, [item])
         }),
       ),
@@ -639,7 +639,7 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
     GotToggled(Success(updated)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.map(items, fn(it) {
             case it.id == updated.id {
               True -> updated
@@ -653,7 +653,7 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
     GotDeleted(Success(id)) -> #(
       Model(
         ..model,
-        todos: remote_data.map(data: model.todos, transform: fn(items) {
+        items: remote_data.map(data: model.items, transform: fn(items) {
           list.filter(items, fn(it) { it.id != id })
         }),
       ),
@@ -676,7 +676,7 @@ fn view_wrap(model: Model) -> element.Element(ClientMsg) {
 
 ## 13. Replace the starter test
 
-The scaffold ships with a `my_todos_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler against an in-memory database. Open `server/test/my_todos_test.gleam`:
+The scaffold ships with a `my_checklist_test.gleam` that tests the old `handler.ping` function. Replace it with a test that exercises a real handler against an in-memory database. Open `server/test/my_checklist_test.gleam`:
 
 ```gleam
 import gleeunit
@@ -728,14 +728,14 @@ You're done editing. Regenerate code, build the client, and start the server:
 bin/dev
 ```
 
-Open `http://localhost:8080`. Add a todo, toggle it, delete one. Refresh the page and the items are still there because they live in `server/data.db`.
+Open `http://localhost:8080`. Add an item, toggle it, delete one. Refresh the page and the items are still there because they live in `server/data.db`.
 
 Stop the server with `Ctrl-C`. Restart it with `bin/server` (no codegen or build needed; you didn't change handler signatures or shared types).
 
 ## Where to go next
 
 - The simpler [Getting Started](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md) guide if you want the same app without the database, useful as a reference for the bits that don't change.
-- `examples/todos` in the libero repo: the same shape with in-memory storage. Good for side-by-side comparison.
+- `examples/checklist` in the libero repo: the same shape with in-memory storage. Good for side-by-side comparison.
 - `examples/default`: the bare scaffold this guide started from.
 - The libero README covers the connection lifecycle (auto-reconnect, push handlers, on_connect/on_disconnect hooks) and the wire format.
 - The marmot docs at `hexdocs.pm/marmot` cover advanced features: positional parameters, custom output paths, and connection configuration via env vars.

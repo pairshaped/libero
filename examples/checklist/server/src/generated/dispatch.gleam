@@ -15,13 +15,13 @@ import libero/wire
 import shared/types
 
 pub type ClientMsg {
-  DeleteTodo(id: Int)
-  ToggleTodo(id: Int)
-  CreateTodo(params: types.TodoParams)
-  GetTodos
+  DeleteItem(id: Int)
+  ToggleItem(id: Int)
+  CreateItem(params: types.ItemParams)
+  GetItems
 }
 
-@external(erlang, "todos@generated@rpc_atoms", "ensure")
+@external(erlang, "checklist@generated@rpc_atoms", "ensure")
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
@@ -29,36 +29,36 @@ pub fn handle(
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
-    Ok(#("shared/types", request_id, msg)) -> {
+    Ok(#("shared/router", request_id, msg)) -> {
       case wire.variant_tag(msg) {
-        Ok("delete_todo")
-        | Ok("toggle_todo")
-        | Ok("create_todo")
-        | Ok("get_todos") -> {
+        Ok("delete_item")
+        | Ok("toggle_item")
+        | Ok("create_item")
+        | Ok("get_items") -> {
           let typed_msg: ClientMsg = wire.coerce(msg)
           case typed_msg {
-            DeleteTodo(id:) ->
+            DeleteItem(id:) ->
               dispatch(state, request_id, fn() {
-                handler_handler.delete_todo(id:, state:)
+                handler_handler.delete_item(id:, state:)
               })
-            ToggleTodo(id:) ->
+            ToggleItem(id:) ->
               dispatch(state, request_id, fn() {
-                handler_handler.toggle_todo(id:, state:)
+                handler_handler.toggle_item(id:, state:)
               })
-            CreateTodo(params:) ->
+            CreateItem(params:) ->
               dispatch(state, request_id, fn() {
-                handler_handler.create_todo(params:, state:)
+                handler_handler.create_item(params:, state:)
               })
-            GetTodos ->
+            GetItems ->
               dispatch(state, request_id, fn() {
-                handler_handler.get_todos(state:)
+                handler_handler.get_items(state:)
               })
           }
         }
         Ok(tag) -> #(
           wire.tag_response(
             request_id:,
-            data: wire.encode(Error(UnknownFunction("shared/types." <> tag))),
+            data: wire.encode(Error(UnknownFunction("shared/router." <> tag))),
           ),
           None,
           state,

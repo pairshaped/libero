@@ -8,31 +8,66 @@ import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array,
 import { Ok, Error as ResultError, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
+import * as _m_shared_router from "../../shared/shared/router.mjs";
 import * as _m_shared_types from "../../shared/shared/types.mjs";
+import * as _m_shared_views from "../../shared/shared/views.mjs";
 
 setResultCtors(Ok, ResultError);
 setOptionCtors(Some, None);
 setListCtors(Empty, NonEmpty);
 setDictFromList(dictFromList);
 
-export function decode_shared_types_todo(term) {
-  return new _m_shared_types.Todo(
+export function decode_shared_router_route(term) {
+  if (term === "home") return new _m_shared_router.Home();
+  throw new DecodeError("unknown variant: " + String(term));
+}
+
+export function decode_shared_types_item(term) {
+  return new _m_shared_types.Item(
     decode_int(term[1]),
     decode_string(term[2]),
     decode_bool(term[3])
   );
 }
 
-export function decode_shared_types_todo_error(term) {
+export function decode_shared_types_item_error(term) {
   if (term === "not_found") return new _m_shared_types.NotFound();
   if (term === "title_required") return new _m_shared_types.TitleRequired();
   throw new DecodeError("unknown variant: " + String(term));
 }
 
-export function decode_shared_types_todo_params(term) {
-  return new _m_shared_types.TodoParams(
+export function decode_shared_types_item_params(term) {
+  return new _m_shared_types.ItemParams(
     decode_string(term[1])
   );
+}
+
+export function decode_shared_views_model(term) {
+  return new _m_shared_views.Model(
+    decode_shared_router_route(term[1]),
+    decode_libero_remote_data_remote_data(term[2]),
+    decode_string(term[3])
+  );
+}
+
+export function decode_shared_views_msg(term) {
+  const tag = Array.isArray(term) ? term[0] : term;
+  switch (tag) {
+    case "navigate_to":
+      return new _m_shared_views.NavigateTo(decode_shared_router_route(term[1]));
+    case "no_op":
+      return new _m_shared_views.NoOp();
+    case "user_typed":
+      return new _m_shared_views.UserTyped(decode_string(term[1]));
+    case "user_submitted_title":
+      return new _m_shared_views.UserSubmittedTitle();
+    case "user_toggled":
+      return new _m_shared_views.UserToggled(decode_int(term[1]));
+    case "user_deleted":
+      return new _m_shared_views.UserDeleted(decode_int(term[1]));
+    default:
+      throw new DecodeError("unknown variant: " + String(tag));
+  }
 }
 
 export function ensure_decoders() { return true; }
@@ -42,49 +77,49 @@ export function ensure_decoders() { return true; }
 
 import { Success as _Success, Failure as _Failure, TransportFailure as _TransportFailure } from "../../libero/libero/remote_data.mjs";
 
-export function decode_response_delete_todo(raw) {
+export function decode_response_delete_item(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
       return new _Success(decode_int(inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_todo_error(inner[1]));
+      return new _Failure(decode_shared_types_item_error(inner[1]));
     }
   }
   return new _TransportFailure("RPC framework error");
 }
 
-export function decode_response_toggle_todo(raw) {
+export function decode_response_toggle_item(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_shared_types_todo(inner[1]));
+      return new _Success(decode_shared_types_item(inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_todo_error(inner[1]));
+      return new _Failure(decode_shared_types_item_error(inner[1]));
     }
   }
   return new _TransportFailure("RPC framework error");
 }
 
-export function decode_response_create_todo(raw) {
+export function decode_response_create_item(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_shared_types_todo(inner[1]));
+      return new _Success(decode_shared_types_item(inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_todo_error(inner[1]));
+      return new _Failure(decode_shared_types_item_error(inner[1]));
     }
   }
   return new _TransportFailure("RPC framework error");
 }
 
-export function decode_response_get_todos(raw) {
+export function decode_response_get_items(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_list_of((t0) => decode_shared_types_todo(t0), inner[1]));
+      return new _Success(decode_list_of((t0) => decode_shared_types_item(t0), inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_todo_error(inner[1]));
+      return new _Failure(decode_shared_types_item_error(inner[1]));
     }
   }
   return new _TransportFailure("RPC framework error");

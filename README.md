@@ -8,7 +8,7 @@ Like server components, but your client is a real SPA with typed RPC, and the sa
 
 ## Getting started
 
-Read the [Getting Started guide](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md). It walks from an empty directory to a working SQLite-backed todo app, with every command and file shown.
+Read the [Getting Started guide](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md). It walks from an empty directory to a working checklist app, with every command and file shown.
 
 The rest of this README explains what libero is and how it works.
 
@@ -63,18 +63,18 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 // server/src/handler.gleam
 
 import server/handler_context.{type HandlerContext}
-import shared/types.{type Todo, type TodoParams, type TodoError}
+import shared/types.{type Item, type ItemParams, type ItemError}
 
-pub fn get_todos(
+pub fn get_items(
   state state: HandlerContext,
-) -> #(Result(List(Todo), TodoError), HandlerContext) {
+) -> #(Result(List(Item), ItemError), HandlerContext) {
   #(Ok(ets_store.all()), state)
 }
 
-pub fn create_todo(
-  params params: TodoParams,
+pub fn create_item(
+  params params: ItemParams,
   state state: HandlerContext,
-) -> #(Result(Todo, TodoError), HandlerContext) {
+) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
     "" -> #(Error(TitleRequired), state)
     title -> #(Ok(insert(title)), state)
@@ -83,9 +83,9 @@ pub fn create_todo(
 ```
 
 From these signatures, Libero generates:
-- A `ClientMsg` type with variants: `GetTodos`, `CreateTodo(params: TodoParams)`
+- A `ClientMsg` type with variants: `GetItems`, `CreateItem(params: ItemParams)`
 - A dispatch module that routes each variant to its handler function
-- Typed client stubs: `rpc.get_todos(on_response: GotTodos)`
+- Typed client stubs: `rpc.get_items(on_response: GotItems)`
 
 The return type `Result(a, e)` maps directly to `RemoteData` on the client:
 - `Ok(value)` becomes `Success(value)`
@@ -98,15 +98,15 @@ Define your domain types in `shared/src/shared/`. These are the types used in ha
 ```gleam
 // shared/src/shared/types.gleam
 
-pub type Todo {
-  Todo(id: Int, title: String, completed: Bool)
+pub type Item {
+  Item(id: Int, title: String, completed: Bool)
 }
 
-pub type TodoParams {
-  TodoParams(title: String)
+pub type ItemParams {
+  ItemParams(title: String)
 }
 
-pub type TodoError {
+pub type ItemError {
   NotFound
   TitleRequired
 }
@@ -119,31 +119,31 @@ The generated stubs let clients send typed messages. Use `RemoteData` with typed
 ```gleam
 import generated/messages as rpc
 import libero/remote_data.{type RemoteData, Failure, Loading, Success}
-import shared/types.{type Todo, type TodoError}
+import shared/types.{type Item, type ItemError}
 
 pub type Model {
-  Model(todos: RemoteData(List(Todo), TodoError), input: String)
+  Model(items: RemoteData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
-  GotTodos(RemoteData(List(Todo), TodoError))
-  GotCreated(RemoteData(Todo, TodoError))
+  GotItems(RemoteData(List(Item), ItemError))
+  GotCreated(RemoteData(Item, ItemError))
   UserToggled(id: Int)
   // ...
 }
 
 fn init(_flags) -> #(Model, Effect(Msg)) {
-  #(Model(todos: Loading, input: ""), rpc.get_todos(on_response: GotTodos))
+  #(Model(items: Loading, input: ""), rpc.get_items(on_response: GotItems))
 }
 ```
 
 In the update function, store load responses directly and use `remote_data.map` to update loaded data:
 
 ```gleam
-GotTodos(rd) -> #(Model(..model, todos: rd), effect.none())
+GotItems(rd) -> #(Model(..model, items: rd), effect.none())
 GotCreated(Success(item)) -> #(
-  Model(..model, todos: remote_data.map(data: model.todos, transform: fn(todos) {
-    list.append(todos, [item])
+  Model(..model, items: remote_data.map(data: model.items, transform: fn(items) {
+    list.append(items, [item])
   })),
   effect.none(),
 )
@@ -152,10 +152,10 @@ GotCreated(Success(item)) -> #(
 In the view, pattern match on all states:
 
 ```gleam
-case model.todos {
+case model.items {
   Loading -> html.text("Loading...")
   Failure(err) -> format_error(err)
-  Success(todos) -> view_todo_list(todos)
+  Success(items) -> view_item_list(items)
   _ -> element.none()
 }
 ```
@@ -236,7 +236,7 @@ Use `bin/dev` after changing handler signatures or shared types. Use `bin/server
 - Serves HTML shell at `/` that loads the first JS client
 
 **Per client (`clients/<name>/src/generated/`):**
-- Typed stubs per handler function (e.g. `rpc.get_todos`, `rpc.create_todo`)
+- Typed stubs per handler function (e.g. `rpc.get_items`, `rpc.create_item`)
 - WebSocket config and typed decoder registration
 - SSR flag reader (for hydration)
 
@@ -279,7 +279,7 @@ The wire contract is shared. The UI surface stays per-client.
 Any BEAM process can call the server over HTTP POST without WebSocket or a Libero dependency:
 
 ```gleam
-let payload = term_to_binary(#("shared/types", GetTodos))
+let payload = term_to_binary(#("shared/types", GetItems))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```
@@ -294,7 +294,8 @@ Libero is a good fit when:
 
 ## Examples
 
-- [`examples/todos`](examples/todos) -- Basic Lustre SPA with CRUD operations and WebSocket RPC
+- [`examples/checklist`](examples/checklist) -- SSR-hydrated Lustre SPA with CRUD over WebSocket. Output of the [Getting Started guide](GETTING_STARTED.md).
+- [`examples/default`](examples/default) -- Bare SSR scaffold with one ping handler. The starting point `bin/new` clones.
 
 ## Prior Art & Credits
 

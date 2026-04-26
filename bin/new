@@ -9,7 +9,7 @@ if [ -z "$NAME" ]; then
   echo ""
   echo "Examples:"
   echo "  ... | sh -s my_app           # uses examples/default"
-  echo "  ... | sh -s my_todos todos   # uses examples/todos"
+  echo "  ... | sh -s my_checklist checklist   # uses examples/checklist"
   exit 1
 fi
 
