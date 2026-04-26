@@ -1,5 +1,5 @@
 import gleam/list
-import server/handler_context.{type HandlerContext, HandlerContext}
+import handler_context.{type HandlerContext, HandlerContext}
 import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 
 // Each pub function below is an RPC endpoint. Libero's scanner detects these

@@ -3,6 +3,7 @@
 //// WebSocket handler for mist. Handles dispatch, push frame
 //// forwarding, and topic cleanup on disconnect.
 
+import generated/dispatch
 import gleam/dynamic/decode
 import gleam/erlang/atom
 import gleam/erlang/process
@@ -11,11 +12,10 @@ import gleam/list
 import gleam/option.{type Option, Some}
 import gleam/result
 import gleam/string
+import handler_context.{type HandlerContext}
 import libero/push
 import libero/ws_logger.{type Logger}
 import mist.{type Connection}
-import server/generated/dispatch
-import server/handler_context.{type HandlerContext}
 
 pub type ConnState {
   ConnState(state: HandlerContext, topics: List(String), logger: Logger)

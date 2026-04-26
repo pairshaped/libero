@@ -40,18 +40,18 @@ export function ensure_decoders() { return true; }
 
 // --- Per-endpoint response decoders ---
 
-import { Success as _Success, Failure as _Failure } from "../../libero/libero/remote_data.mjs";
+import { Success as _Success, Failure as _Failure, TransportFailure as _TransportFailure } from "../../libero/libero/remote_data.mjs";
 
 export function decode_response_delete_todo(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(inner[1]);
+      return new _Success(decode_int(inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
       return new _Failure(decode_shared_types_todo_error(inner[1]));
     }
   }
-  return new _Failure("RPC framework error");
+  return new _TransportFailure("RPC framework error");
 }
 
 export function decode_response_toggle_todo(raw) {
@@ -63,7 +63,7 @@ export function decode_response_toggle_todo(raw) {
       return new _Failure(decode_shared_types_todo_error(inner[1]));
     }
   }
-  return new _Failure("RPC framework error");
+  return new _TransportFailure("RPC framework error");
 }
 
 export function decode_response_create_todo(raw) {
@@ -75,17 +75,17 @@ export function decode_response_create_todo(raw) {
       return new _Failure(decode_shared_types_todo_error(inner[1]));
     }
   }
-  return new _Failure("RPC framework error");
+  return new _TransportFailure("RPC framework error");
 }
 
 export function decode_response_get_todos(raw) {
   if (Array.isArray(raw) && raw[0] === "ok") {
     const inner = raw[1];
     if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_list_of((t) => decode_shared_types_todo(t), inner[1]));
+      return new _Success(decode_list_of((t0) => decode_shared_types_todo(t0), inner[1]));
     } else if (Array.isArray(inner) && inner[0] === "error") {
       return new _Failure(decode_shared_types_todo_error(inner[1]));
     }
   }
-  return new _Failure("RPC framework error");
+  return new _TransportFailure("RPC framework error");
 }

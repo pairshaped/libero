@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Regenerate libero codegen before running.
+cd "$DIR/server"
+gleam run -m libero
+
+# Build the JS client so /web/web/app.mjs is available.
+cd "$DIR/clients/web"
+gleam build --target javascript
+
+# Start the server.
+cd "$DIR/server"
+gleam run

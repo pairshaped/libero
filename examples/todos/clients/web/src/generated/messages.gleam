@@ -3,8 +3,7 @@
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
-import libero/error.{type RpcError}
-import libero/remote_data.{type RemoteData, Failure, Success}
+import libero/remote_data.{type RemoteData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}

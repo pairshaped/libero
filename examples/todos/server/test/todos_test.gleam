@@ -1,7 +1,7 @@
 import gleam/list
 import gleeunit
-import server/handler
-import server/handler_context
+import handler
+import handler_context
 import shared/types.{Todo, TodoParams}
 
 pub fn main() {
