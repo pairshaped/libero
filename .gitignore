@@ -10,3 +10,6 @@ test/fixtures/wire_e2e/src/server/generated/
 test/fixtures/wire_e2e/clients/web/src/generated/
 test/js/.wire_e2e_*.json
 test/js/.wire_e2e_build_root
+
+# Local-only git worktrees for parallel feature work
+.worktrees/
