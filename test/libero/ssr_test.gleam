@@ -1,11 +1,19 @@
 import gleam/bit_array
+import gleam/bytes_tree
 import gleam/dynamic.{type Dynamic}
+import gleam/http
+import gleam/http/request
+import gleam/http/response
+import gleam/int
 import gleam/option.{None, Some}
 import gleam/string
+import gleam/uri as gleam_uri
 import libero/error.{PanicInfo}
 import libero/ssr
 import libero/wire
 import lustre/element as lustre_element
+import lustre/element/html as html_el
+import mist
 
 @external(erlang, "gleam_stdlib", "identity")
 fn coerce(value: a) -> Dynamic
@@ -208,4 +216,160 @@ pub fn document_escapes_xss_in_title_test() {
   // The escaped version should appear instead
   let assert True =
     string.contains(html, "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;")
+}
+
+// --- ssr.handle_request ---
+
+type FakeRoute {
+  HomeRoute
+  PostRoute(id: Int)
+}
+
+type FakeModel {
+  FakeModel(route: FakeRoute, value: Int)
+}
+
+type FakeState {
+  FakeState(default: Int)
+}
+
+fn fake_parse(uri: gleam_uri.Uri) -> Result(FakeRoute, Nil) {
+  case gleam_uri.path_segments(uri.path) {
+    [] | ["home"] -> Ok(HomeRoute)
+    ["posts", id_str] ->
+      case int.parse(id_str) {
+        Ok(id) -> Ok(PostRoute(id))
+        Error(Nil) -> Error(Nil)
+      }
+    _ -> Error(Nil)
+  }
+}
+
+fn fake_render(
+  _route: FakeRoute,
+  model: FakeModel,
+) -> lustre_element.Element(Nil) {
+  html_el.html([], [
+    html_el.body([], [
+      html_el.p([], [html_el.text("value=" <> int.to_string(model.value))]),
+    ]),
+  ])
+}
+
+fn fake_load_ok(
+  _req: request.Request(String),
+  route: FakeRoute,
+  state: FakeState,
+) -> Result(FakeModel, response.Response(mist.ResponseData)) {
+  Ok(FakeModel(route:, value: state.default))
+}
+
+fn fake_load_err(
+  _req: request.Request(String),
+  _route: FakeRoute,
+  _state: FakeState,
+) -> Result(FakeModel, response.Response(mist.ResponseData)) {
+  Error(
+    response.new(302)
+    |> response.set_header("location", "/login")
+    |> response.set_body(mist.Bytes(bytes_tree.new())),
+  )
+}
+
+fn get_request(path: String) -> request.Request(String) {
+  request.new()
+  |> request.set_method(http.Get)
+  |> request.set_path(path)
+}
+
+fn extract_body_string(resp: response.Response(mist.ResponseData)) -> String {
+  case resp.body {
+    mist.Bytes(tree) -> {
+      let bits = bytes_tree.to_bit_array(tree)
+      case bit_array.to_string(bits) {
+        Ok(s) -> s
+        Error(_) -> ""
+      }
+    }
+    _ -> ""
+  }
+}
+
+pub fn handle_request_returns_405_on_post_test() {
+  let req =
+    request.new()
+    |> request.set_method(http.Post)
+    |> request.set_path("/home")
+  let resp =
+    ssr.handle_request(
+      req:,
+      parse: fake_parse,
+      load: fake_load_ok,
+      render: fake_render,
+      state: FakeState(default: 0),
+    )
+  let assert 405 = resp.status
+}
+
+pub fn handle_request_returns_404_when_parse_fails_test() {
+  let req = get_request("/no-such-route")
+  let resp =
+    ssr.handle_request(
+      req:,
+      parse: fake_parse,
+      load: fake_load_ok,
+      render: fake_render,
+      state: FakeState(default: 0),
+    )
+  let assert 404 = resp.status
+}
+
+pub fn handle_request_returns_loader_error_response_test() {
+  let req = get_request("/home")
+  let resp =
+    ssr.handle_request(
+      req:,
+      parse: fake_parse,
+      load: fake_load_err,
+      render: fake_render,
+      state: FakeState(default: 0),
+    )
+  let assert 302 = resp.status
+  let assert Ok("/login") = response.get_header(resp, "location")
+}
+
+pub fn handle_request_renders_200_on_success_test() {
+  let req = get_request("/home")
+  let resp =
+    ssr.handle_request(
+      req:,
+      parse: fake_parse,
+      load: fake_load_ok,
+      render: fake_render,
+      state: FakeState(default: 7),
+    )
+  let assert 200 = resp.status
+  let assert Ok("text/html") = response.get_header(resp, "content-type")
+  let body = extract_body_string(resp)
+  let assert True = string.contains(body, "<!doctype html>")
+  let assert True = string.contains(body, "value=7")
+}
+
+pub fn handle_request_passes_route_with_params_to_loader_test() {
+  let req = get_request("/posts/42")
+  let captured =
+    ssr.handle_request(
+      req:,
+      parse: fake_parse,
+      load: fn(_req, route, _state) {
+        case route {
+          PostRoute(id) -> Ok(FakeModel(route:, value: id))
+          _ -> Ok(FakeModel(route:, value: -1))
+        }
+      },
+      render: fake_render,
+      state: FakeState(default: 0),
+    )
+  let body = extract_body_string(captured)
+  let assert True = string.contains(body, "value=42")
 }

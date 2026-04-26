@@ -6,16 +6,22 @@
 //// Client-side: read and decode flags embedded by the server.
 
 import gleam/bit_array
+import gleam/bytes_tree
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
 import gleam/option.{type Option}
 import gleam/result
 import gleam/string
+import gleam/uri.{type Uri, Uri}
 import libero/error.{type PanicInfo}
 import libero/wire
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
+import mist.{type ResponseData}
 
 pub type SsrError {
   BadResponse
@@ -164,4 +170,75 @@ fn escape_html(text: String) -> String {
   |> string.replace(">", "&gt;")
   |> string.replace("\"", "&quot;")
   |> string.replace("'", "&#39;")
+}
+
+/// Render a server-side page for an HTTP request.
+///
+/// Pipeline: `parse(uri)` -> `load(req, route, state)` -> `render(route, model)` ->
+/// HTML response.
+///
+/// - Non-GET requests get a `405 Method Not Allowed`.
+/// - `parse` returning `Error(Nil)` gets a bare `404 Not Found`. Custom 404
+///   pages: handle the catch-all in your mist router and only call
+///   `handle_request` for paths you recognize.
+/// - `load` returning `Error(response)` returns that exact response — the
+///   loader owns auth redirects, soft 404s with custom bodies, etc.
+/// - `load` returning `Ok(model)` renders the document tree from `render`
+///   into a `200 OK` HTML response.
+///
+/// ```gleam
+/// ssr.handle_request(
+///   req:,
+///   parse: views.parse_route,
+///   load: load_page,
+///   render: render_page,
+///   state:,
+/// )
+/// ```
+pub fn handle_request(
+  req req: Request(body),
+  parse parse: fn(Uri) -> Result(route, Nil),
+  load load: fn(Request(body), route, state) ->
+    Result(model, Response(ResponseData)),
+  render render: fn(route, model) -> Element(msg),
+  state state: state,
+) -> Response(ResponseData) {
+  case req.method {
+    http.Get -> {
+      let uri = request_to_uri(req)
+      case parse(uri) {
+        Error(Nil) -> empty_response(404)
+        Ok(route) ->
+          case load(req, route, state) {
+            Error(response) -> response
+            Ok(model) -> render_response(render(route, model))
+          }
+      }
+    }
+    _ -> empty_response(405)
+  }
+}
+
+fn request_to_uri(req: Request(body)) -> Uri {
+  Uri(
+    scheme: option.None,
+    userinfo: option.None,
+    host: option.None,
+    port: option.None,
+    path: req.path,
+    query: req.query,
+    fragment: option.None,
+  )
+}
+
+fn render_response(el: Element(msg)) -> Response(ResponseData) {
+  let html_str = element.to_document_string(el)
+  response.new(200)
+  |> response.set_header("content-type", "text/html")
+  |> response.set_body(mist.Bytes(bytes_tree.from_string(html_str)))
+}
+
+fn empty_response(status: Int) -> Response(ResponseData) {
+  response.new(status)
+  |> response.set_body(mist.Bytes(bytes_tree.new()))
 }
