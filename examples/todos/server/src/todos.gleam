@@ -31,7 +31,7 @@ pub fn main() {
         http.Post, ["rpc"] -> handle_rpc(req, state, logger)
         _, ["web", ..path] ->
           serve_file(
-            "clients/web/build/dev/javascript/" <> string.join(path, "/"),
+            "../clients/web/build/dev/javascript/" <> string.join(path, "/"),
           )
         _, _ ->
           serve_html(

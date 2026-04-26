@@ -7,10 +7,10 @@ import shared/types.{type Todo, NotFound, TitleRequired, Todo}
 // (3) returns #(Result(value, error), HandlerContext), and (4) all types in
 // the signature come from shared/ or are builtins.
 //
-// These functions can live in any module under src/server/, not just this one.
+// These functions can live in any module under src/, not just this one.
 // Larger apps typically organize handlers into domain modules (e.g.
-// server/users.gleam, server/posts.gleam). The scanner walks all server
-// source files and collects every function that matches the criteria.
+// users.gleam, posts.gleam). The scanner walks all server source files
+// and collects every function that matches the criteria.
 //
 // The codegen reads these signatures and generates:
 //   - A ClientMsg variant per function (e.g. GetTodos, CreateTodo(params: TodoParams))
