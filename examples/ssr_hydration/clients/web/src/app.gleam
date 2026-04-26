@@ -10,7 +10,7 @@ import lustre/effect.{type Effect}
 import modem
 import shared/views.{
   type Model, type Msg, CounterChanged, DecPage, IncPage, Model, NavigateTo,
-  UserClickedAction,
+  NoOp, UserClickedAction,
 }
 
 pub fn main() {
@@ -31,10 +31,11 @@ fn init(flags: Dynamic) -> #(Model, Effect(Msg)) {
 fn on_url_change(uri: Uri) -> Msg {
   case views.parse_route(uri) {
     Ok(route) -> NavigateTo(route)
-    // Modem only fires for in-app same-origin links; if you reach this, your
-    // app has a link whose URL parse_route can't handle. Widen parse_route
-    // rather than silently swallowing.
-    Error(_) -> panic as "on_url_change received a URL parse_route can't handle"
+    // Modem fires on every same-origin link click + popstate. Bad URLs
+    // shouldn't reach here in this app, but if they do we ignore them
+    // (NoOp) rather than crash the runtime. To handle them explicitly,
+    // widen parse_route or add a fallback Route variant.
+    Error(_) -> NoOp
   }
 }
 
@@ -55,6 +56,7 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
     NavigateTo(route) -> #(Model(..model, route:), effect.none())
     CounterChanged(n) -> #(Model(..model, counter: n), effect.none())
+    NoOp -> #(model, effect.none())
   }
 }
 

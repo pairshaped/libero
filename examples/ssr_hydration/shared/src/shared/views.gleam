@@ -23,6 +23,7 @@ pub type Msg {
   UserClickedAction
   NavigateTo(Route)
   CounterChanged(Int)
+  NoOp
 }
 
 pub fn view(model: Model) -> Element(Msg) {
