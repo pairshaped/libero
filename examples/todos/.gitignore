@@ -1,0 +1,5 @@
+*/build/
+*/*/build/
+.env
+*.beam
+erl_crash.dump

@@ -17,7 +17,7 @@ pub fn describe_error(error: ConfigError) -> String {
   \u{2502}
   \u{2502} Namespace must contain only lowercase letters, digits, and underscores
   \u{2502}
-  hint: gleam run -m libero -- gen --namespace=my_ns"
+  hint: gleam run -m libero"
 }
 
 /// How the generated client resolves its WebSocket URL.

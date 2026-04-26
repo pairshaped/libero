@@ -161,7 +161,7 @@ pub fn to_codegen_config(
   \u{2502}
   \u{2502} No client named `" <> client_name <> "` in [tools.libero.clients]
   \u{2502}
-  hint: Add it with: gleam run -m libero -- add " <> client_name <> " --target javascript" }),
+  hint: Add it manually: create clients/" <> client_name <> "/gleam.toml with target = \"javascript\",\n        then add [tools.libero.clients." <> client_name <> "] with target = \"javascript\" to server/gleam.toml." }),
   )
   let app = toml_cfg.name
   let client_generated = "../clients/" <> client.name <> "/src/generated"

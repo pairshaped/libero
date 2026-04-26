@@ -29,7 +29,6 @@ packages = [
 ]
 
 [requirements]
-argv = { version = "~> 1.0" }
 glance = { version = "~> 6.0" }
 gleam_crypto = { version = "~> 1.5" }
 gleam_erlang = { version = "~> 1.0" }

@@ -228,7 +228,6 @@ port = 8080
 
 [tools.libero.clients.web]
 target = "javascript"
-path = "../clients/web"
 ```
 
 ## Commands

@@ -21,7 +21,7 @@ pub fn view(model: Model) -> Element(Msg) {
 
 fn home_view(ping_response: String) -> Element(Msg) {
   html.div([], [
-    html.h1([], [html.text("Hello from default")]),
+    html.h1([], [html.text("Hello from libero")]),
     html.button([event.on_click(UserClickedPing)], [html.text("Ping")]),
     case ping_response {
       "" -> html.p([], [html.text("Click to ping the server.")])
