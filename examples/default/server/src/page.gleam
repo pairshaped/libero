@@ -25,7 +25,7 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
         attribute.name("viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
       ]),
-      html.title([], "libero app"),
+      html.title([], views.title(model)),
     ]),
     html.body([], [
       html.div([attribute.id("app")], [views.view(model)]),

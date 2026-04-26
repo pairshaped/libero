@@ -109,7 +109,9 @@ pub fn log_action(
 
 // Criterion 5 missing: response is not Result(_, _). Wire envelope assumes
 // Result-shaped responses, so this must be filtered out.
-pub fn ping(handler_ctx handler_ctx: HandlerContext) -> #(String, HandlerContext) {
+pub fn ping(
+  handler_ctx handler_ctx: HandlerContext,
+) -> #(String, HandlerContext) {
   #("pong", handler_ctx)
 }
 

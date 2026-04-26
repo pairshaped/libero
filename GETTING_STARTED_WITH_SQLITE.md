@@ -278,6 +278,12 @@ pub type Msg {
   UserDeleted(id: Int)
 }
 
+pub fn title(model: Model) -> String {
+  case model.route {
+    Home -> "Checklist"
+  }
+}
+
 pub fn view(model: Model) -> Element(Msg) {
   case model.route {
     Home -> home_view(model)
@@ -534,7 +540,7 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
         attribute.name("viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
       ]),
-      html.title([], "Checklist"),
+      html.title([], views.title(model)),
     ]),
     html.body([], [
       html.div([attribute.id("app")], [views.view(model)]),
@@ -545,6 +551,8 @@ pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
 ```
 
 `load_page` runs on every full-page request. It calls `handler.get_items` directly, threads the resulting `RemoteData` into the model, and returns it. `render_page` wraps the shared view in an HTML shell and embeds the model as base64-encoded ETF for the client to pick up via `read_flags()`.
+
+The `<title>` comes from `views.title(model)` rather than being hardcoded in `render_page`. As you add routes, `views.title` grows alongside `views.view`, and `page.gleam` stays the route-agnostic shell.
 
 ## 12. Update the client app
 

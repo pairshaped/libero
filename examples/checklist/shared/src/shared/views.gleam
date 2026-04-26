@@ -22,6 +22,12 @@ pub type Msg {
   UserDeleted(id: Int)
 }
 
+pub fn title(model: Model) -> String {
+  case model.route {
+    Home -> "Checklist"
+  }
+}
+
 pub fn view(model: Model) -> Element(Msg) {
   case model.route {
     Home -> home_view(model)
