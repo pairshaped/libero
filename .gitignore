@@ -14,7 +14,3 @@ test/js/.wire_e2e_build_root
 # Local-only git worktrees for parallel feature work
 .worktrees/
 
-# iso_routing test fixture build artifacts
-test/fixtures/iso_routing/build/
-test/fixtures/iso_routing/shared/build/
-test/fixtures/iso_routing/clients/web/build/
