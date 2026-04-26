@@ -50,7 +50,6 @@ fn nav_link(href: String, label: String, active: Bool) -> Element(Msg) {
   html.a(
     [
       attribute.href(href),
-      attribute.attribute("data-navlink", ""),
       ..case active {
         True -> [attribute.class("active")]
         False -> []
@@ -58,13 +57,6 @@ fn nav_link(href: String, label: String, active: Bool) -> Element(Msg) {
     ],
     [html.text(label)],
   )
-}
-
-pub fn route_from_path(path: String) -> Route {
-  case path {
-    "/dec" -> DecPage
-    _ -> IncPage
-  }
 }
 
 /// Parse a URI to a Route. Used by both the server (to route requests)
