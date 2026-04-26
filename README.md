@@ -162,6 +162,34 @@ case model.todos {
 }
 ```
 
+## Connection Management
+
+The WebSocket auto-reconnects with exponential backoff (500ms to 30s with jitter) on unexpected disconnects. Pending requests reject with a connection-lost error when the socket drops. Push handlers persist across reconnects.
+
+Hook into the connection lifecycle:
+
+```gleam
+import libero/rpc
+
+pub type Msg {
+  Connected
+  Disconnected(reason: String)
+  // ...
+}
+
+fn init(_flags) -> #(Model, Effect(Msg)) {
+  #(
+    Model(..),
+    effect.batch([
+      rpc.on_connect(handler: fn() { Connected }),
+      rpc.on_disconnect(handler: Disconnected),
+    ]),
+  )
+}
+```
+
+`on_connect` fires on the initial connection and every successful reconnect, so loading (or reloading) state uses a single code path. `on_disconnect` provides a human-readable reason string suitable for display.
+
 ## Configuration
 
 All config lives in `gleam.toml` under the `[tools.libero]` section:
