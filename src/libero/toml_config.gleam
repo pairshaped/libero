@@ -170,11 +170,10 @@ pub fn to_codegen_config(
     string.replace(app, each: "-", with: "_") <> "@generated@rpc_atoms"
   let atoms_output = toml_cfg.server_atoms_path
   let config_output = client_generated <> "/rpc_config.gleam"
-  // The FFI file at `clients/<name>/src/generated/rpc_decoders_ffi.mjs` is
-  // copied verbatim by gleam to `build/dev/javascript/<name>/generated/`.
-  // From there, 2 levels up reaches `build/dev/javascript/` - the root where
-  // other packages (libero, gleam_stdlib) live. Gleam only rewrites import
-  // paths in .gleam-compiled .mjs files, not in literal .mjs FFI files.
+  // The FFI file lands at build/dev/javascript/<name>/generated/ (Gleam copies
+  // it verbatim from src/generated/). From there, 2 levels up reaches
+  // build/dev/javascript/ - the root where other packages live. Gleam only
+  // rewrites import paths in compiled .mjs files, not in literal FFI files.
   let register_relpath_prefix = "../../"
   let decoders_ffi_output = client_generated <> "/rpc_decoders_ffi.mjs"
   let decoders_gleam_output = client_generated <> "/rpc_decoders.gleam"

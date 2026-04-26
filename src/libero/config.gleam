@@ -76,10 +76,10 @@ pub fn build_config(
 ) -> Result(Config, ConfigError) {
   use namespace <- result.try(validate_namespace(namespace))
   // In the final JS bundle, decoder files land at:
-  //   <bundle_root>/<client_pkg>/client/generated/libero/[<ns>/]rpc_decoders_ffi.mjs
+  //   build/dev/javascript/<client_pkg>/generated/[<ns>/]rpc_decoders_ffi.mjs
   // So from the ffi file's directory, the bundle root is:
-  //   - 4 levels up for no-namespace (client_pkg/client/generated/libero/)
-  //   - 5 levels up for namespaced  (client_pkg/client/generated/libero/<ns>/)
+  //   - 2 levels up for no-namespace (generated/)
+  //   - 3 levels up for namespaced   (generated/<ns>/)
   let #(
     atoms_output,
     atoms_module,
@@ -91,27 +91,18 @@ pub fn build_config(
     None -> #(
       "src/generated@libero@rpc_atoms.erl",
       "generated@libero@rpc_atoms",
-      client_root <> "/src/client/generated/libero/rpc_config.gleam",
-      "../../../../",
-      client_root <> "/src/client/generated/libero/rpc_decoders_ffi.mjs",
-      client_root <> "/src/client/generated/libero/rpc_decoders.gleam",
+      client_root <> "/src/generated/rpc_config.gleam",
+      "../../",
+      client_root <> "/src/generated/rpc_decoders_ffi.mjs",
+      client_root <> "/src/generated/rpc_decoders.gleam",
     )
     Some(ns) -> #(
       "src/generated@libero@" <> ns <> "@rpc_atoms.erl",
       "generated@libero@" <> ns <> "@rpc_atoms",
-      client_root
-        <> "/src/client/generated/libero/"
-        <> ns
-        <> "/rpc_config.gleam",
-      "../../../../../",
-      client_root
-        <> "/src/client/generated/libero/"
-        <> ns
-        <> "/rpc_decoders_ffi.mjs",
-      client_root
-        <> "/src/client/generated/libero/"
-        <> ns
-        <> "/rpc_decoders.gleam",
+      client_root <> "/src/generated/" <> ns <> "/rpc_config.gleam",
+      "../../../",
+      client_root <> "/src/generated/" <> ns <> "/rpc_decoders_ffi.mjs",
+      client_root <> "/src/generated/" <> ns <> "/rpc_decoders.gleam",
     )
   }
   // Paths derived from --shared and --server flags.
@@ -132,8 +123,8 @@ pub fn build_config(
     Some(ns) -> "src/generated/libero/" <> ns
   }
   let client_generated = case namespace {
-    None -> client_root <> "/src/client/generated/libero"
-    Some(ns) -> client_root <> "/src/client/generated/libero/" <> ns
+    None -> client_root <> "/src/generated"
+    Some(ns) -> client_root <> "/src/generated/" <> ns
   }
   let decoders_prelude_import_path =
     register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"

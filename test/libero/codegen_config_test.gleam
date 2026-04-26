@@ -17,15 +17,11 @@ pub fn write_config_full_url_test() {
       server_root: Error(Nil),
     )
   let assert Ok(Nil) =
-    simplifile.create_directory_all(
-      output_dir <> "/src/client/generated/libero",
-    )
+    simplifile.create_directory_all(output_dir <> "/src/generated")
   let assert Ok(Nil) = codegen.write_config(config: cfg)
 
   let assert Ok(content) =
-    simplifile.read(
-      output_dir <> "/src/client/generated/libero/rpc_config.gleam",
-    )
+    simplifile.read(output_dir <> "/src/generated/rpc_config.gleam")
 
   // Should contain the hardcoded URL
   let assert True = string.contains(content, "wss://example.com/ws")
@@ -34,9 +30,7 @@ pub fn write_config_full_url_test() {
 
   // No FFI file should be created for full-url mode
   let assert Error(_) =
-    simplifile.read(
-      output_dir <> "/src/client/generated/libero/rpc_config_ffi.mjs",
-    )
+    simplifile.read(output_dir <> "/src/generated/rpc_config_ffi.mjs")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
@@ -52,15 +46,11 @@ pub fn write_config_path_only_test() {
       server_root: Error(Nil),
     )
   let assert Ok(Nil) =
-    simplifile.create_directory_all(
-      output_dir <> "/src/client/generated/libero",
-    )
+    simplifile.create_directory_all(output_dir <> "/src/generated")
   let assert Ok(Nil) = codegen.write_config(config: cfg)
 
   let assert Ok(content) =
-    simplifile.read(
-      output_dir <> "/src/client/generated/libero/rpc_config.gleam",
-    )
+    simplifile.read(output_dir <> "/src/generated/rpc_config.gleam")
 
   // Should reference the path
   let assert True = string.contains(content, "/ws/admin")
@@ -69,9 +59,7 @@ pub fn write_config_path_only_test() {
 
   // FFI file should exist
   let assert Ok(ffi) =
-    simplifile.read(
-      output_dir <> "/src/client/generated/libero/rpc_config_ffi.mjs",
-    )
+    simplifile.read(output_dir <> "/src/generated/rpc_config_ffi.mjs")
   let assert True = string.contains(ffi, "resolveWsUrl")
   let assert True = string.contains(ffi, "location")
 
