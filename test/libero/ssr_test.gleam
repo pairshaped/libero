@@ -51,7 +51,7 @@ pub fn call_with_expect_extracts_payload_test() {
   let result =
     ssr.call(
       handle: handler,
-      state: Nil,
+      handler_ctx: Nil,
       module: "test",
       msg: "ping",
       expect: fn(resp) { resp },
@@ -69,7 +69,7 @@ pub fn call_expect_transforms_response_test() {
   let result =
     ssr.call(
       handle: handler,
-      state: Nil,
+      handler_ctx: Nil,
       module: "test",
       msg: "ping",
       expect: fn(resp: String) { string.length(resp) },
@@ -90,7 +90,7 @@ pub fn call_returns_bad_response_on_error_response_test() {
   let result: Result(String, ssr.SsrError) =
     ssr.call(
       handle: handler,
-      state: Nil,
+      handler_ctx: Nil,
       module: "test",
       msg: "ping",
       expect: fn(resp) { resp },
@@ -103,7 +103,7 @@ pub fn call_returns_bad_response_on_empty_bytes_test() {
   let result: Result(String, ssr.SsrError) =
     ssr.call(
       handle: handler,
-      state: Nil,
+      handler_ctx: Nil,
       module: "test",
       msg: "ping",
       expect: fn(resp) { resp },
@@ -143,7 +143,7 @@ pub fn call_returns_dispatch_error_on_panic_test() {
   let result: Result(String, ssr.SsrError) =
     ssr.call(
       handle: handler,
-      state: Nil,
+      handler_ctx: Nil,
       module: "test",
       msg: "ping",
       expect: fn(resp) { resp },
@@ -222,9 +222,9 @@ fn fake_render(
 fn fake_load_ok(
   _req: request.Request(String),
   route: FakeRoute,
-  state: FakeState,
+  handler_ctx: FakeState,
 ) -> Result(FakeModel, response.Response(mist.ResponseData)) {
-  Ok(FakeModel(route:, value: state.default))
+  Ok(FakeModel(route:, value: handler_ctx.default))
 }
 
 fn fake_load_err(
@@ -269,7 +269,7 @@ pub fn handle_request_returns_405_on_post_test() {
       parse: fake_parse,
       load: fake_load_ok,
       render: fake_render,
-      state: FakeState(default: 0),
+      handler_ctx: FakeState(default: 0),
     )
   let assert 405 = resp.status
 }
@@ -282,7 +282,7 @@ pub fn handle_request_returns_404_when_parse_fails_test() {
       parse: fake_parse,
       load: fake_load_ok,
       render: fake_render,
-      state: FakeState(default: 0),
+      handler_ctx: FakeState(default: 0),
     )
   let assert 404 = resp.status
 }
@@ -295,7 +295,7 @@ pub fn handle_request_returns_loader_error_response_test() {
       parse: fake_parse,
       load: fake_load_err,
       render: fake_render,
-      state: FakeState(default: 0),
+      handler_ctx: FakeState(default: 0),
     )
   let assert 302 = resp.status
   let assert Ok("/login") = response.get_header(resp, "location")
@@ -309,7 +309,7 @@ pub fn handle_request_renders_200_on_success_test() {
       parse: fake_parse,
       load: fake_load_ok,
       render: fake_render,
-      state: FakeState(default: 7),
+      handler_ctx: FakeState(default: 7),
     )
   let assert 200 = resp.status
   let assert Ok("text/html") = response.get_header(resp, "content-type")
@@ -331,7 +331,7 @@ pub fn handle_request_passes_route_with_params_to_loader_test() {
         }
       },
       render: fake_render,
-      state: FakeState(default: 0),
+      handler_ctx: FakeState(default: 0),
     )
   let body = extract_body_string(captured)
   let assert True = string.contains(body, "value=42")

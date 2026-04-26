@@ -290,23 +290,23 @@ import shared/types.{
 }
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(state.items), state)
+  #(Ok(handler_ctx.items), handler_ctx)
 }
 
 pub fn create_item(
   params params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
-    "" -> #(Error(TitleRequired), state)
+    "" -> #(Error(TitleRequired), handler_ctx)
     title -> {
-      let item = Item(id: state.next_id, title:, completed: False)
+      let item = Item(id: handler_ctx.next_id, title:, completed: False)
       let new_state =
         HandlerContext(
-          items: list.append(state.items, [item]),
-          next_id: state.next_id + 1,
+          items: list.append(handler_ctx.items, [item]),
+          next_id: handler_ctx.next_id + 1,
         )
       #(Ok(item), new_state)
     }
@@ -315,16 +315,16 @@ pub fn create_item(
 
 pub fn toggle_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  case list.find(state.items, fn(t) { t.id == id }) {
-    Error(_) -> #(Error(NotFound), state)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
     Ok(item) -> {
       let toggled = Item(..item, completed: !item.completed)
       let new_state =
         HandlerContext(
-          ..state,
-          items: list.map(state.items, fn(t) {
+          ..handler_ctx,
+          items: list.map(handler_ctx.items, fn(t) {
             case t.id == id {
               True -> toggled
               False -> t
@@ -338,15 +338,15 @@ pub fn toggle_item(
 
 pub fn delete_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  case list.find(state.items, fn(t) { t.id == id }) {
-    Error(_) -> #(Error(NotFound), state)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
     Ok(_) -> {
       let new_state =
         HandlerContext(
-          ..state,
-          items: list.filter(state.items, fn(t) { t.id != id }),
+          ..handler_ctx,
+          items: list.filter(handler_ctx.items, fn(t) { t.id != id }),
         )
       #(Ok(id), new_state)
     }
@@ -379,9 +379,9 @@ import shared/views.{type Model, type Msg, Model}
 pub fn load_page(
   _req: Request(Connection),
   route: Route,
-  state: HandlerContext,
+  handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
-  let #(result, _) = handler.get_items(state:)
+  let #(result, _) = handler.get_items(handler_ctx:)
   let items = case result {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
@@ -552,9 +552,9 @@ pub fn main() {
 }
 
 pub fn create_item_returns_item_test() {
-  let state = handler_context.new()
+  let handler_ctx = handler_context.new()
   let #(result, _) =
-    handler.create_item(params: ItemParams(title: "Buy milk"), state:)
+    handler.create_item(params: ItemParams(title: "Buy milk"), handler_ctx:)
   let assert Ok(item) = result
   let assert "Buy milk" = item.title
   let assert False = item.completed

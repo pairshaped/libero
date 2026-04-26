@@ -108,31 +108,31 @@ import server/handler_context.{type HandlerContext}
 import shared/types.{type Item, type ItemParams, type ItemError, TitleRequired}
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(ets_store.all()), state)
+  #(Ok(ets_store.all()), handler_ctx)
 }
 
 pub fn create_item(
   params params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
-    "" -> #(Error(TitleRequired), state)
-    title -> #(Ok(insert(title)), state)
+    "" -> #(Error(TitleRequired), handler_ctx)
+    title -> #(Ok(insert(title)), handler_ctx)
   }
 }
 
 pub fn toggle_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   // ...
 }
 
 pub fn delete_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
   // ...
 }
@@ -243,7 +243,7 @@ import libero/ssr
 let assert Ok(counter) =
   ssr.call(
     handle: dispatch.handle,
-    state:,
+    handler_ctx:,
     module: "shared/messages",
     msg: GetCounter,
     expect: fn(resp) {
@@ -279,10 +279,10 @@ Handles a full server-side render cycle: parse the URI into a route, load data, 
 pub fn handle_request(
   req req: Request(body),
   parse parse: fn(Uri) -> Result(route, Nil),
-  load load: fn(Request(body), route, state) ->
+  load load: fn(Request(body), route, handler_ctx) ->
     Result(model, Response(ResponseData)),
   render render: fn(route, model) -> Element(msg),
-  state state: state,
+  handler_ctx handler_ctx: state,
 ) -> Response(ResponseData)
 ```
 
@@ -294,7 +294,7 @@ ssr.handle_request(
   parse: router.parse,
   load: page.load_page,
   render: page.render_page,
-  state:,
+  handler_ctx:,
 )
 ```
 
@@ -363,7 +363,7 @@ The server entry point (`server/src/<app>.gleam`) is generated once and never ov
 ## Error Model
 
 Two tiers:
-1. **Domain errors** -- inside the handler's `Result`: `#(Error(NotFound), state)`. Typed, user-facing. Arrives as `Failure(NotFound)` in client's `RemoteData`.
+1. **Domain errors** -- inside the handler's `Result`: `#(Error(NotFound), handler_ctx)`. Typed, user-facing. Arrives as `Failure(NotFound)` in client's `RemoteData`.
 2. **Framework errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`. Caught by dispatch, logged server-side.
 
 ## RemoteData

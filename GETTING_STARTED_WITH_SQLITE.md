@@ -407,14 +407,14 @@ pub fn new(db db: sqlight.Connection) -> HandlerContext {
 Now the server entry must open the connection and pass it in. Edit `server/src/my_checklist.gleam`. Find this line:
 
 ```gleam
-let state = handler_context.new()
+let handler_ctx = handler_context.new()
 ```
 
 Change it to:
 
 ```gleam
 let assert Ok(db) = sqlight.open("file:data.db")
-let state = handler_context.new(db:)
+let handler_ctx = handler_context.new(db:)
 ```
 
 And add `import sqlight` to the imports near the top of the file (the imports are alphabetised; insert it after `import shared/router`).
@@ -437,50 +437,50 @@ import shared/types.{
 }
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  case server_sql.list_items(db: state.db) {
-    Ok(rows) -> #(Ok(list.map(rows, row_to_item)), state)
-    Error(_) -> #(Error(DatabaseError), state)
+  case server_sql.list_items(db: handler_ctx.db) {
+    Ok(rows) -> #(Ok(list.map(rows, row_to_item)), handler_ctx)
+    Error(_) -> #(Error(DatabaseError), handler_ctx)
   }
 }
 
 pub fn create_item(
   params params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
-    "" -> #(Error(TitleRequired), state)
+    "" -> #(Error(TitleRequired), handler_ctx)
     title ->
-      case server_sql.create_item(db: state.db, title:) {
-        Ok([row]) -> #(Ok(row_to_item(row)), state)
-        Ok(_) -> #(Error(DatabaseError), state)
-        Error(_) -> #(Error(DatabaseError), state)
+      case server_sql.create_item(db: handler_ctx.db, title:) {
+        Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
+        Ok(_) -> #(Error(DatabaseError), handler_ctx)
+        Error(_) -> #(Error(DatabaseError), handler_ctx)
       }
   }
 }
 
 pub fn toggle_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  case server_sql.toggle_item(db: state.db, id:) {
-    Ok([row]) -> #(Ok(row_to_item(row)), state)
-    Ok([]) -> #(Error(NotFound), state)
-    Ok(_) -> #(Error(DatabaseError), state)
-    Error(_) -> #(Error(DatabaseError), state)
+  case server_sql.toggle_item(db: handler_ctx.db, id:) {
+    Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
+    Ok([]) -> #(Error(NotFound), handler_ctx)
+    Ok(_) -> #(Error(DatabaseError), handler_ctx)
+    Error(_) -> #(Error(DatabaseError), handler_ctx)
   }
 }
 
 pub fn delete_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  case server_sql.delete_item(db: state.db, id:) {
-    Ok([row]) -> #(Ok(row.id), state)
-    Ok([]) -> #(Error(NotFound), state)
-    Ok(_) -> #(Error(DatabaseError), state)
-    Error(_) -> #(Error(DatabaseError), state)
+  case server_sql.delete_item(db: handler_ctx.db, id:) {
+    Ok([row]) -> #(Ok(row.id), handler_ctx)
+    Ok([]) -> #(Error(NotFound), handler_ctx)
+    Ok(_) -> #(Error(DatabaseError), handler_ctx)
+    Error(_) -> #(Error(DatabaseError), handler_ctx)
   }
 }
 
@@ -516,9 +516,9 @@ import shared/views.{type Model, type Msg, Model}
 pub fn load_page(
   _req: Request(Connection),
   route: Route,
-  state: HandlerContext,
+  handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
-  let #(result, _) = handler.get_items(state:)
+  let #(result, _) = handler.get_items(handler_ctx:)
   let items = case result {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
@@ -700,11 +700,11 @@ pub fn create_item_persists_test() {
        )",
       on: db,
     )
-  let state = handler_context.new(db:)
+  let handler_ctx = handler_context.new(db:)
   let #(result, _) =
     handler.create_item(
       params: ItemParams(title: "Buy milk"),
-      state:,
+      handler_ctx:,
     )
   let assert Ok(item) = result
   let assert "Buy milk" = item.title

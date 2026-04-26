@@ -12,7 +12,6 @@ import libero/error.{
 }
 import libero/trace
 import libero/wire
-import shared/router
 
 pub type ClientMsg {
   Ping
@@ -22,7 +21,7 @@ pub type ClientMsg {
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
@@ -32,7 +31,9 @@ pub fn handle(
           let typed_msg: ClientMsg = wire.coerce(msg)
           case typed_msg {
             Ping ->
-              dispatch(state, request_id, fn() { handler_handler.ping(state:) })
+              dispatch(handler_ctx, request_id, fn() {
+                handler_handler.ping(handler_ctx:)
+              })
           }
         }
         Ok(tag) -> #(
@@ -41,7 +42,7 @@ pub fn handle(
             data: wire.encode(Error(UnknownFunction("shared/router." <> tag))),
           ),
           None,
-          state,
+          handler_ctx,
         )
         Error(_) -> #(
           wire.tag_response(
@@ -49,7 +50,7 @@ pub fn handle(
             data: wire.encode(Error(MalformedRequest)),
           ),
           None,
-          state,
+          handler_ctx,
         )
       }
     }
@@ -59,7 +60,7 @@ pub fn handle(
         data: wire.encode(Error(UnknownFunction(name))),
       ),
       None,
-      state,
+      handler_ctx,
     )
     Error(_) -> #(
       wire.tag_response(
@@ -67,21 +68,21 @@ pub fn handle(
         data: wire.encode(Error(MalformedRequest)),
       ),
       None,
-      state,
+      handler_ctx,
     )
   }
 }
 
 fn dispatch(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   request_id request_id: Int,
   call call: fn() -> #(a, HandlerContext),
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(call) {
-    Ok(#(value, new_state)) ->
+    Ok(#(value, new_handler_ctx)) ->
       safe_encode(
         fn() { wire.encode(Ok(value)) },
-        new_state,
+        new_handler_ctx,
         request_id,
         "dispatch_encode_ok",
       )
@@ -95,7 +96,7 @@ fn dispatch(
           ),
         ),
         Some(error.PanicInfo(trace_id:, fn_name: "dispatch", reason:)),
-        state,
+        handler_ctx,
       )
     }
   }
@@ -103,12 +104,16 @@ fn dispatch(
 
 fn safe_encode(
   encoder: fn() -> BitArray,
-  state: HandlerContext,
+  handler_ctx: HandlerContext,
   request_id: Int,
   fn_name: String,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(encoder) {
-    Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
+    Ok(bytes) -> #(
+      wire.tag_response(request_id:, data: bytes),
+      None,
+      handler_ctx,
+    )
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
@@ -119,7 +124,7 @@ fn safe_encode(
           ),
         ),
         Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
-        state,
+        handler_ctx,
       )
     }
   }

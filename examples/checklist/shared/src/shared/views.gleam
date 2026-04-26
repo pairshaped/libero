@@ -10,11 +10,7 @@ import shared/router.{type Route, Home}
 import shared/types.{type Item, type ItemError, NotFound, TitleRequired}
 
 pub type Model {
-  Model(
-    route: Route,
-    items: RemoteData(List(Item), ItemError),
-    input: String,
-  )
+  Model(route: Route, items: RemoteData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
@@ -81,10 +77,7 @@ fn view_items(items: RemoteData(List(Item), ItemError)) -> Element(Msg) {
         html.text("Connection error: " <> message),
       ])
     Success(items) ->
-      html.ul(
-        [attribute.style("padding", "0")],
-        list.map(items, view_item),
-      )
+      html.ul([attribute.style("padding", "0")], list.map(items, view_item))
   }
 }
 
@@ -117,10 +110,7 @@ fn view_item(item: Item) -> Element(Msg) {
         ],
         [html.text(item.title)],
       ),
-      html.button(
-        [event.on_click(UserDeleted(item.id))],
-        [html.text("Delete")],
-      ),
+      html.button([event.on_click(UserDeleted(item.id))], [html.text("Delete")]),
     ],
   )
 }

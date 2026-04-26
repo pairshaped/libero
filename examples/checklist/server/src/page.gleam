@@ -14,9 +14,9 @@ import shared/views.{type Model, type Msg, Model}
 pub fn load_page(
   _req: Request(Connection),
   route: Route,
-  state: HandlerContext,
+  handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
-  let #(result, _) = handler.get_items(state:)
+  let #(result, _) = handler.get_items(handler_ctx:)
   let items = case result {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)

@@ -56,11 +56,13 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   let assert True = string.contains(content, "DeleteTodo(id: Int)")
 
   // Must route to handler functions
-  let assert True = string.contains(content, "handler.get_todos(state:)")
+  let assert True = string.contains(content, "handler.get_todos(handler_ctx:)")
   let assert True =
-    string.contains(content, "handler.create_todo(params:, state:)")
-  let assert True = string.contains(content, "handler.toggle_todo(id:, state:)")
-  let assert True = string.contains(content, "handler.delete_todo(id:, state:)")
+    string.contains(content, "handler.create_todo(params:, handler_ctx:)")
+  let assert True =
+    string.contains(content, "handler.toggle_todo(id:, handler_ctx:)")
+  let assert True =
+    string.contains(content, "handler.delete_todo(id:, handler_ctx:)")
 
   // Must NOT reference AppError or MsgFromServer
   let assert False = string.contains(content, "AppError")

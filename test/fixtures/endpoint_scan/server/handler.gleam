@@ -39,38 +39,38 @@ pub type AuditEntry {
 // All criteria met — included as endpoints.
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok([]), state)
+  #(Ok([]), handler_ctx)
 }
 
 pub fn create_item(
   params _params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  #(Error(NotFound), state)
+  #(Error(NotFound), handler_ctx)
 }
 
 pub fn delete_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  #(Ok(id), state)
+  #(Ok(id), handler_ctx)
 }
 
 // Endpoint with Dict in params and return — exercises the Dict-as-builtin path.
 pub fn lookup_items(
   ids _ids: Dict(String, Int),
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Dict(String, Item), ItemError), HandlerContext) {
-  #(Ok(dict.new()), state)
+  #(Ok(dict.new()), handler_ctx)
 }
 
 // Criterion 1 missing: private function.
 fn internal_helper(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  #(Ok(0), state)
+  #(Ok(0), handler_ctx)
 }
 
 // Criterion 2 missing: no HandlerContext parameter.
@@ -87,36 +87,36 @@ pub fn process_items(
 
 // Criterion 3 missing (variant): HandlerContext in wrong position in tuple.
 pub fn wrong_order(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(HandlerContext, Result(Int, ItemError)) {
-  #(state, Ok(0))
+  #(handler_ctx, Ok(0))
 }
 
 // Criterion 4 missing: server-only type in return.
 pub fn get_audit_log(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(AuditLog, ItemError), HandlerContext) {
-  #(Ok(AuditLog), state)
+  #(Ok(AuditLog), handler_ctx)
 }
 
 // Criterion 4 missing (variant): server-only type in params.
 pub fn log_action(
   action _action: AuditEntry,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Nil, ItemError), HandlerContext) {
-  #(Ok(Nil), state)
+  #(Ok(Nil), handler_ctx)
 }
 
 // Criterion 5 missing: response is not Result(_, _). Wire envelope assumes
 // Result-shaped responses, so this must be filtered out.
-pub fn ping(state state: HandlerContext) -> #(String, HandlerContext) {
-  #("pong", state)
+pub fn ping(handler_ctx handler_ctx: HandlerContext) -> #(String, HandlerContext) {
+  #("pong", handler_ctx)
 }
 
 // Touch the unused private helper so Gleam doesn't warn — the helper
 // exists only to test that the scanner skips private fns. This wrapper
 // fails criterion 3 (Nil return), so the scanner ignores it too.
-pub fn touch_internal_helper(state state: HandlerContext) -> Nil {
-  let _ = internal_helper(state:)
+pub fn touch_internal_helper(handler_ctx handler_ctx: HandlerContext) -> Nil {
+  let _ = internal_helper(handler_ctx:)
   Nil
 }

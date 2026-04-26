@@ -5,23 +5,23 @@ import shared/types.{
 }
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(state.items), state)
+  #(Ok(handler_ctx.items), handler_ctx)
 }
 
 pub fn create_item(
   params params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
-    "" -> #(Error(TitleRequired), state)
+    "" -> #(Error(TitleRequired), handler_ctx)
     title -> {
-      let item = Item(id: state.next_id, title:, completed: False)
+      let item = Item(id: handler_ctx.next_id, title:, completed: False)
       let new_state =
         HandlerContext(
-          items: list.append(state.items, [item]),
-          next_id: state.next_id + 1,
+          items: list.append(handler_ctx.items, [item]),
+          next_id: handler_ctx.next_id + 1,
         )
       #(Ok(item), new_state)
     }
@@ -30,16 +30,16 @@ pub fn create_item(
 
 pub fn toggle_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
-  case list.find(state.items, fn(t) { t.id == id }) {
-    Error(_) -> #(Error(NotFound), state)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
     Ok(item) -> {
       let toggled = Item(..item, completed: !item.completed)
       let new_state =
         HandlerContext(
-          ..state,
-          items: list.map(state.items, fn(t) {
+          ..handler_ctx,
+          items: list.map(handler_ctx.items, fn(t) {
             case t.id == id {
               True -> toggled
               False -> t
@@ -53,15 +53,15 @@ pub fn toggle_item(
 
 pub fn delete_item(
   id id: Int,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Int, ItemError), HandlerContext) {
-  case list.find(state.items, fn(t) { t.id == id }) {
-    Error(_) -> #(Error(NotFound), state)
+  case list.find(handler_ctx.items, fn(t) { t.id == id }) {
+    Error(_) -> #(Error(NotFound), handler_ctx)
     Ok(_) -> {
       let new_state =
         HandlerContext(
-          ..state,
-          items: list.filter(state.items, fn(t) { t.id != id }),
+          ..handler_ctx,
+          items: list.filter(handler_ctx.items, fn(t) { t.id != id }),
         )
       #(Ok(id), new_state)
     }

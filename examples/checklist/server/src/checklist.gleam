@@ -21,14 +21,14 @@ import shared/router
 pub fn main() {
   let _ = push.init()
   let _ = dispatch.ensure_atoms()
-  let state = handler_context.new()
+  let handler_ctx = handler_context.new()
   let logger = ws_logger.default_logger()
 
   let assert Ok(_) =
     fn(req: Request(Connection)) {
       case req.method, request.path_segments(req) {
-        _, ["ws"] -> ws.upgrade(request: req, state:, topics: [], logger:)
-        http.Post, ["rpc"] -> handle_rpc(req, state, logger)
+        _, ["ws"] -> ws.upgrade(request: req, handler_ctx:, topics: [], logger:)
+        http.Post, ["rpc"] -> handle_rpc(req, handler_ctx, logger)
         _, ["web", ..path] ->
           serve_file(
             "../clients/web/build/dev/javascript/" <> string.join(path, "/"),
@@ -39,7 +39,7 @@ pub fn main() {
             parse: router.parse_route,
             load: page.load_page,
             render: page.render_page,
-            state:,
+            handler_ctx:,
           )
       }
     }
@@ -56,13 +56,13 @@ pub fn main() {
 // requests since HTTP is stateless. Use WebSocket for stateful interactions.
 fn handle_rpc(
   req: Request(Connection),
-  state: handler_context.HandlerContext,
+  handler_ctx: handler_context.HandlerContext,
   logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
   case mist.read_body(req, 1_000_000) {
     Ok(req) -> {
-      let #(response_bytes, maybe_panic, _new_state) =
-        dispatch.handle(state:, data: req.body)
+      let #(response_bytes, maybe_panic, _new_handler_ctx) =
+        dispatch.handle(handler_ctx:, data: req.body)
       case maybe_panic {
         Some(info) ->
           logger.error(

@@ -96,15 +96,15 @@ pub fn write_endpoint_dispatch(
         }
       }
       let handler_args = case e.params {
-        [] -> "state:"
+        [] -> "handler_ctx:"
         params -> {
           let args = list.map(params, fn(p) { p.0 <> ":" })
-          string.join(list.append(args, ["state:"]), ", ")
+          string.join(list.append(args, ["handler_ctx:"]), ", ")
         }
       }
       "        "
       <> param_destructure
-      <> " ->\n          dispatch(state, request_id, fn() { "
+      <> " ->\n          dispatch(handler_ctx, request_id, fn() { "
       <> alias
       <> "."
       <> e.fn_name
@@ -135,7 +135,7 @@ pub type ClientMsg {
 pub fn ensure_atoms() -> Nil
 
 pub fn handle(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   data data: BitArray,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case wire.decode_call(data) {
@@ -148,32 +148,32 @@ pub fn handle(
           }
         }
         Ok(tag) ->
-          #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(\"" <> shared_module_path <> ".\" <> tag)))), None, state)
+          #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(\"" <> shared_module_path <> ".\" <> tag)))), None, handler_ctx)
         Error(_) ->
-          #(wire.tag_response(request_id:, data: wire.encode(Error(MalformedRequest))), None, state)
+          #(wire.tag_response(request_id:, data: wire.encode(Error(MalformedRequest))), None, handler_ctx)
       }
     }
     Ok(#(name, request_id, _)) ->
-      #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(name)))), None, state)
+      #(wire.tag_response(request_id:, data: wire.encode(Error(UnknownFunction(name)))), None, handler_ctx)
     Error(_) ->
-      #(wire.tag_response(request_id: 0, data: wire.encode(Error(MalformedRequest))), None, state)
+      #(wire.tag_response(request_id: 0, data: wire.encode(Error(MalformedRequest))), None, handler_ctx)
   }
 }
 
 fn dispatch(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   request_id request_id: Int,
   call call: fn() -> #(a, HandlerContext),
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(call) {
-    Ok(#(value, new_state)) ->
-      safe_encode(fn() { wire.encode(Ok(value)) }, new_state, request_id, \"dispatch_encode_ok\")
+    Ok(#(value, new_handler_ctx)) ->
+      safe_encode(fn() { wire.encode(Ok(value)) }, new_handler_ctx, request_id, \"dispatch_encode_ok\")
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
         wire.tag_response(request_id:, data: wire.encode(Error(InternalError(trace_id, \"Internal server error\")))),
         Some(error.PanicInfo(trace_id:, fn_name: \"dispatch\", reason:)),
-        state,
+        handler_ctx,
       )
     }
   }
@@ -181,18 +181,18 @@ fn dispatch(
 
 fn safe_encode(
   encoder: fn() -> BitArray,
-  state: HandlerContext,
+  handler_ctx: HandlerContext,
   request_id: Int,
   fn_name: String,
 ) -> #(BitArray, Option(PanicInfo), HandlerContext) {
   case trace.try_call(encoder) {
-    Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, state)
+    Ok(bytes) -> #(wire.tag_response(request_id:, data: bytes), None, handler_ctx)
     Error(reason) -> {
       let trace_id = trace.new_trace_id()
       #(
         wire.tag_response(request_id:, data: wire.encode(Error(InternalError(trace_id, \"Response encoding failed\")))),
         Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
-        state,
+        handler_ctx,
       )
     }
   }
@@ -467,7 +467,7 @@ import " <> module_path <> "/dispatch
 import " <> context_module <> ".{type HandlerContext}
 
 pub type ConnState {
-  ConnState(state: HandlerContext, topics: List(String), logger: Logger)
+  ConnState(handler_ctx: HandlerContext, topics: List(String), logger: Logger)
 }
 
 type PushMsg {
@@ -481,22 +481,22 @@ type PushMsg {
 /// or pass your own structured logger.
 pub fn upgrade(
   request req: Request(Connection),
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   topics topics: List(String),
   logger logger: Logger,
 ) {
   mist.websocket(
     request: req,
     handler: handler,
-    on_init: on_init(state, topics, logger),
-    on_close: fn(state) {
-      list.each(state.topics, fn(t) { push.leave(topic: t) })
+    on_init: on_init(handler_ctx, topics, logger),
+    on_close: fn(conn_state: ConnState) {
+      list.each(conn_state.topics, fn(t) { push.leave(topic: t) })
       logger.debug(\"WebSocket: disconnected\")
     },
   )
 }
 
-fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
+fn on_init(handler_ctx: HandlerContext, topics: List(String), logger: Logger) {
   fn(_conn: mist.WebsocketConnection) -> #(ConnState, Option(process.Selector(PushMsg))) {
     logger.debug(\"WebSocket: connected\")
     list.each(topics, fn(t) { push.join(topic: t) })
@@ -513,22 +513,22 @@ fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
           |> result.unwrap(Ignored)
         },
       )
-    #(ConnState(state:, topics:, logger:), Some(selector))
+    #(ConnState(handler_ctx:, topics:, logger:), Some(selector))
   }
 }
 
 fn handler(
-  state: ConnState,
+  conn_state: ConnState,
   message: mist.WebsocketMessage(PushMsg),
   conn: mist.WebsocketConnection,
 ) {
   case message {
     mist.Binary(data) -> {
-      let #(response_bytes, maybe_panic, new_state) =
-        dispatch.handle(state: state.state, data:)
+      let #(response_bytes, maybe_panic, new_handler_ctx) =
+        dispatch.handle(handler_ctx: conn_state.handler_ctx, data:)
       case maybe_panic {
         Some(info) ->
-          state.logger.error(
+          conn_state.logger.error(
             \"RPC panic: \"
             <> info.fn_name
             <> \" (trace \"
@@ -541,25 +541,25 @@ fn handler(
       case mist.send_binary_frame(conn, response_bytes) {
         Ok(_) -> Nil
         Error(reason) ->
-          state.logger.warning(
+          conn_state.logger.warning(
             \"Failed to send WebSocket frame: \" <> string.inspect(reason),
           )
       }
-      mist.continue(ConnState(..state, state: new_state))
+      mist.continue(ConnState(..conn_state, handler_ctx: new_handler_ctx))
     }
     mist.Custom(PushFrame(frame)) -> {
       case mist.send_binary_frame(conn, frame) {
         Ok(_) -> Nil
         Error(reason) ->
-          state.logger.warning(
+          conn_state.logger.warning(
             \"Failed to send WebSocket push frame: \" <> string.inspect(reason),
           )
       }
-      mist.continue(state)
+      mist.continue(conn_state)
     }
-    mist.Custom(Ignored) -> mist.continue(state)
+    mist.Custom(Ignored) -> mist.continue(conn_state)
     mist.Closed | mist.Shutdown -> mist.stop()
-    mist.Text(_) -> mist.continue(state)
+    mist.Text(_) -> mist.continue(conn_state)
   }
 }
 "
@@ -1272,7 +1272,7 @@ import "
 pub fn main() {
   let _ = push.init()
   let _ = dispatch.ensure_atoms()
-  let state = "
+  let handler_ctx = "
     <> context_qualifier
     <> ".new()
   let logger = ws_logger.default_logger()
@@ -1283,11 +1283,11 @@ pub fn main() {
         _, [\"ws\"] ->
           ws.upgrade(
             request: req,
-            state:,
+            handler_ctx:,
             topics: [],
             logger:,
           )
-        http.Post, [\"rpc\"] -> handle_rpc(req, state, logger)"
+        http.Post, [\"rpc\"] -> handle_rpc(req, handler_ctx, logger)"
     <> js_routes
     <> index_route
     <> "
@@ -1319,15 +1319,15 @@ pub fn main() {
 // requests since HTTP is stateless. Use WebSocket for stateful interactions.
 fn handle_rpc(
   req: Request(Connection),
-  state: "
+  handler_ctx: "
     <> context_qualifier
     <> ".HandlerContext,
   logger: ws_logger.Logger,
 ) -> response.Response(mist.ResponseData) {
   case mist.read_body(req, 1_000_000) {
     Ok(req) -> {
-      let #(response_bytes, maybe_panic, _new_state) =
-        dispatch.handle(state:, data: req.body)
+      let #(response_bytes, maybe_panic, _new_handler_ctx) =
+        dispatch.handle(handler_ctx:, data: req.body)
       case maybe_panic {
         Some(info) ->
           logger.error(

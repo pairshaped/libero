@@ -18,7 +18,7 @@ import libero/ws_logger.{type Logger}
 import mist.{type Connection}
 
 pub type ConnState {
-  ConnState(state: HandlerContext, topics: List(String), logger: Logger)
+  ConnState(handler_ctx: HandlerContext, topics: List(String), logger: Logger)
 }
 
 type PushMsg {
@@ -32,22 +32,22 @@ type PushMsg {
 /// or pass your own structured logger.
 pub fn upgrade(
   request req: Request(Connection),
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
   topics topics: List(String),
   logger logger: Logger,
 ) {
   mist.websocket(
     request: req,
     handler: handler,
-    on_init: on_init(state, topics, logger),
-    on_close: fn(state) {
-      list.each(state.topics, fn(t) { push.leave(topic: t) })
+    on_init: on_init(handler_ctx, topics, logger),
+    on_close: fn(conn_state: ConnState) {
+      list.each(conn_state.topics, fn(t) { push.leave(topic: t) })
       logger.debug("WebSocket: disconnected")
     },
   )
 }
 
-fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
+fn on_init(handler_ctx: HandlerContext, topics: List(String), logger: Logger) {
   fn(_conn: mist.WebsocketConnection) -> #(
     ConnState,
     Option(process.Selector(PushMsg)),
@@ -68,22 +68,22 @@ fn on_init(state: HandlerContext, topics: List(String), logger: Logger) {
           |> result.unwrap(Ignored)
         },
       )
-    #(ConnState(state:, topics:, logger:), Some(selector))
+    #(ConnState(handler_ctx:, topics:, logger:), Some(selector))
   }
 }
 
 fn handler(
-  state: ConnState,
+  conn_state: ConnState,
   message: mist.WebsocketMessage(PushMsg),
   conn: mist.WebsocketConnection,
 ) {
   case message {
     mist.Binary(data) -> {
-      let #(response_bytes, maybe_panic, new_state) =
-        dispatch.handle(state: state.state, data:)
+      let #(response_bytes, maybe_panic, new_handler_ctx) =
+        dispatch.handle(handler_ctx: conn_state.handler_ctx, data:)
       case maybe_panic {
         Some(info) ->
-          state.logger.error(
+          conn_state.logger.error(
             "RPC panic: "
             <> info.fn_name
             <> " (trace "
@@ -96,24 +96,24 @@ fn handler(
       case mist.send_binary_frame(conn, response_bytes) {
         Ok(_) -> Nil
         Error(reason) ->
-          state.logger.warning(
+          conn_state.logger.warning(
             "Failed to send WebSocket frame: " <> string.inspect(reason),
           )
       }
-      mist.continue(ConnState(..state, state: new_state))
+      mist.continue(ConnState(..conn_state, handler_ctx: new_handler_ctx))
     }
     mist.Custom(PushFrame(frame)) -> {
       case mist.send_binary_frame(conn, frame) {
         Ok(_) -> Nil
         Error(reason) ->
-          state.logger.warning(
+          conn_state.logger.warning(
             "Failed to send WebSocket push frame: " <> string.inspect(reason),
           )
       }
-      mist.continue(state)
+      mist.continue(conn_state)
     }
-    mist.Custom(Ignored) -> mist.continue(state)
+    mist.Custom(Ignored) -> mist.continue(conn_state)
     mist.Closed | mist.Shutdown -> mist.stop()
-    mist.Text(_) -> mist.continue(state)
+    mist.Text(_) -> mist.continue(conn_state)
   }
 }

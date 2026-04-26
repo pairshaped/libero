@@ -39,7 +39,7 @@ pub type SsrError {
 /// ```gleam
 /// ssr.call(
 ///   handle: dispatch.handle,
-///   state:,
+///   handler_ctx:,
 ///   module: "shared/messages",
 ///   msg: GetCounter,
 ///   expect: fn(resp) {
@@ -51,13 +51,14 @@ pub type SsrError {
 /// ```
 pub fn call(
   handle handle: fn(state, BitArray) -> #(BitArray, Option(PanicInfo), state),
-  state state: state,
+  handler_ctx handler_ctx: state,
   module module: String,
   msg msg: msg,
   expect expect: fn(response) -> payload,
 ) -> Result(payload, SsrError) {
   let data = wire.encode_call(module:, request_id: 0, msg:)
-  let #(response_bytes, maybe_panic, _state) = handle(state, data)
+  let #(response_bytes, maybe_panic, _new_handler_ctx) =
+    handle(handler_ctx, data)
   case maybe_panic {
     option.Some(_) -> Error(DispatchError)
     option.None ->
@@ -134,14 +135,14 @@ pub fn boot_script(
 
 /// Render a server-side page for an HTTP request.
 ///
-/// Pipeline: `parse(uri)` -> `load(req, route, state)` -> `render(route, model)` ->
+/// Pipeline: `parse(uri)` -> `load(req, route, handler_ctx)` -> `render(route, model)` ->
 /// HTML response.
 ///
 /// - Non-GET requests get a `405 Method Not Allowed`.
 /// - `parse` returning `Error(Nil)` gets a bare `404 Not Found`. Custom 404
 ///   pages: handle the catch-all in your mist router and only call
 ///   `handle_request` for paths you recognize.
-/// - `load` returning `Error(response)` returns that exact response — the
+/// - `load` returning `Error(response)` returns that exact response: the
 ///   loader owns auth redirects, soft 404s with custom bodies, etc.
 /// - `load` returning `Ok(model)` renders the document tree from `render`
 ///   into a `200 OK` HTML response.
@@ -152,7 +153,7 @@ pub fn boot_script(
 ///   parse: views.parse_route,
 ///   load: load_page,
 ///   render: render_page,
-///   state:,
+///   handler_ctx:,
 /// )
 /// ```
 pub fn handle_request(
@@ -161,7 +162,7 @@ pub fn handle_request(
   load load: fn(Request(body), route, state) ->
     Result(model, Response(ResponseData)),
   render render: fn(route, model) -> Element(msg),
-  state state: state,
+  handler_ctx handler_ctx: state,
 ) -> Response(ResponseData) {
   case req.method {
     http.Get -> {
@@ -169,7 +170,7 @@ pub fn handle_request(
       case parse(uri) {
         Error(Nil) -> empty_response(404)
         Ok(route) ->
-          case load(req, route, state) {
+          case load(req, route, handler_ctx) {
             Error(response) -> response
             Ok(model) -> render_response(render(route, model))
           }

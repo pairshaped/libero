@@ -7,7 +7,6 @@ import libero/remote_data.{type RemoteData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
-import shared/router
 import shared/types
 
 pub type ClientMsg {

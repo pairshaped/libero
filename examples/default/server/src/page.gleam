@@ -12,7 +12,7 @@ import shared/views.{type Model, type Msg, Model}
 pub fn load_page(
   _req: Request(Connection),
   route: Route,
-  _state: HandlerContext,
+  _handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
   Ok(Model(route:, ping_response: ""))
 }

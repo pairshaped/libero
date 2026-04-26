@@ -8,9 +8,9 @@ pub fn main() {
 }
 
 pub fn create_item_returns_item_test() {
-  let state = handler_context.new()
+  let handler_ctx = handler_context.new()
   let #(result, _) =
-    handler.create_item(params: ItemParams(title: "Buy milk"), state:)
+    handler.create_item(params: ItemParams(title: "Buy milk"), handler_ctx:)
   let assert Ok(item) = result
   let assert "Buy milk" = item.title
   let assert False = item.completed

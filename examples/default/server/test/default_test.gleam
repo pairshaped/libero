@@ -7,6 +7,6 @@ pub fn main() {
 }
 
 pub fn ping_test() {
-  let state = handler_context.new()
-  let assert #(Ok("pong"), _) = handler.ping(state:)
+  let handler_ctx = handler_context.new()
+  let assert #(Ok("pong"), _) = handler.ping(handler_ctx:)
 }

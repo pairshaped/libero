@@ -66,18 +66,18 @@ import server/handler_context.{type HandlerContext}
 import shared/types.{type Item, type ItemParams, type ItemError}
 
 pub fn get_items(
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(ets_store.all()), state)
+  #(Ok(ets_store.all()), handler_ctx)
 }
 
 pub fn create_item(
   params params: ItemParams,
-  state state: HandlerContext,
+  handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
-    "" -> #(Error(TitleRequired), state)
-    title -> #(Ok(insert(title)), state)
+    "" -> #(Error(TitleRequired), handler_ctx)
+    title -> #(Ok(insert(title)), handler_ctx)
   }
 }
 ```

@@ -50,19 +50,13 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
   case msg {
     ViewMsg(NavigateTo(route)) -> #(Model(..model, route:), effect.none())
     ViewMsg(NoOp) -> #(model, effect.none())
-    ViewMsg(UserTyped(value:)) -> #(
-      Model(..model, input: value),
-      effect.none(),
-    )
+    ViewMsg(UserTyped(value:)) -> #(Model(..model, input: value), effect.none())
     ViewMsg(UserSubmittedTitle) ->
       case model.input {
         "" -> #(model, effect.none())
         title -> #(
           Model(..model, input: ""),
-          rpc.create_item(
-            params: ItemParams(title:),
-            on_response: GotCreated,
-          ),
+          rpc.create_item(params: ItemParams(title:), on_response: GotCreated),
         )
       }
     ViewMsg(UserToggled(id:)) -> #(
