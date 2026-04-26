@@ -9,7 +9,7 @@ pub fn scaffold_project_test() {
   let dir = "build/.test_cli_new/test_scaffold"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: None)
+  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: None, web: False)
 
   let assert Ok(True) = simplifile.is_file(dir <> "/gleam.toml")
   let assert Ok(True) = simplifile.is_directory(dir <> "/src/server")
@@ -46,7 +46,8 @@ pub fn scaffold_pg_test() {
   let dir = "build/.test_cli_new/test_pg"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: Some(cli.Postgres))
+  let assert Ok(Nil) =
+    cli_new.scaffold(path: dir, database: Some(cli.Postgres), web: False)
 
   let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
   let assert True = string.contains(gleam_toml, "pog")
@@ -72,28 +73,28 @@ pub fn scaffold_pg_test() {
 }
 
 pub fn scaffold_empty_name_test() {
-  let result = cli_new.scaffold(path: "", database: None)
+  let result = cli_new.scaffold(path: "", database: None, web: False)
   let assert True = result.is_error(result)
   let assert Error(msg) = result
   let assert True = string.contains(msg, "name cannot be empty")
 }
 
 pub fn scaffold_digit_start_name_test() {
-  let result = cli_new.scaffold(path: "123bad", database: None)
+  let result = cli_new.scaffold(path: "123bad", database: None, web: False)
   let assert True = result.is_error(result)
   let assert Error(msg) = result
   let assert True = string.contains(msg, "Must start with a lowercase letter")
 }
 
 pub fn scaffold_reserved_word_name_test() {
-  let result = cli_new.scaffold(path: "type", database: None)
+  let result = cli_new.scaffold(path: "type", database: None, web: False)
   let assert True = result.is_error(result)
   let assert Error(msg) = result
   let assert True = string.contains(msg, "reserved word")
 }
 
 pub fn scaffold_special_chars_name_test() {
-  let result = cli_new.scaffold(path: "my-app", database: None)
+  let result = cli_new.scaffold(path: "my-app", database: None, web: False)
   let assert True = result.is_error(result)
   let assert Error(msg) = result
   let assert True =
@@ -104,7 +105,8 @@ pub fn scaffold_sqlite_test() {
   let dir = "build/.test_cli_new/test_sqlite"
   let _ = simplifile.delete("build/.test_cli_new")
 
-  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: Some(cli.Sqlite))
+  let assert Ok(Nil) =
+    cli_new.scaffold(path: dir, database: Some(cli.Sqlite), web: False)
 
   let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
   let assert True = string.contains(gleam_toml, "sqlight")
@@ -128,6 +130,28 @@ pub fn scaffold_sqlite_test() {
 
   let assert Ok(readme) = simplifile.read(dir <> "/README.md")
   let assert True = string.contains(readme, "marmot")
+
+  let _ = simplifile.delete("build/.test_cli_new")
+  Nil
+}
+
+pub fn scaffold_web_client_test() {
+  let dir = "build/.test_cli_new/test_web"
+  let _ = simplifile.delete("build/.test_cli_new")
+
+  let assert Ok(Nil) = cli_new.scaffold(path: dir, database: None, web: True)
+
+  let assert Ok(True) = simplifile.is_directory(dir <> "/clients/web/src")
+  let assert Ok(True) = simplifile.is_file(dir <> "/clients/web/src/app.gleam")
+  let assert Ok(True) = simplifile.is_file(dir <> "/clients/web/gleam.toml")
+
+  let assert Ok(client_toml) = simplifile.read(dir <> "/clients/web/gleam.toml")
+  let assert True = string.contains(client_toml, "target = \"javascript\"")
+  let assert True = string.contains(client_toml, "lustre")
+
+  let assert Ok(gleam_toml) = simplifile.read(dir <> "/gleam.toml")
+  let assert True = string.contains(gleam_toml, "[tools.libero.clients.web]")
+  let assert True = string.contains(gleam_toml, "target = \"javascript\"")
 
   let _ = simplifile.delete("build/.test_cli_new")
   Nil

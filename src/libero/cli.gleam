@@ -13,7 +13,7 @@ pub type Database {
 }
 
 pub type Command {
-  New(name: String, database: Option(Database))
+  New(name: String, database: Option(Database), web: Bool)
   Add(name: String, target: String)
   Gen
   Build
@@ -29,30 +29,7 @@ pub fn parse_command() -> Command {
 /// Separated from parse_command so tests can call it without argv.
 pub fn parse_args(args: List(String)) -> Command {
   case args {
-    ["new", name, "--database", db, ..] ->
-      case parse_database(db) {
-        Ok(database) -> New(name:, database: Some(database))
-        Error(Nil) -> {
-          io.println_error("error: Invalid database: `" <> db <> "`
-  \u{2502}
-  \u{2502} --database must be \"pg\" or \"sqlite\"
-  \u{2502}
-  hint: gleam run -m libero -- new my_app --database pg")
-          Unknown
-        }
-      }
-    ["new", _name, "--database"] -> {
-      io.println_error(
-        "error: Missing database value
-  \u{2502}
-  \u{2502} --database requires a value
-  \u{2502}
-  hint: gleam run -m libero -- new my_app --database pg
-        gleam run -m libero -- new my_app --database sqlite",
-      )
-      Unknown
-    }
-    ["new", name, ..] -> New(name:, database: None)
+    ["new", name, ..rest] -> parse_new_options(name, rest, None, False)
     ["add", name, "--target", target, ..] ->
       case target {
         "javascript" | "erlang" -> Add(name:, target:)
@@ -88,6 +65,42 @@ pub fn parse_args(args: List(String)) -> Command {
       Unknown
     }
     _ -> Unknown
+  }
+}
+
+fn parse_new_options(
+  name: String,
+  args: List(String),
+  database: Option(Database),
+  web: Bool,
+) -> Command {
+  case args {
+    [] -> New(name:, database:, web:)
+    ["--web", ..rest] -> parse_new_options(name, rest, database, True)
+    ["--database", db, ..rest] ->
+      case parse_database(db) {
+        Ok(parsed) -> parse_new_options(name, rest, Some(parsed), web)
+        Error(Nil) -> {
+          io.println_error("error: Invalid database: `" <> db <> "`
+  \u{2502}
+  \u{2502} --database must be \"pg\" or \"sqlite\"
+  \u{2502}
+  hint: gleam run -m libero -- new my_app --database pg")
+          Unknown
+        }
+      }
+    ["--database"] -> {
+      io.println_error(
+        "error: Missing database value
+  \u{2502}
+  \u{2502} --database requires a value
+  \u{2502}
+  hint: gleam run -m libero -- new my_app --database pg
+        gleam run -m libero -- new my_app --database sqlite",
+      )
+      Unknown
+    }
+    [_, ..rest] -> parse_new_options(name, rest, database, web)
   }
 }
 

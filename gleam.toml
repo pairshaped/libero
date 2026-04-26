@@ -29,6 +29,11 @@ glinter = "~> 2.14"
 gleeunit = "~> 1.0"
 gleam_erlang = "~> 1.0"
 
+[documentation]
+pages = [
+  { title = "Build a SQLite-backed checklist app", path = "guides/build-a-checklist-app.html", source = "./docs/build-a-checklist-app.md" },
+]
+
 [tools.glinter]
 stats = true
 warnings_as_errors = true

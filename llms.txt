@@ -44,7 +44,7 @@ Rules:
 ## CLI
 
 ```bash
-gleam run -m libero -- new <name> [--database pg|sqlite]  # scaffold project
+gleam run -m libero -- new <name> [--database pg|sqlite] [--web]  # scaffold project
 gleam run -m libero -- add <name> --target <target>   # add a client
 gleam run -m libero -- gen                            # regenerate stubs
 gleam run -m libero -- build                          # gen + build server + all clients
@@ -55,6 +55,8 @@ The `--database` flag adds database dependencies and a connection module:
 - `--database sqlite`: adds [sqlight](https://hexdocs.pm/sqlight/) + [marmot](https://hexdocs.pm/marmot/) for type-safe SQLite queries
 
 Both options scaffold `src/server/db.gleam` (connection setup) and `src/server/sql/` (directory for `.sql` query files). The database connection is included in `HandlerContext` so handlers have access via `state.db`.
+
+The `--web` flag adds the default JavaScript client named `web` during scaffold.
 
 ## Configuration
 

@@ -5,6 +5,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import libero/cli.{type Database}
+import libero/cli/add as cli_add
 import libero/cli/helpers
 import libero/cli/templates
 import libero/cli/templates/db as db_templates
@@ -22,6 +23,7 @@ import simplifile
 pub fn scaffold(
   path path: String,
   database database: Option(Database),
+  web web: Bool,
 ) -> Result(Nil, String) {
   let name =
     string.split(path, "/")
@@ -36,7 +38,7 @@ pub fn scaffold(
     )
   {
     Error(msg) -> Error(msg)
-    Ok(Nil) -> scaffold_validated(name:, path:, database:)
+    Ok(Nil) -> scaffold_validated(name:, path:, database:, web:)
   }
 }
 
@@ -45,6 +47,7 @@ fn scaffold_validated(
   name name: String,
   path path: String,
   database database: Option(Database),
+  web web: Bool,
 ) -> Result(Nil, String) {
   // Abort if the project already exists
   case simplifile.is_file(path <> "/gleam.toml") {
@@ -54,7 +57,7 @@ fn scaffold_validated(
   \u{2502} A gleam.toml already exists at this path")
     _ -> {
       let server_dir = path <> "/src/server"
-      scaffold_files(name:, path:, server_dir:, database:)
+      scaffold_files(name:, path:, server_dir:, database:, web:)
     }
   }
 }
@@ -65,6 +68,7 @@ fn scaffold_files(
   path path: String,
   server_dir server_dir: String,
   database database: Option(Database),
+  web web: Bool,
 ) -> Result(Nil, String) {
   // Compute database-specific template values
   let #(db_deps, extra_toml, db_readme) = case database {
@@ -139,5 +143,19 @@ fn scaffold_files(
     path <> "/README.md",
     templates.starter_readme(name:, db_section: db_readme),
   ))
+  use _ <-
+    fn(next) {
+      case web {
+        False -> next(Nil)
+        True -> {
+          use _ <- result.try(cli_add.add_client(
+            project_path: path,
+            name: "web",
+            target: "javascript",
+          ))
+          next(Nil)
+        }
+      }
+    }
   Ok(Nil)
 }
