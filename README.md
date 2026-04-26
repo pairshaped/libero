@@ -221,7 +221,7 @@ gleam_http = "~> 4.0"
 mist = "~> 6.0"
 lustre = "~> 5.6"
 shared = { path = "../shared" }
-libero = { path = "../../libero" }
+libero = "~> 5.0"
 
 [tools.libero]
 port = 8080
