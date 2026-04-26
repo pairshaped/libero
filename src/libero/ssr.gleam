@@ -14,7 +14,6 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/option.{type Option}
 import gleam/result
-import gleam/string
 import gleam/uri.{type Uri, Uri}
 import libero/error.{type PanicInfo}
 import libero/wire
@@ -100,35 +99,6 @@ pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
   }
 }
 
-/// Generate a complete HTML document with a pre-rendered body,
-/// embedded flags, and a client module import.
-///
-/// The `title` is HTML-escaped automatically. The `body` is inserted
-/// as raw HTML (assumed to be pre-rendered Lustre output). The
-/// `client_module` is a JS import path controlled by the developer,
-/// not user input — it is not escaped (by design). If you derive this
-/// value from external input, you must validate it yourself.
-/// The `flags` value is encoded
-/// internally via `encode_flags`, producing a base64 string that is
-/// safe to embed in a JS string literal.
-pub fn document(
-  title title: String,
-  body body: String,
-  flags flags: a,
-  client_module client_module: String,
-) -> String {
-  let encoded_flags = encode_flags(flags)
-  "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>"
-  <> escape_html(title)
-  <> "</title>\n</head>\n<body>\n  <div id=\"app\">"
-  <> body
-  <> "</div>\n  <script>window.__LIBERO_FLAGS__ = \""
-  <> encoded_flags
-  <> "\";</script>\n  <script type=\"module\">\n    import { main } from \""
-  <> client_module
-  <> "\";\n    main();\n  </script>\n</body>\n</html>"
-}
-
 /// Render a fragment of two `<script>` elements that boot the client app:
 /// one assigns the base64-encoded ETF flags to `window.__LIBERO_FLAGS__`,
 /// the other imports `client_module` as an ES module and calls `main()`.
@@ -160,16 +130,6 @@ pub fn boot_script(
       "import { main } from \"" <> client_module <> "\";\nmain();",
     ),
   ])
-}
-
-/// Escape HTML special characters to prevent XSS in text content.
-fn escape_html(text: String) -> String {
-  text
-  |> string.replace("&", "&amp;")
-  |> string.replace("<", "&lt;")
-  |> string.replace(">", "&gt;")
-  |> string.replace("\"", "&quot;")
-  |> string.replace("'", "&#39;")
 }
 
 /// Render a server-side page for an HTTP request.

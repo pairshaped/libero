@@ -111,25 +111,6 @@ pub fn call_returns_bad_response_on_empty_bytes_test() {
   let assert Error(ssr.BadResponse) = result
 }
 
-// --- ssr.document ---
-
-pub fn document_contains_title_and_body_test() {
-  let flags_value = "abc123"
-  let html =
-    ssr.document(
-      title: "Test Page",
-      body: "<p>Hello</p>",
-      flags: flags_value,
-      client_module: "/web/app.mjs",
-    )
-  let assert True = string.contains(html, "<title>Test Page</title>")
-  let assert True = string.contains(html, "<p>Hello</p>")
-  // flags are base64-encoded ETF, not the raw value
-  let encoded_flags = ssr.encode_flags(flags_value)
-  let assert True = string.contains(html, encoded_flags)
-  let assert True = string.contains(html, "/web/app.mjs")
-}
-
 // --- decode_flags ---
 
 pub fn decode_flags_roundtrip_test() {
@@ -198,24 +179,6 @@ pub fn boot_script_module_script_is_module_type_test() {
   let html_str = lustre_element.to_string(el)
   // The import script must be type="module" or the import statement is invalid.
   let assert True = string.contains(html_str, "type=\"module\"")
-}
-
-// --- escape_html XSS ---
-
-pub fn document_escapes_xss_in_title_test() {
-  let xss_title = "<script>alert(\"xss\")</script>"
-  let html =
-    ssr.document(
-      title: xss_title,
-      body: "",
-      flags: Nil,
-      client_module: "/app.mjs",
-    )
-  // The raw script tag must NOT appear in the output
-  let assert False = string.contains(html, "<script>alert(")
-  // The escaped version should appear instead
-  let assert True =
-    string.contains(html, "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;")
 }
 
 // --- ssr.handle_request ---

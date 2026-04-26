@@ -1,7 +1,9 @@
 import gleam/string
 import gleeunit
 import libero/ssr
+import lustre/attribute
 import lustre/element
+import lustre/element/html
 import server/handler
 import server/handler_context
 import shared/views.{Model}
@@ -41,14 +43,14 @@ pub fn full_ssr_render_test() {
   // Directly call handler instead of going through dispatch for this test
   let counter = 0
   let model = Model(route: views.DecPage, counter:)
-  let body = element.to_string(views.view(model))
-  let flags = ssr.encode_flags(counter)
   let doc =
-    ssr.document(
-      title: "Counter",
-      body:,
-      flags:,
-      client_module: "/web/web/app.mjs",
+    element.to_string(
+      html.html([], [
+        html.body([], [
+          html.div([attribute.id("app")], [views.view(model)]),
+          ssr.boot_script(client_module: "/web/web/app.mjs", flags: model),
+        ]),
+      ]),
     )
   let assert True = string.contains(doc, "Counter: 0")
   let assert True = string.contains(doc, ">-</button>")
