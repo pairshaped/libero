@@ -39,7 +39,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "todos@generated@rpc_atoms",
-      context_module: "server/handler_context",
+      context_module: "handler_context",
       shared_module_path: "shared/messages",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
@@ -94,7 +94,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "todos@generated@rpc_atoms",
-      context_module: "server/handler_context",
+      context_module: "handler_context",
       shared_module_path: "shared/messages",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
@@ -144,7 +144,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
-      context_module: "server/handler_context",
+      context_module: "handler_context",
       shared_module_path: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
@@ -185,7 +185,7 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
-      context_module: "server/handler_context",
+      context_module: "handler_context",
       shared_module_path: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
@@ -293,7 +293,7 @@ pub type GadgetError { GadgetNotFound }
   let assert Ok(Nil) =
     simplifile.write(
       server_dir <> "/store.gleam",
-      "import server/handler_context.{type HandlerContext}
+      "import handler_context.{type HandlerContext}
 import shared/gadgets as g
 
 pub fn create_gadget(

@@ -13,6 +13,9 @@ libero = { path = "../../.." }
 
 [tools.libero]
 port = 8080
+server.generated_dir = "src/server/generated"
+shared.src_dir = "shared/src/shared"
+context_module = "server/handler_context"
 
 [tools.libero.clients.web]
 target = "javascript"

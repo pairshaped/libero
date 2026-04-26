@@ -89,16 +89,16 @@ pub fn build_config(
     decoders_gleam_output,
   ) = case namespace {
     None -> #(
-      "src/server@generated@libero@rpc_atoms.erl",
-      "server@generated@libero@rpc_atoms",
+      "src/generated@libero@rpc_atoms.erl",
+      "generated@libero@rpc_atoms",
       client_root <> "/src/client/generated/libero/rpc_config.gleam",
       "../../../../",
       client_root <> "/src/client/generated/libero/rpc_decoders_ffi.mjs",
       client_root <> "/src/client/generated/libero/rpc_decoders.gleam",
     )
     Some(ns) -> #(
-      "src/server@generated@libero@" <> ns <> "@rpc_atoms.erl",
-      "server@generated@libero@" <> ns <> "@rpc_atoms",
+      "src/generated@libero@" <> ns <> "@rpc_atoms.erl",
+      "generated@libero@" <> ns <> "@rpc_atoms",
       client_root
         <> "/src/client/generated/libero/"
         <> ns
@@ -128,8 +128,8 @@ pub fn build_config(
     |> result.map(fn(root) { root <> "/src" })
     |> option.from_result
   let server_generated = case namespace {
-    None -> "src/server/generated/libero"
-    Some(ns) -> "src/server/generated/libero/" <> ns
+    None -> "src/generated/libero"
+    Some(ns) -> "src/generated/libero/" <> ns
   }
   let client_generated = case namespace {
     None -> client_root <> "/src/client/generated/libero"

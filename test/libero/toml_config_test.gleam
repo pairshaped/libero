@@ -16,13 +16,13 @@ pub fn parse_minimal_toml_test() {
 }
 
 pub fn parse_uses_shared_plus_server_defaults_test() {
-  // No tools.libero overrides -> defaults assume shared + server + clients layout
+  // No tools.libero overrides -> defaults assume three-peer layout (runs from server/)
   let toml = "name = \"myapp\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "src" = cfg.server_src_dir
-  let assert "src/server/generated" = cfg.server_generated_dir
-  let assert "shared/src/shared" = cfg.shared_src_dir
-  let assert "server/handler_context" = cfg.context_module
+  let assert "src/generated" = cfg.server_generated_dir
+  let assert "../shared/src/shared" = cfg.shared_src_dir
+  let assert "handler_context" = cfg.context_module
   let assert "src/myapp@generated@rpc_atoms.erl" = cfg.server_atoms_path
 }
 
@@ -75,16 +75,16 @@ pub fn to_codegen_config_javascript_client_test() {
       rest: False,
       clients: [ClientConfig(name: "web", target: "javascript")],
       server_src_dir: "src",
-      server_generated_dir: "src/server/generated",
+      server_generated_dir: "src/generated",
       server_atoms_path: "src/my_app@generated@rpc_atoms.erl",
-      shared_src_dir: "shared/src/shared",
-      context_module: "server/handler_context",
+      shared_src_dir: "../shared/src/shared",
+      context_module: "handler_context",
     )
   let assert Ok(cfg) =
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
-  let assert "clients/web/src/generated" = cfg.client_generated
-  let assert "src/server/generated" = cfg.server_generated
-  let assert Some("shared/src/shared") = cfg.shared_src
+  let assert "../clients/web/src/generated" = cfg.client_generated
+  let assert "src/generated" = cfg.server_generated
+  let assert Some("../shared/src/shared") = cfg.shared_src
   let assert WsPathOnly(path: "/ws") = cfg.ws_mode
 }
 
@@ -96,10 +96,10 @@ pub fn to_codegen_config_missing_client_test() {
       rest: False,
       clients: [],
       server_src_dir: "src",
-      server_generated_dir: "src/server/generated",
+      server_generated_dir: "src/generated",
       server_atoms_path: "src/my_app@generated@rpc_atoms.erl",
-      shared_src_dir: "shared/src/shared",
-      context_module: "server/handler_context",
+      shared_src_dir: "../shared/src/shared",
+      context_module: "handler_context",
     )
   let assert Error(msg) =
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")

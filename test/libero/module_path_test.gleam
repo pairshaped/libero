@@ -46,8 +46,8 @@ pub fn module_to_mjs_deep_path_test() {
 // -- extract_dir tests --
 
 pub fn extract_dir_nested_test() {
-  let assert "src/server/generated/libero" =
-    codegen.extract_dir("src/server/generated/libero/dispatch.gleam")
+  let assert "src/generated/libero" =
+    codegen.extract_dir("src/generated/libero/dispatch.gleam")
 }
 
 pub fn extract_dir_single_file_test() {

@@ -9,7 +9,7 @@ import libero/config
 pub fn prefix_paths_prefixes_server_generated_test() {
   let prefixed =
     config.prefix_paths(config: base_config(), project_path: "build/.test_proj")
-  let assert "build/.test_proj/src/server/generated" = prefixed.server_generated
+  let assert "build/.test_proj/src/generated" = prefixed.server_generated
 }
 
 pub fn prefix_paths_prefixes_client_generated_test() {
@@ -65,7 +65,7 @@ pub fn prefix_paths_with_dot_is_identity_for_paths_test() {
   // paths still resolve to the right files when read by simplifile.
   // Standardize on the literal "./..." form so tests can compare exactly.
   let prefixed = config.prefix_paths(config: base_config(), project_path: ".")
-  let assert "./src/server/generated" = prefixed.server_generated
+  let assert "./src/generated" = prefixed.server_generated
   let assert "./clients/web/src/generated" = prefixed.client_generated
 }
 
@@ -83,7 +83,7 @@ fn base_config() -> config.Config {
     decoders_prelude_import_path: "../../libero/libero/decoders_prelude.mjs",
     shared_src: option.Some("shared/src/shared"),
     server_src: option.Some("src"),
-    server_generated: "src/server/generated",
+    server_generated: "src/generated",
     client_generated: "clients/web/src/generated",
   )
 }

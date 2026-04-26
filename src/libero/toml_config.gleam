@@ -27,20 +27,20 @@ pub type TomlConfig {
     /// Default: "src" (package root).
     server_src_dir: String,
     /// Directory where libero writes server-side generated code
-    /// (dispatch, websocket). Default: "src/server/generated".
+    /// (dispatch, websocket). Default: "src/generated" (relative to server package root).
     server_generated_dir: String,
     /// Path to the atoms .erl file. Default:
     /// "src/<name>@generated@rpc_atoms.erl".
     server_atoms_path: String,
     /// Directory containing shared source (where message modules live).
     /// Libero scans this directory for MsgFromClient/MsgFromServer types.
-    /// Default: "shared/src/shared" - a separate target-agnostic package.
+    /// Default: "../shared/src/shared" (relative to server package root) - a separate target-agnostic package.
     /// Required for projects with both an Erlang server and a JS client:
     /// if messages lived in the server package, the JS client couldn't
     /// import them without pulling in wisp/sqlight (Erlang-only FFI).
     shared_src_dir: String,
     /// Gleam module path to the HandlerContext type used by libero dispatch.
-    /// Default: "server/handler_context".
+    /// Default: "handler_context".
     context_module: String,
   )
 }
@@ -113,7 +113,7 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
 
   let server_generated_dir =
     tom.get_string(parsed, ["tools", "libero", "server", "generated_dir"])
-    |> result.unwrap("src/server/generated")
+    |> result.unwrap("src/generated")
 
   let default_atoms =
     "src/"
@@ -125,11 +125,11 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
 
   let shared_src_dir =
     tom.get_string(parsed, ["tools", "libero", "shared", "src_dir"])
-    |> result.unwrap("shared/src/shared")
+    |> result.unwrap("../shared/src/shared")
 
   let context_module =
     tom.get_string(parsed, ["tools", "libero", "context_module"])
-    |> result.unwrap("server/handler_context")
+    |> result.unwrap("handler_context")
 
   use clients <- result.try(parse_clients(parsed))
 
@@ -164,7 +164,7 @@ pub fn to_codegen_config(
   hint: Add it with: gleam run -m libero -- add " <> client_name <> " --target javascript" }),
   )
   let app = toml_cfg.name
-  let client_generated = "clients/" <> client.name <> "/src/generated"
+  let client_generated = "../clients/" <> client.name <> "/src/generated"
   let server_generated = toml_cfg.server_generated_dir
   let atoms_module =
     string.replace(app, each: "-", with: "_") <> "@generated@rpc_atoms"
@@ -180,7 +180,7 @@ pub fn to_codegen_config(
   let decoders_gleam_output = client_generated <> "/rpc_decoders.gleam"
   let decoders_prelude_import_path =
     register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
-  let client_root = "clients/" <> client.name
+  let client_root = "../clients/" <> client.name
   Ok(Config(
     ws_mode: WsPathOnly(path: ws_path),
     namespace: None,
