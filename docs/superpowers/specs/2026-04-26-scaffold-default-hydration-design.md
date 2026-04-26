@@ -1,191 +1,448 @@
-# Scaffold: SSR-hydrated SPA as the default for `libero new`
+# Libero project layout: three-peer monorepo with examples-as-templates
 
-> **Bean:** libero-jqaj. Follow-up to libero-nm1e (isomorphic routing), now shipped.
+> **Bean:** libero-jqaj. Originally scoped to "make SSR-hydrated SPA the scaffold default." Through brainstorming this expanded into a layout-and-tooling rework. The bean description should be updated.
 
 ## Goal
 
-Update `libero new` to produce an SSR-hydrated SPA by default. The scaffolded skeleton compiles, runs with `gleam run -m libero -- build && gleam run`, server-renders HTML for `/`, and hydrates on the client. A `--no-client` flag opts out for server-only projects.
+Restructure libero projects to follow Lustre's recommended three-peer monorepo layout (`server/`, `shared/`, `clients/`). Use libero's own `examples/` directory as the canonical starter set: scaffolding a new project becomes copying an example. Replace the bespoke `libero new` CLI codegen with a hosted shell script that fetches and renames an example.
 
 ## Context
 
-`libero/ssr.handle_request` and `libero/ssr.boot_script` shipped in libero 5.0. The `examples/ssr_hydration` example demonstrates the pattern. The current `libero new` scaffold predates these helpers: it produces a pure-SPA structure with a hard-coded inline `index.html` in the generated server entry. The bean tracks bringing the scaffold up to date.
+Libero today puts the server package at the project root. `clients/` and `shared/` are subdirectories. This was the path of least resistance — Gleam needs a runnable root package, and the server is the obvious thing to make runnable. But it has costs:
+
+1. **Layout misleads about importance.** `shared/` is the cross-target contract that both server and client depend on. Putting it in a subdir signals "auxiliary helper" when it's structurally as load-bearing as the server.
+2. **Diverges from Lustre's official guide.** Lustre docs recommend three peer packages at root. New users coming from Lustre encounter unfamiliar shape.
+3. **`libero new` has a chicken-and-egg problem.** Invoked as `gleam run -m libero -- new <name>`, it requires libero to already be a dep of a Gleam project. Brand-new users don't have one.
+4. **Scaffold templates and example apps duplicate effort.** The CLI codegen has hand-written file content; `examples/` directories have working apps. They drift.
+
+Pre-launch is the cheapest moment to fix all four.
 
 ## Scope
 
 What changes:
 
-1. Generated server entry (codegen): replace the hard-coded inline `index.html` fallthrough with an `ssr.handle_request` catch-all that dispatches via `page.load_page` and `page.render_page`. Existing routes for `/ws`, `/rpc`, and `/<client>/*` static files stay.
-2. New scaffolded files: `shared/src/shared/router.gleam`, `shared/src/shared/views.gleam`, `src/server/page.gleam`.
-3. Renamed scaffolded file: `shared/src/shared/messages.gleam` becomes `shared/src/shared/types.gleam`.
-4. Updated scaffolded file: `clients/web/src/app.gleam` switches to `modem.init`, `decode_flags`, and the cross-target `views.view`. Adds `clients/web/src/flags_ffi.mjs`.
-5. Updated handler: `src/server/handler.gleam` keeps the `ping` handler, now imports `PingError` from `shared/types`.
-6. CLI flags: remove `--web`, add `--no-client`.
-7. Tests: update `test/libero/cli_new_test.gleam` to verify the new default shape and the `--no-client` opt-out.
+1. **Layout.** Server moves out of the root into `server/`. Sibling peers: `server/`, `shared/`, `clients/`. No top-level `gleam.toml`.
+2. **Codegen paths.** Libero's codegen and config defaults update to write to `src/generated/` (inside `server/`), `../clients/<name>/src/generated/`, and read from `../shared/src/shared/`. Paths become relative to libero's cwd, which is always `server/`.
+3. **Default example.** New `examples/default/` is the canonical minimal SSR-hydrated SPA. Doubles as the starter shape.
+4. **Existing example migrates.** `examples/todos/` moves to the new three-peer layout. (`examples/ssr_hydration/` was already deleted.)
+5. **Scaffolding via shell script.** New `bin/new` in the libero repo: a `curl | sh`-style script that downloads the libero tarball, extracts an example into a target directory, renames the example name to the user's project name across `gleam.toml` files, and runs `git init`. Replaces the bespoke `libero new` CLI codegen path.
+6. **Per-project bin scripts.** Each scaffolded project ships `bin/dev` and `bin/test` as the entry points for daily workflow. Wraps the `cd server && ...` ceremony.
+7. **CLI collapse.** Libero's CLI becomes single-purpose: invoking `gleam run -m libero` generates code. No subcommands, no flags. Mirrors marmot. The `new`, `add`, `build`, `gen` distinctions all go away; `libero` either generates or it doesn't. Argument parsing in `cli.gleam` is removed; `cli/new.gleam`, `cli/add.gleam`, `cli/templates.gleam`, `cli/parse_database.gleam` are deleted.
+8. **README and llms.txt updates.** New "getting started" using `curl | sh`. Layout section reflects the three-peer shape.
+9. **Tests.** Scaffold tests in `cli_new_test.gleam` are deleted (the CLI scaffold path goes away). New tests verify `examples/default/` builds and runs end-to-end.
 
 What does NOT change:
 
-- The `examples/` directories. Existing examples already track the new patterns.
-- The `libero/ssr` API. No new helpers needed.
-- The `--database` flag and database scaffolding. Orthogonal to client/SSR.
+- The `libero/ssr` API. Helpers shipped in libero-nm1e remain unchanged.
+- The handler-as-contract codegen. Type scanning, dispatch generation, websocket generation are unchanged at the algorithm level. Only the file paths they read/write change.
+- The `--database pg | sqlite` scaffold variation. With examples-as-templates, this becomes "pick a different example" (`examples/default-pg/`, `examples/default-sqlite/`), or accept that database setup is a manual step the user does after copying the default.
 
 ## Out of scope
 
-- Rewriting `docs/build-a-checklist-app.md`. That happens in a separate project once this scaffold has shipped.
-- Making the scaffold a full demo app. The scaffold is a minimum-viable skeleton that compiles and runs. Pedagogical demos belong in `examples/` or guides.
-- Adding `--no-ssr` or other axes of scaffold variation. Two shapes (default hydrated SPA, `--no-client`) cover the cases that exist today.
+- Rewriting `docs/build-a-checklist-app.md`. Separate project, happens after this lands.
+- Migrating curling/v3 to the new layout. Owned by user, happens after libero ships.
+- Distributing libero as a standalone binary or via package managers (brew, mise). Future bean.
+- Hosting `libero.run` or any custom domain. The script is served from `raw.githubusercontent.com/pairshaped/libero/main/bin/new`. Custom domain is a future bean.
+- Database scaffold variations. The default example doesn't pre-wire pg or sqlite. Users add a database manually or pick a different example once we ship one.
+- Multi-client scaffolding (`libero add cli --target erlang`). Adding a second client is a manual operation: create the directory, write its `gleam.toml`, register it in `server/gleam.toml`'s `[tools.libero.clients.X]`. Documented in README.
 
-## File structure
+## File layout
 
-Default `libero new myapp`:
+A scaffolded `my_app` looks like:
 
 ```
-myapp/
-├── gleam.toml
-├── shared/
-│   ├── gleam.toml
-│   └── src/shared/
-│       ├── router.gleam       # Route enum, parse_route, route_to_path (cross-target)
-│       ├── types.gleam        # Domain types used in handler signatures (cross-target)
-│       └── views.gleam        # Model, Msg, view function (cross-target)
-├── src/
-│   ├── myapp.gleam            # Generated server entry: mist routes, calls page module
-│   └── server/
-│       ├── handler.gleam      # `ping` handler
+my_app/
+├── .gitignore
+├── README.md
+├── bin/
+│   ├── dev               # codegen + run server
+│   └── test              # run server tests
+├── server/
+│   ├── gleam.toml        # target=erlang, [tools.libero] config, libero+mist+lustre deps
+│   ├── manifest.toml
+│   └── src/
+│       ├── server.gleam              # entry point, customizable, never overwritten
+│       ├── handler.gleam             # ping handler
 │       ├── handler_context.gleam
-│       └── page.gleam         # load_page + render_page (server-only SSR orchestration)
-├── clients/
-│   └── web/
-│       ├── gleam.toml
-│       └── src/
-│           ├── app.gleam      # Lustre client: decode_flags + modem.init
-│           └── flags_ffi.mjs  # FFI for reading window.__LIBERO_FLAGS__
-└── test/
-    └── myapp_test.gleam       # Starter test exercising `ping`
+│       ├── page.gleam                # load_page + render_page (SSR orchestration)
+│       └── generated/                # codegen output (dispatch, websocket)
+├── shared/
+│   ├── gleam.toml        # no target (cross-compiles)
+│   ├── manifest.toml
+│   └── src/shared/
+│       ├── router.gleam              # Route, parse_route, route_to_path
+│       ├── types.gleam               # PingError (domain types)
+│       └── views.gleam               # Model, Msg, view function
+└── clients/
+    └── web/
+        ├── gleam.toml    # target=javascript, lustre+modem deps
+        ├── manifest.toml
+        └── src/
+            ├── app.gleam             # Lustre client: decode_flags + modem.init
+            └── flags_ffi.mjs         # FFI for window.__LIBERO_FLAGS__
 ```
 
-`libero new myapp --no-client`:
+Per-package gleam.toml summaries:
 
-- No `clients/` directory.
-- No `shared/router.gleam` or `shared/views.gleam`.
-- No `src/server/page.gleam`.
-- Server entry has no SSR catch-all. Falls through to a 404 response (matches the current behavior when a project is scaffolded without any client).
-- Keeps `shared/types.gleam`, since handlers still need a place for domain types when called via HTTP `/rpc`.
+- `server/gleam.toml`: target=erlang, deps = libero, mist, lustre, gleam_http, shared (path: `../shared`). Holds `[tools.libero]` config including `shared_src_dir = "../shared/src/shared"` and `[tools.libero.clients.web]` with target=javascript and path=`../clients/web`.
+- `shared/gleam.toml`: no target (compiles to both). Deps = lustre, gleam_stdlib, libero (for `libero/ssr` types used in views).
+- `clients/web/gleam.toml`: target=javascript, deps = lustre, modem, libero, shared (path: `../../shared`).
 
-## Per-module responsibilities
+## The default example (`examples/default/`)
 
-### `shared/router.gleam`
+Minimum viable SSR-hydrated SPA. Renders "Hello from default" plus a Ping button on the server, hydrates on the client, button click calls `ping` handler via RPC and shows the response.
 
-Owns the Route enum and bidirectional URL conversion. Cross-target so the server passes `router.parse_route` to `ssr.handle_request` and the client passes the same function to `modem.init`.
-
-Starter content: `Route { Home }`, `parse_route` matches the empty path to `Home`, `route_to_path(Home) = "/"`.
-
-### `shared/types.gleam`
-
-Holds domain types that appear in handler signatures. Replaces the legacy `messages.gleam` name, which was a holdover from the pre-handler-as-contract era when "messages" meant manually-defined wire types.
-
-Starter content: `pub type PingError { PingFailed }`. Purpose is to make the convention visible: domain error types live in shared/.
-
-### `shared/views.gleam`
-
-Cross-target view rendering. Holds `Model`, `Msg`, and `view`. The client adds an outer `ClientMsg` type wrapping `Msg` plus RPC variants.
-
-Starter content:
-
-- `Model(route: Route, ping_response: String)`. The `ping_response` field starts empty and gets filled by the client when the user clicks Ping.
-- `Msg { UserClickedPing, NavigateTo(Route), NoOp }`.
-- `view(model)` dispatches on `model.route`. The `Home` view renders the heading, a Ping button bound to `UserClickedPing`, and a paragraph showing `model.ping_response` (or a placeholder when empty).
-
-### `src/server/page.gleam`
-
-Server-only SSR orchestration. Two functions:
-
-- `load_page(req, route, state)` returns `Result(Model, Response)`. Starter implementation is trivial: `Ok(Model(route:, ping_response: ""))`. No `ssr.call` demo.
-- `render_page(route, model)` returns `Element(Msg)`. Wraps `views.view(model)` in `<html><head><body>` and appends `ssr.boot_script(client_module: "/web/web/app.mjs", flags: model)`.
-
-The trivial `load_page` is intentional. Showing `ssr.call` in the scaffold would force a chain of demo data that's irrelevant the moment a user starts a real app. The shape is wired up; the user fills in the data fetch.
-
-### `src/server/handler.gleam`
-
-Unchanged from today except for the import: `import shared/types.{type PingError}` instead of `shared/messages`. Keeps `ping` returning `#(Result(String, PingError), HandlerContext)`. Codegen needs at least one handler, and `ping` doubles as the handler the scaffolded client actually calls.
-
-### `clients/web/src/app.gleam`
-
-Hydrating Lustre client. Pattern matches the example:
-
-- `main()` calls `lustre.application(init, update, view_wrap)` and starts on `#app` with `get_flags()` as the flags.
-- `init(flags)` calls `decode_flags(flags)`. On Ok, returns the decoded `Model` and `modem.init(on_url_change)`. On Error, panics with a message that points the user at `ssr.boot_script`.
-- `on_url_change(uri)` runs `router.parse_route` and emits `NavigateTo(route)` or `NoOp`.
-- `update` handles `ViewMsg(UserClickedPing)` (issues `rpc.ping(on_response: GotPing)`), `ViewMsg(NavigateTo(route))` (updates `model.route`), `ViewMsg(NoOp)` (no-op), and `GotPing(rd)` (writes the response text into `model.ping_response`).
-- `view_wrap` lifts `views.view(model): Element(Msg)` to `Element(ClientMsg)` via `element.map(ViewMsg)`.
-- FFI: `get_flags()` reads `window.__LIBERO_FLAGS__` from `flags_ffi.mjs`.
-
-### `src/myapp.gleam` (generated server entry)
-
-Codegen produces the server entry at scaffold time and never overwrites it (existing `write_if_missing` behavior). Routing case stays:
+### `shared/src/shared/router.gleam`
 
 ```gleam
-case req.method, request.path_segments(req) {
-  _, ["ws"] -> ws.upgrade(...)
-  http.Post, ["rpc"] -> handle_rpc(...)
-  _, ["web", ..path] -> serve_file(...)
-  _, _ -> ssr.handle_request(
-    req:,
-    parse: router.parse_route,
-    load: page.load_page,
-    render: page.render_page,
-    state:,
-  )
+import gleam/uri.{type Uri}
+
+pub type Route {
+  Home
+}
+
+pub fn parse_route(uri: Uri) -> Result(Route, Nil) {
+  case uri.path_segments(uri.path) {
+    [] -> Ok(Home)
+    _ -> Error(Nil)
+  }
+}
+
+pub fn route_to_path(route: Route) -> String {
+  case route {
+    Home -> "/"
+  }
 }
 ```
 
-When `--no-client` is set, the `["web", ..path]` arm and the SSR fallthrough are both dropped. Fallthrough becomes `_, _ -> response.new(404) |> ...`.
+### `shared/src/shared/types.gleam`
 
-## CLI changes
+```gleam
+pub type PingError {
+  PingFailed
+}
+```
 
-`src/libero/cli.gleam` and `src/libero/cli/new.gleam`:
+### `shared/src/shared/views.gleam`
 
-- Remove `--web`. The flag was the explicit way to add a JS client at scaffold time. With SSR-hydrated SPA as the default, `--web` is implicit.
-- Add `--no-client`. Inverts the default: skip the JS client and the SSR wiring.
+```gleam
+import lustre/attribute
+import lustre/element.{type Element}
+import lustre/element/html
+import lustre/event
+import shared/router.{type Route, Home}
 
-`scaffold` function signature changes from `(path, database, web)` to `(path, database, no_client)`.
+pub type Model {
+  Model(route: Route, ping_response: String)
+}
+
+pub type Msg {
+  UserClickedPing
+  NavigateTo(Route)
+  NoOp
+}
+
+pub fn view(model: Model) -> Element(Msg) {
+  case model.route {
+    Home -> home_view(model.ping_response)
+  }
+}
+
+fn home_view(ping_response: String) -> Element(Msg) {
+  html.div([], [
+    html.h1([], [html.text("Hello from default")]),
+    html.button([event.on_click(UserClickedPing)], [html.text("Ping")]),
+    case ping_response {
+      "" -> html.p([], [html.text("Click to ping the server.")])
+      msg -> html.p([], [html.text("Server says: " <> msg)])
+    },
+  ])
+}
+```
+
+### `server/src/handler.gleam`
+
+```gleam
+import handler_context.{type HandlerContext}
+import shared/types.{type PingError}
+
+pub fn ping(
+  state state: HandlerContext,
+) -> #(Result(String, PingError), HandlerContext) {
+  #(Ok("pong"), state)
+}
+```
+
+Note: imports use `handler_context` (no `server/` prefix) because we're inside the server package now.
+
+### `server/src/page.gleam`
+
+```gleam
+import gleam/http/request.{type Request}
+import gleam/http/response
+import handler_context.{type HandlerContext}
+import libero/ssr
+import lustre/attribute
+import lustre/element.{type Element}
+import lustre/element/html
+import mist.{type Connection, type ResponseData}
+import shared/router.{type Route}
+import shared/views.{type Model, type Msg, Model}
+
+pub fn load_page(
+  _req: Request(Connection),
+  route: Route,
+  _state: HandlerContext,
+) -> Result(Model, response.Response(ResponseData)) {
+  Ok(Model(route:, ping_response: ""))
+}
+
+pub fn render_page(_route: Route, model: Model) -> Element(Msg) {
+  html.html([attribute.attribute("lang", "en")], [
+    html.head([], [
+      html.meta([attribute.attribute("charset", "utf-8")]),
+      html.meta([
+        attribute.name("viewport"),
+        attribute.attribute("content", "width=device-width, initial-scale=1"),
+      ]),
+      html.title([], "default"),
+    ]),
+    html.body([], [
+      html.div([attribute.id("app")], [views.view(model)]),
+      ssr.boot_script(client_module: "/web/web/app.mjs", flags: model),
+    ]),
+  ])
+}
+```
+
+### `server/src/server.gleam` (entry, generated by codegen)
+
+Mist setup: routes `/ws` to websocket, `POST /rpc` to HTTP RPC, `/web/*` to static files for the JS client, and a catch-all `ssr.handle_request(parse: router.parse_route, load: page.load_page, render: page.render_page, state:)`.
+
+### `clients/web/src/app.gleam`
+
+```gleam
+import generated/messages as rpc
+import gleam/dynamic.{type Dynamic}
+import gleam/uri.{type Uri}
+import libero/remote_data.{type RemoteData, Success}
+import libero/ssr as libero_ssr
+import lustre
+import lustre/effect.{type Effect}
+import lustre/element
+import modem
+import shared/router
+import shared/types.{type PingError}
+import shared/views.{type Model, type Msg, Model, NavigateTo, NoOp, UserClickedPing}
+
+pub type ClientMsg {
+  ViewMsg(Msg)
+  GotPing(RemoteData(String, PingError))
+}
+
+pub fn main() {
+  let app = lustre.application(init, update, view_wrap)
+  let assert Ok(_) = lustre.start(app, "#app", get_flags())
+  Nil
+}
+
+fn init(flags: Dynamic) -> #(Model, Effect(ClientMsg)) {
+  let model = case libero_ssr.decode_flags(flags) {
+    Ok(m) -> m
+    Error(_) ->
+      panic as "failed to decode SSR flags — was ssr.boot_script called on the server?"
+  }
+  #(model, modem.init(on_url_change))
+}
+
+fn on_url_change(uri: Uri) -> ClientMsg {
+  case router.parse_route(uri) {
+    Ok(route) -> ViewMsg(NavigateTo(route))
+    Error(_) -> ViewMsg(NoOp)
+  }
+}
+
+fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
+  case msg {
+    ViewMsg(UserClickedPing) -> #(model, rpc.ping(on_response: GotPing))
+    ViewMsg(NavigateTo(route)) -> #(Model(..model, route:), effect.none())
+    ViewMsg(NoOp) -> #(model, effect.none())
+    GotPing(Success(response)) -> #(
+      Model(..model, ping_response: response),
+      effect.none(),
+    )
+    GotPing(_) -> #(
+      Model(..model, ping_response: "ping failed"),
+      effect.none(),
+    )
+  }
+}
+
+fn view_wrap(model: Model) -> element.Element(ClientMsg) {
+  views.view(model) |> element.map(ViewMsg)
+}
+
+@external(javascript, "./flags_ffi.mjs", "getFlags")
+fn get_flags() -> Dynamic {
+  panic as "get_flags requires a browser"
+}
+```
+
+### `bin/dev`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$DIR/server"
+gleam run -m libero
+gleam run
+```
+
+### `bin/test`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$DIR/server" && gleam test
+```
+
+## The `bin/new` scaffolding script (libero repo)
+
+Path: `bin/new` in the libero repo (not in scaffolded apps). Distributed via `raw.githubusercontent.com/pairshaped/libero/main/bin/new`.
+
+Behavior:
+1. Take two args: project name (required), example name (optional, defaults to `default`).
+2. Download `https://github.com/pairshaped/libero/archive/main.tar.gz`.
+3. Extract `libero-main/examples/<example_name>/` to `./<project_name>/`, stripping the leading path components.
+4. Walk all `gleam.toml` files in the new project, replace `name = "<example_name>"` with `name = "<project_name>"` and any `path = "../<example_name>"` references that may reference the example by name.
+5. `git init`, `git add .`, `git commit -m "Initial commit from libero/examples/<example_name>"`.
+6. Print a "next steps" message: `cd <project_name> && bin/dev`.
+
+Implementation: bash, ~30 lines. Uses curl, tar, find, sed, git. No external runtime deps.
+
+User invocation:
+
+```bash
+# Basic — use the default example
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_app
+
+# Pick a different example
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_todos todos
+```
+
+For users who don't want to run remote scripts:
+- The README shows the `curl | sh` command and links to the script source on GitHub.
+- The README also shows the script's body inline in a collapsed `<details>` block so users can read it without leaving the page.
+- The script is small (~30 lines of bash) and easy to audit.
+
+## Codegen and config changes
+
+### Config defaults
+
+In `src/libero/toml_config.gleam`:
+
+| Field | Old default | New default |
+|---|---|---|
+| `server_src_dir` | `"src"` | `"src"` (unchanged — same package, just the package's location moved) |
+| `server_generated_dir` | `"src/server/generated"` | `"src/generated"` |
+| `server_atoms_path` | `"src/<name>@generated@rpc_atoms.erl"` | `"src/<name>@generated@rpc_atoms.erl"` (unchanged) |
+| `shared_src_dir` | `"shared/src/shared"` | `"../shared/src/shared"` |
+| `context_module` | `"server/handler_context"` | `"handler_context"` |
+
+In `src/libero/config.gleam`:
+
+| Field | Old default | New default |
+|---|---|---|
+| Atoms file path (no namespace) | `"src/server@generated@libero@rpc_atoms.erl"` | `"src/generated@libero@rpc_atoms.erl"` |
+| Generated dispatch dir (no namespace) | `"src/server/generated/libero"` | `"src/generated/libero"` |
+
+The `server/handler_context` → `handler_context` rename reflects that we're inside the server package; the redundant `server/` prefix goes away. Same for `server/generated` → `generated`.
+
+### Codegen output paths
+
+Currently `codegen.gleam` writes to `<server_generated>/dispatch.gleam`, `<server_generated>/websocket.gleam`, and per-client to `clients/<name>/src/generated/...`. With the new layout, libero's cwd is `server/`. The relative paths inside config become:
+- Server outputs: `src/generated/dispatch.gleam`, `src/generated/websocket.gleam`
+- Client outputs: `../clients/<name>/src/generated/...`
+
+Codegen currently joins `server_generated` from cwd; that still works as long as the config value is correct. Verify during implementation that no path-resolution code assumes paths are non-relative.
+
+### `[tools.libero.clients.X]` paths
+
+Today: `path = "clients/<name>"`. New: `path = "../clients/<name>"`. The schema is identical, just defaults change.
+
+## CLI collapse
+
+Libero's CLI becomes single-purpose: invoking `gleam run -m libero` generates code. No subcommands, no flags. Same shape as marmot.
+
+Files affected:
+
+- **Delete:** `src/libero/cli.gleam` (argument parsing).
+- **Delete:** `src/libero/cli/new.gleam` (replaced by `bin/new` shell script).
+- **Delete:** `src/libero/cli/add.gleam` (manual edit instead).
+- **Delete:** `src/libero/cli/templates.gleam` (replaced by `examples/` files).
+- **Delete:** `src/libero/cli/parse_database.gleam` (no flags to parse).
+- **Simplify:** `src/libero.gleam` becomes a thin entry: load config, run codegen, exit. No argv handling.
+
+CLI surface becomes: `gleam run -m libero`. That's it.
+
+Compilation stays where it lives in Gleam: `gleam build` per-package, `gleam run` to start the server. Libero is purely a code generator now, not a build orchestrator.
 
 ## Test coverage
 
-`test/libero/cli_new_test.gleam` updates:
+Removed:
+- `test/libero/cli_new_test.gleam` — `new` command deleted.
+- `test/libero/cli_add_test.gleam` — `add` command deleted.
+- `test/libero/cli_test.gleam` — argument parsing deleted.
+- `test/libero/cli_parse_database_test.gleam` — flag parsing deleted.
 
-- Existing `scaffold_project_test`: drop the `web: False` argument. Assert the new default files exist (`shared/src/shared/router.gleam`, `shared/src/shared/views.gleam`, `shared/src/shared/types.gleam`, `src/server/page.gleam`, `clients/web/src/app.gleam`, `clients/web/src/flags_ffi.mjs`). Assert that `shared/src/shared/messages.gleam` does NOT exist.
-- New `scaffold_no_client_test`: passes `no_client: True`. Assert that `clients/`, `shared/router.gleam`, `shared/views.gleam`, and `src/server/page.gleam` are absent. Assert that `shared/types.gleam` and `src/server/handler.gleam` are present.
-- Existing database scaffold tests (`scaffold_pg_test`, `scaffold_sqlite_test`): drop `web: False` argument. Verify they still produce the new default file shape.
-- New `scaffold_runs_test` (optional, slower): scaffolds, runs `libero build`, asserts the generated dispatch and SSR call sites compile. Skip if cycle time becomes a problem; existing `gen_run_test` covers most of this already.
+Updated:
+- `test/libero/codegen_config_test.gleam` — verify new path defaults.
+- `test/libero/gen_run_test.gleam` — verify codegen runs against the new layout. May need fixture updates.
 
-## Behavior on first `gleam run`
+New:
+- `test/libero/example_default_test.gleam` (or similar) — verify `examples/default/` builds successfully on both targets and that its server starts and serves a response. Treats the default example as a fixture.
 
-A user who runs `libero new myapp && cd myapp && gleam run -m libero -- build && gleam run`:
+## Migration story
 
-1. Server starts on port 8080.
-2. Visiting `http://localhost:8080/` returns SSR HTML: a heading, a Ping button, and a placeholder paragraph. The page is fully styled-and-laid-out before any JavaScript runs.
-3. The client boots, decodes flags, hydrates the existing DOM (no flicker, no remount).
-4. Clicking the Ping button issues an RPC call. The response replaces the placeholder text with "Server says: pong".
+**For libero itself:**
+- The library source (`src/libero/`) doesn't move. Libero is a library, not a fullstack app.
+- `examples/todos/` migrates to the three-peer layout. One-time mechanical change.
+- Tests update for new paths.
 
-Failure modes the scaffold must handle gracefully:
+**For curling/v3 (downstream):**
+- Move `src/server/` → `server/src/`, drop the redundant `server/` prefix.
+- Move root `gleam.toml`'s `[tools.libero]` into `server/gleam.toml`.
+- Move `clients/admin/` → `clients/admin/` (no change to clients structure).
+- Move `shared/` → `shared/` (no change).
+- Update all imports: `server/handler_context` → `handler_context`, `server/foo` → `foo`, etc.
+- Update `bin/dev`, `bin/build` paths.
+- Run `gleam run -m libero` from new `server/` to regenerate, then `gleam build` and fix any breakage.
 
-- `decode_flags` Error: the client panics with a clear message. Users see this if they accidentally remove `ssr.boot_script` or load the client outside of an SSR-rendered page.
-- Bad URLs at navigation time: `parse_route` returns `Error(Nil)`, `on_url_change` emits `NoOp`. The browser's URL changes but the model doesn't. Better than panicking.
+Pre-launch, this is a one-PR migration in v3. User-owned, separate from libero work.
 
-## Migration
+**For new users:**
+- Old getting-started: `gleam run -m libero -- new my_app --web`. No longer works.
+- New getting-started: `curl -fsSL .../bin/new | sh -s my_app`, then `cd my_app && bin/dev`.
 
-Libero 5.0 has not been published to hex. There are no external users on the current scaffold to migrate. The change ships as part of whatever the next published version is.
-
-`examples/ssr_hydration` already follows the new pattern. Existing internal projects scaffolded against the old `libero new` keep their original `main.gleam` because codegen uses `write_if_missing` for the server entry. They are not auto-migrated; if the maintainer wants SSR they have to update the file by hand against the new template. That is acceptable, since the affected projects are countable on one hand and the rewrite is small.
+**For existing libero invocations:**
+- Old: `gleam run -m libero -- gen` (or `-- build`, `-- add ...`).
+- New: `gleam run -m libero` (just generates). Compilation/run is plain `gleam build` and `gleam run`. No subcommands.
 
 ## Risks
 
-- **Codegen complexity**: the generated server entry now imports `libero/ssr`, the `router` module path from shared, and the `page` module from server. The codegen template grows. Mitigation: keep the template flat, no fancy splicing, and rely on existing `gen_run_test` to catch regressions.
-- **Cross-target compile cost**: `shared/views.gleam` now depends on lustre. The shared package compiles on both Erlang and JavaScript. Existing examples already do this and the build cost is small, but worth verifying the scaffold's first-build time is reasonable on a clean machine.
-- **Naming overlap**: `shared/router.gleam` (route definitions) and `src/server/router.gleam` (HTTP routing, the curling-style pattern users coming from non-hydrated apps may be used to) describe related but different things. The scaffold ships only the first; the second is an internal convention for users who want to factor out their server entry's routing case as their app grows. Worth a sentence in the README so the distinction is visible.
+- **`bin/new` rename logic.** Replacing `default` (or whatever example name) with the user's project name across `gleam.toml` files is a sed replacement. If "default" appears in unexpected places (a comment, a string literal in starter code), it gets renamed too. Mitigation: the default example shouldn't have "default" in any non-config context. Audit the example contents before shipping.
+- **Codegen path resolution.** Many places in `codegen.gleam` assume specific path shapes. Hidden assumptions about cwd or non-relative paths could surface during implementation. Mitigation: the existing `gen_run_test` fixture runs codegen against a real scaffold; it'll catch most of these.
+- **`gleam.toml` path dep across packages.** `path = "../shared"` works in Gleam, but the build system needs to resolve symbolic vs absolute path quirks. Verify by running a fresh end-to-end build.
+- **Examples drift.** With examples as templates, examples must build and run. If a libero change breaks an example, scaffolding breaks. Mitigation: CI builds and runs examples on every PR.
+- **`bin/new` running on Windows.** The script is bash. Windows users need WSL or git-bash. Acceptable for a Gleam project (Gleam doesn't promise great Windows support either), but worth a sentence in the README.
 
 ## Open questions for the implementation plan
 
-- Exact wording of comments in scaffolded files. The user prefers minimal comments. Settle on a per-file budget (likely zero or one short line) when writing the plan.
-- Whether `shared/types.gleam` ships empty or with `PingError`. Spec assumes it ships with `PingError` because `ping` references it. Confirm during implementation.
-- Whether the generated server entry's import block is hand-formatted by codegen or runs through `gleam format` after write. Existing codegen runs `gleam format` on `.gleam` writes, so this should already work; verify.
+- **Example name vs project name in `gleam.toml`.** The default example's `gleam.toml` files name the package `default`. After rename, they name `my_app`. But what about the example in the libero repo when it's there? Maybe it stays as `default` and CI runs it as `default`. Then `bin/new` renames at copy time. Confirm during plan.
+- **Modem dep version.** The default example uses modem. Pin version in spec? Today's example uses `modem ~> 2.1`. Confirm during plan.
+- **Whether to keep a starter test in scaffold.** Old scaffold had `test/<name>_test.gleam` exercising `ping`. New layout puts it at `server/test/<name>_test.gleam`. Worth keeping. Confirm content is unchanged.
+- **`.gitignore` content.** Each package has its own `build/`. Project root needs a `.gitignore` covering `*/build/`, `*/*/build/`, `.env`, etc.
+- **README templates.** What does the scaffolded `README.md` say? Probably very thin: "this is my_app, run `bin/dev` to start." Confirm during plan.
+- **CI for examples.** New responsibility: ensure examples build on every libero PR. New CI step or extension to existing.
