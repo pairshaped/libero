@@ -5,6 +5,7 @@ import gleam/string
 import libero/error.{PanicInfo}
 import libero/ssr
 import libero/wire
+import lustre/element as lustre_element
 
 @external(erlang, "gleam_stdlib", "identity")
 fn coerce(value: a) -> Dynamic
@@ -159,6 +160,36 @@ pub fn call_returns_dispatch_error_on_panic_test() {
       expect: fn(resp) { resp },
     )
   let assert Error(ssr.DispatchError) = result
+}
+
+// --- ssr.boot_script ---
+
+pub fn boot_script_embeds_encoded_flags_test() {
+  let flags = "hello world"
+  let encoded = ssr.encode_flags(flags)
+  let el = ssr.boot_script(client_module: "/web/app.mjs", flags:)
+  let html_str = lustre_element.to_string(el)
+  let assert True = string.contains(html_str, encoded)
+}
+
+pub fn boot_script_includes_client_module_test() {
+  let el = ssr.boot_script(client_module: "/web/app.mjs", flags: 0)
+  let html_str = lustre_element.to_string(el)
+  let assert True = string.contains(html_str, "/web/app.mjs")
+  let assert True = string.contains(html_str, "main()")
+}
+
+pub fn boot_script_sets_window_flags_global_test() {
+  let el = ssr.boot_script(client_module: "/x.mjs", flags: 1)
+  let html_str = lustre_element.to_string(el)
+  let assert True = string.contains(html_str, "window.__LIBERO_FLAGS__")
+}
+
+pub fn boot_script_module_script_is_module_type_test() {
+  let el = ssr.boot_script(client_module: "/x.mjs", flags: 1)
+  let html_str = lustre_element.to_string(el)
+  // The import script must be type="module" or the import statement is invalid.
+  let assert True = string.contains(html_str, "type=\"module\"")
 }
 
 // --- escape_html XSS ---

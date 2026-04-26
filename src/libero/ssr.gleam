@@ -13,6 +13,9 @@ import gleam/result
 import gleam/string
 import libero/error.{type PanicInfo}
 import libero/wire
+import lustre/attribute
+import lustre/element.{type Element}
+import lustre/element/html
 
 pub type SsrError {
   BadResponse
@@ -118,6 +121,39 @@ pub fn document(
   <> "\";</script>\n  <script type=\"module\">\n    import { main } from \""
   <> client_module
   <> "\";\n    main();\n  </script>\n</body>\n</html>"
+}
+
+/// Render a fragment of two `<script>` elements that boot the client app:
+/// one assigns the base64-encoded ETF flags to `window.__LIBERO_FLAGS__`,
+/// the other imports `client_module` as an ES module and calls `main()`.
+///
+/// Drop this in your document tree (typically at the end of `<body>`)
+/// when building a server-rendered page.
+///
+/// ```gleam
+/// html.body([], [
+///   html.div([attribute.id("app")], [views.view(model)]),
+///   ssr.boot_script(client_module: "/web/app.mjs", flags: model),
+/// ])
+/// ```
+///
+/// `client_module` is a JS import path controlled by the developer, not user
+/// input — it is concatenated into the generated `<script type="module">`
+/// without escaping. If you derive this value from external input, you must
+/// validate it yourself.
+pub fn boot_script(
+  client_module client_module: String,
+  flags flags: a,
+) -> Element(msg) {
+  let encoded = encode_flags(flags)
+  // encoded is base64 (alphabet [A-Za-z0-9+/=]) — safe inside a JS string literal.
+  element.fragment([
+    html.script([], "window.__LIBERO_FLAGS__ = \"" <> encoded <> "\";"),
+    html.script(
+      [attribute.type_("module")],
+      "import { main } from \"" <> client_module <> "\";\nmain();",
+    ),
+  ])
 }
 
 /// Escape HTML special characters to prevent XSS in text content.
