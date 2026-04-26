@@ -13,6 +13,19 @@ if [ -z "$NAME" ]; then
   exit 1
 fi
 
+validate_name() {
+  local kind="$1"
+  local value="$2"
+  if ! [[ "$value" =~ ^[a-z][a-z0-9_]*$ ]]; then
+    echo "error: $kind '$value' is not a valid Gleam package name"
+    echo "       must start with a lowercase letter, contain only lowercase letters, digits, or underscores"
+    exit 1
+  fi
+}
+
+validate_name "project name" "$NAME"
+validate_name "template" "$TEMPLATE"
+
 if [ -e "$NAME" ]; then
   echo "error: $NAME already exists"
   exit 1
@@ -22,7 +35,15 @@ TARBALL="https://github.com/pairshaped/libero/archive/main.tar.gz"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
-echo "Downloading libero/examples/$TEMPLATE ..."
+# Pre-flight: git must be configured before we can commit later.
+if ! git config user.email >/dev/null 2>&1 || ! git config user.name >/dev/null 2>&1; then
+  echo "error: git user.email and user.name must be configured"
+  echo "       run: git config --global user.email \"you@example.com\""
+  echo "            git config --global user.name \"Your Name\""
+  exit 1
+fi
+
+echo "Downloading libero (extracting examples/$TEMPLATE) ..."
 curl -fsSL "$TARBALL" | tar xz -C "$TMPDIR"
 
 SRC="$TMPDIR/libero-main/examples/$TEMPLATE"
@@ -54,6 +75,14 @@ fi
 find "$NAME" -name 'gleam.toml' -exec \
   sed -i.bak 's|libero = { path = "[^"]*" }|libero = "~> 5.0"|g' {} \;
 find "$NAME" -name '*.bak' -delete
+
+# Sanity check: no libero path-deps should remain in scaffolded gleam.toml files.
+if grep -rl 'libero = { path' "$NAME" 2>/dev/null; then
+  echo "error: failed to replace libero path-dep with hex dep in scaffolded gleam.toml"
+  echo "       this indicates the source-side gleam.toml format changed"
+  echo "       and the bin/new script needs updating"
+  exit 1
+fi
 
 cd "$NAME"
 git init -q
