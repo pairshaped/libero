@@ -1,6 +1,6 @@
-//// Integration test through `cli/gen.run`. Verifies the path-prefix
-//// fix from libero-j18s: codegen writes inside `project_path` instead
-//// of CWD when the two differ.
+//// Integration test through `cli/gen.run`. Verifies codegen writes into
+//// the server package at `project_path` and into sibling client packages,
+//// with no leak into libero's own src tree.
 
 import gleam/string
 import libero/cli/gen
