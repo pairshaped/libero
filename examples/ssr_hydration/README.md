@@ -10,8 +10,7 @@ The server pre-renders the page HTML with real data so the browser displays cont
 - `src/server/handler.gleam` - handler functions for increment, decrement, and get_counter (each is an RPC endpoint)
 - `src/ets_store.gleam` - simple ETS-backed integer storage
 - `shared/src/shared/views.gleam` - view functions that compile to both Erlang (for SSR) and JavaScript (for the client)
-- `clients/web/src/app.gleam` - Lustre client that hydrates the SSR HTML
-- `clients/web/src/router.gleam` - browser routing (pushState, popstate)
+- `clients/web/src/app.gleam` - Lustre client that hydrates the SSR HTML (modem handles browser routing)
 
 ## How it works
 
@@ -19,8 +18,9 @@ The server uses `libero/ssr` to:
 
 1. Call the handler directly (no network) via `ssr.call` to fetch the current counter value
 2. Render the view to HTML on the server using the shared view functions
-3. Encode the counter value as flags with `ssr.encode_flags`
-4. Send a complete HTML document with `ssr.document`
+3. Inject the initial model as flags and the client bootstrap tag via `ssr.boot_script`
+
+Routing is handled by passing `parse: views.parse_route` and a `render: fn(Route, Model) -> Element(msg)` to `ssr.handle_request`, which takes care of the full SSR response.
 
 The client reads the embedded flags in `init`, renders the same view, and Lustre hydrates the existing DOM instead of replacing it.
 

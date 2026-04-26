@@ -6,6 +6,9 @@ tmp/
 examples/**/manifest.toml
 test/fixtures/wire_e2e/manifest.toml
 test/fixtures/wire_e2e/clients/**/manifest.toml
+test/fixtures/iso_routing/manifest.toml
+test/fixtures/iso_routing/shared/manifest.toml
+test/fixtures/iso_routing/clients/web/manifest.toml
 test/fixtures/wire_e2e/src/server/generated/
 test/fixtures/wire_e2e/clients/web/src/generated/
 test/js/.wire_e2e_*.json
