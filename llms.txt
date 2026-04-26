@@ -66,7 +66,7 @@ To add a client manually: create `clients/<name>/gleam.toml`, add `[tools.libero
 
 ## Configuration
 
-Libero config lives in `gleam.toml` under `[tools.libero]`:
+Libero config lives in `server/gleam.toml` under `[tools.libero]`:
 
 ```toml
 name = "my_app"
@@ -74,19 +74,20 @@ version = "0.1.0"
 target = "erlang"
 
 [dependencies]
-gleam_stdlib = ">= 0.69.0 and < 1.0.0"
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
 gleam_erlang = "~> 1.0"
 gleam_http = "~> 4.0"
 mist = "~> 6.0"
 lustre = "~> 5.6"
-shared = { path = "shared" }
-libero = { path = "../libero" }
+shared = { path = "../shared" }
+libero = "~> 5.0"
 
 [tools.libero]
 port = 8080
 
 [tools.libero.clients.web]
 target = "javascript"
+path = "../clients/web"
 ```
 
 ## Handler-as-Contract
@@ -268,21 +269,54 @@ fn init(flags: Dynamic) -> #(Model, Effect(Msg)) {
 }
 ```
 
-### `ssr.document` -- render the full HTML page
+### `ssr.handle_request` -- route, load, and render a page
 
-Wraps pre-rendered HTML, flags, and a client module import into a complete document:
+Handles a full server-side render cycle: parse the URI into a route, load data, render to HTML, and return a `Response`. Non-GET requests get a 405.
 
 ```gleam
-let body = element.to_string(views.view(model))
-let flags = ssr.encode_flags(counter)
-let html =
-  ssr.document(
-    title: "My App",
-    body:,
-    flags:,
-    client_module: "/web/web/app.mjs",
-  )
+pub fn handle_request(
+  req req: Request(body),
+  parse parse: fn(Uri) -> Result(route, Nil),
+  load load: fn(Request(body), route, state) ->
+    Result(model, Response(ResponseData)),
+  render render: fn(route, model) -> Element(msg),
+  state state: state,
+) -> Response(ResponseData)
 ```
+
+Usage in the server's mist router:
+
+```gleam
+ssr.handle_request(
+  req:,
+  parse: router.parse,
+  load: page.load_page,
+  render: page.render_page,
+  state:,
+)
+```
+
+### `ssr.boot_script` -- embed flags and boot the client app
+
+Returns a lustre fragment of two `<script>` elements: one that writes the encoded flags to `window.__LIBERO_FLAGS__`, and one `<script type="module">` that imports and calls `main()` from the client bundle.
+
+```gleam
+pub fn boot_script(
+  client_module client_module: String,
+  flags flags: a,
+) -> Element(msg)
+```
+
+Usage inside a `render_page` function:
+
+```gleam
+html.body([], [
+  html.div([attribute.id("app")], [views.view(model)]),
+  ssr.boot_script(client_module: "/web/web/app.mjs", flags: model),
+])
+```
+
+`client_module` is a developer-controlled JS import path, not user input. Do not derive it from external input without validation.
 
 ### SSR project structure
 
