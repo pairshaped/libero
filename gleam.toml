@@ -1,5 +1,5 @@
 name = "libero"
-version = "5.0.0"
+version = "6.0.0"
 description = "Typed Gleam RPC for Lustre SPAs without REST, JSON codecs, or hand-written dispatch tables"
 licences = ["MIT"]
 repository = { type = "github", user = "pairshaped", repo = "libero" }
@@ -23,6 +23,8 @@ gleam_crypto = "~> 1.5"
 lustre = "~> 5.6"
 argv = "~> 1.0"
 tom = ">= 2.0.2 and < 3.0.0"
+gleam_http = "~> 4.0"
+mist = "~> 6.0"
 
 [dev-dependencies]
 glinter = "~> 2.14"

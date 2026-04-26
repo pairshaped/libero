@@ -1,47 +1,46 @@
-//// Client app: hydrates SSR-rendered HTML, handles RPC and routing.
+//// Client app: hydrates SSR-rendered HTML, handles RPC and routing via modem.
 
 import generated/messages as rpc
-import generated/ssr
 import gleam/dynamic.{type Dynamic}
+import gleam/uri.{type Uri}
 import libero/remote_data.{type RemoteData, Success}
 import libero/ssr as libero_ssr
 import lustre
 import lustre/effect.{type Effect}
-import router
+import modem
 import shared/views.{
   type Model, type Msg, CounterChanged, DecPage, IncPage, Model, NavigateTo,
-  UserClickedAction,
+  NoOp, UserClickedAction,
 }
 
 pub fn main() {
   let app = lustre.application(init, update, views.view)
-  let flags = ssr.read_flags()
-  let assert Ok(_) = lustre.start(app, "#app", flags)
+  let assert Ok(_) = lustre.start(app, "#app", get_flags())
   Nil
 }
 
 fn init(flags: Dynamic) -> #(Model, Effect(Msg)) {
-  let counter = case libero_ssr.decode_flags(flags) {
-    Ok(n) -> n
-    Error(_) -> 0
+  let model = case libero_ssr.decode_flags(flags) {
+    Ok(m) -> m
+    Error(_) ->
+      panic as "failed to decode SSR flags — was ssr.boot_script called on the server?"
   }
-  let route = views.route_from_path(router.get_pathname())
-  #(
-    Model(route:, counter:),
-    effect.batch([
-      router.listen_nav_clicks(fn(path) {
-        NavigateTo(views.route_from_path(path))
-      }),
-      router.on_popstate(fn(path) { NavigateTo(views.route_from_path(path)) }),
-    ]),
-  )
+  #(model, modem.init(on_url_change))
+}
+
+fn on_url_change(uri: Uri) -> Msg {
+  case views.parse_route(uri) {
+    Ok(route) -> NavigateTo(route)
+    // Modem fires on every same-origin link click + popstate. Bad URLs
+    // shouldn't reach here in this app, but if they do we ignore them
+    // (NoOp) rather than crash the runtime. To handle them explicitly,
+    // widen parse_route or add a fallback Route variant.
+    Error(_) -> NoOp
+  }
 }
 
 fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
-    // Send increment or decrement RPC based on current route.
-    // The generated stub handles wire encoding and response decoding.
-    // on_response wraps the RemoteData result in our CounterChanged msg.
     UserClickedAction -> {
       let effect = case model.route {
         IncPage ->
@@ -55,18 +54,20 @@ fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       }
       #(model, effect)
     }
-    NavigateTo(route) -> #(
-      Model(..model, route:),
-      router.push_url(views.route_to_path(route)),
-    )
+    NavigateTo(route) -> #(Model(..model, route:), effect.none())
     CounterChanged(n) -> #(Model(..model, counter: n), effect.none())
+    NoOp -> #(model, effect.none())
   }
 }
 
-// Extract the counter value from RemoteData, defaulting to 0 on failure.
 fn unwrap_counter(rd: RemoteData(Int, Nil)) -> Int {
   case rd {
     Success(n) -> n
     _ -> 0
   }
+}
+
+@external(javascript, "./flags_ffi.mjs", "getFlags")
+fn get_flags() -> Dynamic {
+  panic as "get_flags requires a browser"
 }

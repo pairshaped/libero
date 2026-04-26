@@ -2,6 +2,7 @@
 //// Compiles to both Erlang (for SSR) and JavaScript (for client).
 
 import gleam/int
+import gleam/uri.{type Uri}
 import lustre/attribute
 import lustre/element.{type Element}
 import lustre/element/html
@@ -22,6 +23,7 @@ pub type Msg {
   UserClickedAction
   NavigateTo(Route)
   CounterChanged(Int)
+  NoOp
 }
 
 pub fn view(model: Model) -> Element(Msg) {
@@ -49,7 +51,6 @@ fn nav_link(href: String, label: String, active: Bool) -> Element(Msg) {
   html.a(
     [
       attribute.href(href),
-      attribute.attribute("data-navlink", ""),
       ..case active {
         True -> [attribute.class("active")]
         False -> []
@@ -59,10 +60,14 @@ fn nav_link(href: String, label: String, active: Bool) -> Element(Msg) {
   )
 }
 
-pub fn route_from_path(path: String) -> Route {
-  case path {
-    "/dec" -> DecPage
-    _ -> IncPage
+/// Parse a URI to a Route. Used by both the server (to route requests)
+/// and the client (modem hands us a Uri on navigation events).
+/// Cross-target: compiles to BEAM and JS.
+pub fn parse_route(uri: Uri) -> Result(Route, Nil) {
+  case uri.path_segments(uri.path) {
+    [] | ["inc"] -> Ok(IncPage)
+    ["dec"] -> Ok(DecPage)
+    _ -> Error(Nil)
   }
 }
 

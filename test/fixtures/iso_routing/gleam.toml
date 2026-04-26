@@ -1,0 +1,10 @@
+name = "iso_routing"
+version = "0.1.0"
+target = "erlang"
+
+[dependencies]
+gleam_stdlib = ">= 0.69.0 and < 2.0.0"
+shared = { path = "shared" }
+
+[dev-dependencies]
+gleeunit = "~> 1.0"

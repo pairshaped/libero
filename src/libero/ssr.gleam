@@ -6,13 +6,21 @@
 //// Client-side: read and decode flags embedded by the server.
 
 import gleam/bit_array
+import gleam/bytes_tree
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/http
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
 import gleam/option.{type Option}
 import gleam/result
-import gleam/string
+import gleam/uri.{type Uri, Uri}
 import libero/error.{type PanicInfo}
 import libero/wire
+import lustre/attribute
+import lustre/element.{type Element}
+import lustre/element/html
+import mist.{type ResponseData}
 
 pub type SsrError {
   BadResponse
@@ -91,41 +99,106 @@ pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
   }
 }
 
-/// Generate a complete HTML document with a pre-rendered body,
-/// embedded flags, and a client module import.
+/// Render a fragment of two `<script>` elements that boot the client app:
+/// one assigns the base64-encoded ETF flags to `window.__LIBERO_FLAGS__`,
+/// the other imports `client_module` as an ES module and calls `main()`.
 ///
-/// The `title` is HTML-escaped automatically. The `body` is inserted
-/// as raw HTML (assumed to be pre-rendered Lustre output). The
-/// `client_module` is a JS import path controlled by the developer,
-/// not user input — it is not escaped (by design). If you derive this
-/// value from external input, you must validate it yourself.
-/// The `flags` value is encoded
-/// internally via `encode_flags`, producing a base64 string that is
-/// safe to embed in a JS string literal.
-pub fn document(
-  title title: String,
-  body body: String,
-  flags flags: a,
+/// Drop this in your document tree (typically at the end of `<body>`)
+/// when building a server-rendered page.
+///
+/// ```gleam
+/// html.body([], [
+///   html.div([attribute.id("app")], [views.view(model)]),
+///   ssr.boot_script(client_module: "/web/app.mjs", flags: model),
+/// ])
+/// ```
+///
+/// `client_module` is a JS import path controlled by the developer, not user
+/// input — it is concatenated into the generated `<script type="module">`
+/// without escaping. If you derive this value from external input, you must
+/// validate it yourself.
+pub fn boot_script(
   client_module client_module: String,
-) -> String {
-  let encoded_flags = encode_flags(flags)
-  "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>"
-  <> escape_html(title)
-  <> "</title>\n</head>\n<body>\n  <div id=\"app\">"
-  <> body
-  <> "</div>\n  <script>window.__LIBERO_FLAGS__ = \""
-  <> encoded_flags
-  <> "\";</script>\n  <script type=\"module\">\n    import { main } from \""
-  <> client_module
-  <> "\";\n    main();\n  </script>\n</body>\n</html>"
+  flags flags: a,
+) -> Element(msg) {
+  let encoded = encode_flags(flags)
+  // encoded is base64 (alphabet [A-Za-z0-9+/=]) — safe inside a JS string literal.
+  element.fragment([
+    html.script([], "window.__LIBERO_FLAGS__ = \"" <> encoded <> "\";"),
+    html.script(
+      [attribute.type_("module")],
+      "import { main } from \"" <> client_module <> "\";\nmain();",
+    ),
+  ])
 }
 
-/// Escape HTML special characters to prevent XSS in text content.
-fn escape_html(text: String) -> String {
-  text
-  |> string.replace("&", "&amp;")
-  |> string.replace("<", "&lt;")
-  |> string.replace(">", "&gt;")
-  |> string.replace("\"", "&quot;")
-  |> string.replace("'", "&#39;")
+/// Render a server-side page for an HTTP request.
+///
+/// Pipeline: `parse(uri)` -> `load(req, route, state)` -> `render(route, model)` ->
+/// HTML response.
+///
+/// - Non-GET requests get a `405 Method Not Allowed`.
+/// - `parse` returning `Error(Nil)` gets a bare `404 Not Found`. Custom 404
+///   pages: handle the catch-all in your mist router and only call
+///   `handle_request` for paths you recognize.
+/// - `load` returning `Error(response)` returns that exact response — the
+///   loader owns auth redirects, soft 404s with custom bodies, etc.
+/// - `load` returning `Ok(model)` renders the document tree from `render`
+///   into a `200 OK` HTML response.
+///
+/// ```gleam
+/// ssr.handle_request(
+///   req:,
+///   parse: views.parse_route,
+///   load: load_page,
+///   render: render_page,
+///   state:,
+/// )
+/// ```
+pub fn handle_request(
+  req req: Request(body),
+  parse parse: fn(Uri) -> Result(route, Nil),
+  load load: fn(Request(body), route, state) ->
+    Result(model, Response(ResponseData)),
+  render render: fn(route, model) -> Element(msg),
+  state state: state,
+) -> Response(ResponseData) {
+  case req.method {
+    http.Get -> {
+      let uri = request_to_uri(req)
+      case parse(uri) {
+        Error(Nil) -> empty_response(404)
+        Ok(route) ->
+          case load(req, route, state) {
+            Error(response) -> response
+            Ok(model) -> render_response(render(route, model))
+          }
+      }
+    }
+    _ -> empty_response(405)
+  }
+}
+
+fn request_to_uri(req: Request(body)) -> Uri {
+  Uri(
+    scheme: option.None,
+    userinfo: option.None,
+    host: option.None,
+    port: option.None,
+    path: req.path,
+    query: req.query,
+    fragment: option.None,
+  )
+}
+
+fn render_response(el: Element(msg)) -> Response(ResponseData) {
+  let html_str = element.to_document_string(el)
+  response.new(200)
+  |> response.set_header("content-type", "text/html")
+  |> response.set_body(mist.Bytes(bytes_tree.from_string(html_str)))
+}
+
+fn empty_response(status: Int) -> Response(ResponseData) {
+  response.new(status)
+  |> response.set_body(mist.Bytes(bytes_tree.new()))
 }
