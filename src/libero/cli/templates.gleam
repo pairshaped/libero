@@ -5,7 +5,7 @@
 
 /// Libero version constraint used in generated gleam.toml files.
 /// Update this constant when bumping the libero version.
-const libero_version = "~> 6.0"
+const libero_version = "~> 5.0"
 
 /// Returns gleam.toml content for a new project (the server package).
 /// Libero config lives under the [tools.libero] section.
