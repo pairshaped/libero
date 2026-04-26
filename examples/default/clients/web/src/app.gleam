@@ -1,4 +1,5 @@
 import generated/messages as rpc
+import generated/ssr.{read_flags}
 import gleam/dynamic.{type Dynamic}
 import gleam/uri.{type Uri}
 import libero/remote_data.{type RemoteData, Success}
@@ -20,7 +21,7 @@ pub type ClientMsg {
 
 pub fn main() {
   let app = lustre.application(init, update, view_wrap)
-  let assert Ok(_) = lustre.start(app, "#app", get_flags())
+  let assert Ok(_) = lustre.start(app, "#app", read_flags())
   Nil
 }
 
@@ -55,9 +56,4 @@ fn update(model: Model, msg: ClientMsg) -> #(Model, Effect(ClientMsg)) {
 
 fn view_wrap(model: Model) -> element.Element(ClientMsg) {
   views.view(model) |> element.map(ViewMsg)
-}
-
-@external(javascript, "./flags_ffi.mjs", "getFlags")
-fn get_flags() -> Dynamic {
-  panic as "get_flags requires a browser"
 }

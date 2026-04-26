@@ -7,6 +7,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import handler_context
@@ -16,7 +17,6 @@ import libero/ws_logger
 import mist.{type Connection}
 import page
 import shared/router
-import simplifile
 
 pub fn main() {
   let _ = push.init()
@@ -50,6 +50,10 @@ pub fn main() {
   process.sleep_forever()
 }
 
+// HTTP RPC endpoint. Accepts POST requests with ETF-encoded call envelopes,
+// passes them to dispatch.handle (same handler logic as WebSocket), and
+// returns the ETF-encoded response. State changes are not persisted across
+// requests since HTTP is stateless. Use WebSocket for stateful interactions.
 fn handle_rpc(
   req: Request(Connection),
   state: handler_context.HandlerContext,
@@ -72,6 +76,7 @@ fn handle_rpc(
         None -> Nil
       }
       response.new(200)
+      |> response.set_header("content-type", "application/octet-stream")
       |> response.set_body(
         mist.Bytes(bytes_tree.from_bit_array(response_bytes)),
       )
@@ -82,25 +87,31 @@ fn handle_rpc(
   }
 }
 
+// Serve a static file from disk. Used for client JS bundles and assets.
 fn serve_file(path: String) -> response.Response(mist.ResponseData) {
-  case simplifile.read_bits(path) {
-    Ok(bytes) ->
+  case mist.send_file(path, offset: 0, limit: None) {
+    Ok(body) ->
       response.new(200)
-      |> response.set_header("content-type", content_type_for(path))
-      |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(bytes)))
+      |> response.set_header("content-type", content_type(path))
+      |> response.set_body(body)
     Error(_) ->
       response.new(404)
       |> response.set_body(mist.Bytes(bytes_tree.from_string("Not found")))
   }
 }
 
-fn content_type_for(path: String) -> String {
-  case string.ends_with(path, ".mjs") || string.ends_with(path, ".js") {
-    True -> "application/javascript"
-    False ->
-      case string.ends_with(path, ".css") {
-        True -> "text/css"
-        False -> "application/octet-stream"
-      }
+// Map file extensions to MIME types for static file serving.
+fn content_type(path: String) -> String {
+  case string.split(path, ".") |> list.last {
+    Ok("js") | Ok("mjs") -> "application/javascript"
+    Ok("css") -> "text/css"
+    Ok("html") -> "text/html"
+    Ok("json") -> "application/json"
+    Ok("wasm") -> "application/wasm"
+    Ok("svg") -> "image/svg+xml"
+    Ok("png") -> "image/png"
+    Ok("ico") -> "image/x-icon"
+    Ok("map") -> "application/json"
+    _ -> "application/octet-stream"
   }
 }
