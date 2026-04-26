@@ -17,14 +17,13 @@ fi
 rm -rf "$STAGED_FIXTURE"
 mkdir -p "$STAGED_FIXTURE"
 
-cp "$FIXTURE_SRC/gleam.toml" "$STAGED_FIXTURE/gleam.toml"
-mkdir -p "$STAGED_FIXTURE/shared/src" "$STAGED_FIXTURE/src" "$STAGED_FIXTURE/clients"
+# Three-peer layout: $STAGED/server/, $STAGED/shared/, $STAGED/clients/web/.
+mkdir -p "$STAGED_FIXTURE/server/src" "$STAGED_FIXTURE/shared/src" "$STAGED_FIXTURE/clients/web/src"
+cp "$FIXTURE_SRC/gleam.toml" "$STAGED_FIXTURE/server/gleam.toml"
+cp -R "$FIXTURE_SRC/server_src/." "$STAGED_FIXTURE/server/src/"
 cp -R "$FIXTURE_SRC/shared/." "$STAGED_FIXTURE/shared/"
 cp -R "$FIXTURE_SRC/shared_src/." "$STAGED_FIXTURE/shared/src/"
-cp -R "$FIXTURE_SRC/server_src/." "$STAGED_FIXTURE/src/"
-mkdir -p "$STAGED_FIXTURE/clients/web"
 cp -R "$FIXTURE_SRC/clients/web/." "$STAGED_FIXTURE/clients/web/"
-mkdir -p "$STAGED_FIXTURE/clients/web/src"
 cp -R "$FIXTURE_SRC/client_src/." "$STAGED_FIXTURE/clients/web/src/"
 
 find "$STAGED_FIXTURE" -name '*.gleam.template' -exec sh -c '
@@ -34,12 +33,12 @@ find "$STAGED_FIXTURE" -name '*.gleam.template' -exec sh -c '
 ' sh {} +
 
 perl -0pi -e "s#libero = \\{ path = \"[^\"]+\" \\}#libero = { path = \"$ROOT_DIR\" }#g" \
-  "$STAGED_FIXTURE/gleam.toml"
+  "$STAGED_FIXTURE/server/gleam.toml"
 perl -0pi -e "s#libero = \\{ path = \"[^\"]+\" \\}#libero = { path = \"$ROOT_DIR\" }#g" \
   "$STAGED_FIXTURE/clients/web/gleam.toml"
 
 (
-  cd "$STAGED_FIXTURE"
+  cd "$STAGED_FIXTURE/server"
   gleam run -m libero -- gen
   gleam build --target erlang
 )
@@ -53,5 +52,5 @@ printf '%s\n' "$STAGED_FIXTURE" > "$BUILD_ROOT_FILE"
 
 erl -noshell -eval "$(cat "$ROOT_DIR/test/js/wire_e2e_decode_manifest.escript")" > "$DECODE_MANIFEST"
 
-ERL_EBINS=$(find "$STAGED_FIXTURE/build/dev/erlang" -path '*/ebin' -type d | tr '\n' ' ')
+ERL_EBINS=$(find "$STAGED_FIXTURE/server/build/dev/erlang" -path '*/ebin' -type d | tr '\n' ' ')
 erl -noshell -pa $ERL_EBINS -eval "$(cat "$ROOT_DIR/test/js/wire_e2e_dispatch_manifest.escript")" > "$DISPATCH_MANIFEST"

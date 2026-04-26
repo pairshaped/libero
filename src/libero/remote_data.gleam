@@ -107,6 +107,59 @@ pub fn is_loading(data: RemoteData(a, e)) -> Bool {
   }
 }
 
+/// Check if the data has not been requested yet.
+pub fn is_not_asked(data: RemoteData(a, e)) -> Bool {
+  case data {
+    NotAsked -> True
+    _ -> False
+  }
+}
+
+/// Check if the data carries a typed domain failure.
+pub fn is_failure(data: RemoteData(a, e)) -> Bool {
+  case data {
+    Failure(_) -> True
+    _ -> False
+  }
+}
+
+/// Check if the data carries a wire-level transport failure.
+pub fn is_transport_failure(data: RemoteData(a, e)) -> Bool {
+  case data {
+    TransportFailure(_) -> True
+    _ -> False
+  }
+}
+
+/// Check if the data is in any error state (domain or transport).
+/// Useful when the view wants to render the same error UI for both.
+pub fn is_error(data: RemoteData(a, e)) -> Bool {
+  case data {
+    Failure(_) | TransportFailure(_) -> True
+    _ -> False
+  }
+}
+
+/// Reduce all five states into a single value. Each case provides its
+/// own callback so the caller can return whatever shape they need
+/// (e.g. an `Element(msg)` for a Lustre view).
+pub fn fold(
+  data data: RemoteData(a, e),
+  on_not_asked on_not_asked: fn() -> b,
+  on_loading on_loading: fn() -> b,
+  on_failure on_failure: fn(e) -> b,
+  on_transport_failure on_transport_failure: fn(String) -> b,
+  on_success on_success: fn(a) -> b,
+) -> b {
+  case data {
+    NotAsked -> on_not_asked()
+    Loading -> on_loading()
+    Failure(error) -> on_failure(error)
+    TransportFailure(message) -> on_transport_failure(message)
+    Success(value) -> on_success(value)
+  }
+}
+
 /// Convert a libero RPC response (Dynamic) into a `RemoteData` value.
 ///
 /// The wire response is `Result(Result(payload, domain_err), RpcError)`:

@@ -50,14 +50,17 @@ Rules:
 Scaffold a new project:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_app
+curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s my_app
 cd my_app
 bin/dev
 ```
 
 From the project root:
 
-- `bin/dev` — regenerate code, build, and start the server
+- `bin/gen` — regenerate libero codegen (dispatch, client stubs)
+- `bin/build` — build the JavaScript client bundle
+- `bin/server` — start the server
+- `bin/dev` — convenience wrapper that runs gen, build, server in order
 - `bin/test` — run server tests
 
 `bin/dev` runs in order: `cd server && gleam run -m libero` (codegen), then `cd clients/web && gleam build --target javascript`, then `cd server && gleam run`.

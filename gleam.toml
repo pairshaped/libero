@@ -32,7 +32,7 @@ gleam_erlang = "~> 1.0"
 
 [documentation]
 pages = [
-  { title = "Build a SQLite-backed checklist app", path = "guides/build-a-checklist-app.html", source = "./docs/build-a-checklist-app.md" },
+  { title = "Getting Started", path = "guides/getting-started.html", source = "./GETTING_STARTED.md" },
 ]
 
 [tools.glinter]

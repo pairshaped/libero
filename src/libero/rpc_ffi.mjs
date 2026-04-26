@@ -34,6 +34,17 @@ export const ERROR_UNKNOWN_TAG = "ETF_UNKNOWN_TAG";
 export const ERROR_IMPROPER_LIST = "ETF_IMPROPER_LIST";
 /** Atom name exceeds the Erlang 255 codepoint limit. */
 export const ERROR_ATOM_TOO_LONG = "ETF_ATOM_TOO_LONG";
+/** Tuple arity or list length exceeds MAX_COLLECTION_LEN. */
+export const ERROR_COLLECTION_TOO_LONG = "ETF_COLLECTION_TOO_LONG";
+/** Binary or bit-binary length exceeds MAX_BINARY_BYTES. */
+export const ERROR_BINARY_TOO_LARGE = "ETF_BINARY_TOO_LARGE";
+
+// Hard caps so that a malformed (or hostile) frame cannot pre-allocate
+// gigabytes of references. Real mist frame limits will normally catch
+// this first; these are defense-in-depth and independent of how the
+// underlying transport is configured.
+const MAX_COLLECTION_LEN = 16_000_000;
+const MAX_BINARY_BYTES = 64 * 1024 * 1024;
 
 /**
  * @param {string} message
@@ -202,6 +213,26 @@ class ETFDecoder {
     }
   }
 
+  checkCollectionLen(n, label) {
+    if (n > MAX_COLLECTION_LEN) {
+      throw makeError(
+        `ETF decode: ${label} ${n} exceeds limit ${MAX_COLLECTION_LEN}`,
+        ERROR_COLLECTION_TOO_LONG,
+      );
+    }
+    return n;
+  }
+
+  checkBinaryLen(n, label) {
+    if (n > MAX_BINARY_BYTES) {
+      throw makeError(
+        `ETF decode: ${label} length ${n} exceeds limit ${MAX_BINARY_BYTES}`,
+        ERROR_BINARY_TOO_LARGE,
+      );
+    }
+    return n;
+  }
+
   readUint8() {
     this.ensureAvailable(1);
     const v = this.view.getUint8(this.offset);
@@ -264,7 +295,7 @@ class ETFDecoder {
         return this.decodeTuple(this.readUint8());
 
       case 105: // LARGE_TUPLE_EXT
-        return this.decodeTuple(this.readUint32());
+        return this.decodeTuple(this.checkCollectionLen(this.readUint32(), "tuple arity"));
 
       case 106: // NIL_EXT (empty list)
         if (this.raw) return [];
@@ -286,7 +317,7 @@ class ETFDecoder {
       }
 
       case 109: { // BINARY_EXT (Gleam string or byte-aligned BitArray)
-        const len = this.readUint32();
+        const len = this.checkBinaryLen(this.readUint32(), "binary");
         const bytes = this.readBytes(len);
         if (this.raw) return { __liberoRawBinary: true, rawBuffer: bytes };
         return utf8Decoder.decode(bytes);
@@ -312,7 +343,7 @@ class ETFDecoder {
         // The last byte's high `bits` bits are meaningful; low `8 - bits`
         // bits are padding. A Gleam BitArray represents this natively
         // via bitSize, so no separate wrapper is needed.
-        const len = this.readUint32();
+        const len = this.checkBinaryLen(this.readUint32(), "bit_binary");
         const bitsInLastByte = this.readUint8();
         const bytes = this.readBytes(len);
         const bitSize = len === 0 ? 0 : (len - 1) * 8 + bitsInLastByte;
@@ -396,7 +427,7 @@ class ETFDecoder {
   }
 
   decodeList() {
-    const count = this.readUint32();
+    const count = this.checkCollectionLen(this.readUint32(), "list length");
     const elements = [];
     for (let i = 0; i < count; i++) {
       elements.push(this.decodeTerm());
@@ -1021,6 +1052,10 @@ function ensureSocket(url) {
 
   ws.addEventListener("message", (event) => {
     const bytes = new Uint8Array(event.data);
+    if (bytes.byteLength < 1) {
+      console.warn("libero: dropped empty WebSocket frame");
+      return;
+    }
     const tag = bytes[0];
     const payload = bytes.slice(1);
 
@@ -1053,6 +1088,10 @@ function ensureSocket(url) {
 
     // Response frame (tag 0x00): extract request ID and match by ID.
     // Frame format: <<0x00, request_id:32-big, etf_bytes>>
+    if (bytes.byteLength < 5) {
+      console.warn(`libero: dropped malformed response frame (${bytes.byteLength} bytes, need >= 5)`);
+      return;
+    }
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const requestId = view.getUint32(1);
     const responsePayload = bytes.slice(5);

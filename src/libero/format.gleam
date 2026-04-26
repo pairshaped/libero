@@ -39,7 +39,7 @@ pub fn format_gleam(code: String) -> String {
 }
 
 fn run_format(tmp: String, fallback: String) -> String {
-  let exit_code = run_executable("gleam", ["format", tmp])
+  let #(exit_code, output) = run_format_command(tmp)
   case exit_code {
     0 ->
       simplifile.read(tmp)
@@ -50,20 +50,27 @@ fn run_format(tmp: String, fallback: String) -> String {
         <> int.to_string(exit_code)
         <> "), using unformatted output",
       )
+      case string.trim(output) {
+        "" -> Nil
+        trimmed -> io.println_error("  " <> trimmed)
+      }
       fallback
     }
   }
 }
 
-fn run_executable(executable: String, args: List(String)) -> Int {
-  case find_executable(executable) {
-    option.None -> -1
-    option.Some(path) -> run_executable_ffi(path, args)
+fn run_format_command(tmp: String) -> #(Int, String) {
+  case find_executable("gleam") {
+    option.None -> #(-1, "gleam executable not found on PATH")
+    option.Some(path) -> run_executable_capturing_ffi(path, ["format", tmp])
   }
 }
 
-@external(erlang, "libero_cli_ffi", "run_executable")
-fn run_executable_ffi(path: String, args: List(String)) -> Int
+@external(erlang, "libero_cli_ffi", "run_executable_capturing")
+fn run_executable_capturing_ffi(
+  path: String,
+  args: List(String),
+) -> #(Int, String)
 
 @external(erlang, "libero_cli_ffi", "find_executable")
 fn find_executable(name: String) -> Option(String)

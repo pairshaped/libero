@@ -1,5 +1,5 @@
 -module(libero_cli_ffi).
--export([run_command/2, run_executable/2, find_executable/1]).
+-export([run_command/2, run_executable/2, run_executable_capturing/2, find_executable/1]).
 
 %% Run a command in a given directory, inheriting stdio.
 %% Returns the exit code as an integer.
@@ -39,6 +39,27 @@ wait_for_port(Port) ->
     receive
         {Port, {exit_status, Status}} -> Status;
         {Port, {data, _}} -> wait_for_port(Port)
+    end.
+
+%% Run an executable, capturing stdout+stderr (merged) into a binary.
+%% Returns {ExitStatus, Output} so callers can surface diagnostics
+%% when the command fails. Used for tools whose output should not
+%% be printed unconditionally (e.g. `gleam format`).
+run_executable_capturing(Path, Args) ->
+    Port = erlang:open_port(
+        {spawn_executable, unicode:characters_to_list(Path)},
+        [{args, [unicode:characters_to_list(A) || A <- Args]},
+         exit_status, stderr_to_stdout, binary]
+    ),
+    wait_for_port_capturing(Port, []).
+
+wait_for_port_capturing(Port, Acc) ->
+    receive
+        {Port, {exit_status, Status}} ->
+            Output = iolist_to_binary(lists:reverse(Acc)),
+            {Status, Output};
+        {Port, {data, Data}} ->
+            wait_for_port_capturing(Port, [Data | Acc])
     end.
 
 %% Find an executable on PATH. Returns {some, Path} or none.

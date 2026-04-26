@@ -225,6 +225,16 @@ fn parse_clients(
   \u{2502}
   hint: Add: target = \"javascript\"" }),
         )
+        use _ <- result.try(case target {
+          "javascript" -> Ok(Nil)
+          other -> Error("error: Unsupported client target
+  \u{250c}\u{2500} gleam.toml
+  \u{2502}
+  \u{2502} [tools.libero.clients." <> name <> "] has target = \"" <> other <> "\"
+  \u{2502} libero only supports `javascript` clients today
+  \u{2502}
+  hint: Set target = \"javascript\"")
+        })
         Ok(ClientConfig(name: name, target: target))
       })
     }

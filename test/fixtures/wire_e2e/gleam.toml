@@ -8,13 +8,13 @@ gleam_erlang = "~> 1.0"
 gleam_http = "~> 4.0"
 mist = "~> 6.0"
 lustre = "~> 5.6"
-shared = { path = "shared" }
-libero = { path = "../../.." }
+shared = { path = "../shared" }
+libero = { path = "../../../.." }
 
 [tools.libero]
 port = 8080
 server.generated_dir = "src/server/generated"
-shared.src_dir = "shared/src/shared"
+shared.src_dir = "../shared/src/shared"
 context_module = "server/handler_context"
 
 [tools.libero.clients.web]

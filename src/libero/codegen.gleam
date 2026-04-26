@@ -48,12 +48,9 @@ pub fn write_endpoint_dispatch(
       "import " <> mod <> " as " <> alias
     })
 
-  // Collect shared type imports for parameter types used in ClientMsg variants,
-  // excluding the shared_module_path (already imported above).
-  let shared_module_import = "import " <> shared_module_path
-  let shared_type_imports =
-    collect_param_type_imports(endpoints:)
-    |> list.filter(fn(imp) { imp != shared_module_import })
+  // Collect shared type imports for parameter types used in ClientMsg variants.
+  // shared_module_path is used only as a wire envelope string (no import).
+  let shared_type_imports = collect_param_type_imports(endpoints:)
   let dict_import = case endpoints_contain(endpoints:, predicate: is_dict) {
     True -> "\nimport gleam/dict.{type Dict}"
     False -> ""
@@ -127,7 +124,6 @@ import libero/error.{type PanicInfo, InternalError, MalformedRequest, UnknownFun
 import libero/trace
 import libero/wire
 import " <> context_module <> ".{type HandlerContext}
-import " <> shared_module_path <> "
 " <> string.join(handler_imports, "\n") <> "
 " <> string.join(shared_type_imports, "\n") <> "
 
@@ -216,12 +212,9 @@ pub fn write_endpoint_client_stubs(
   client_generated client_generated: String,
   shared_module_path shared_module_path: String,
 ) -> Result(Nil, GenError) {
-  // Collect shared type imports from parameter and return type annotations,
-  // excluding the shared_module_path (already imported above).
-  let shared_module_import = "import " <> shared_module_path
-  let shared_type_imports =
-    collect_shared_type_imports(endpoints:)
-    |> list.filter(fn(imp) { imp != shared_module_import })
+  // Collect shared type imports from parameter and return type annotations.
+  // shared_module_path is used only as a wire envelope string (no import).
+  let shared_type_imports = collect_shared_type_imports(endpoints:)
 
   // Generate ClientMsg variants (same structure as in dispatch)
   let client_msg_variants =
@@ -332,8 +325,7 @@ import gleam/dynamic.{type Dynamic}
 import libero/remote_data.{type RemoteData}
 import libero/rpc
 import libero/wire
-import lustre/effect.{type Effect}
-import " <> shared_module_path <> option_import <> dict_import <> "
+import lustre/effect.{type Effect}" <> option_import <> dict_import <> "
 " <> string.join(shared_type_imports, "\n") <> "
 
 pub type ClientMsg {
@@ -1257,6 +1249,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response
+import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
@@ -1284,7 +1277,7 @@ pub fn main() {
     <> ".new()
   let logger = ws_logger.default_logger()
 
-  let assert Ok(_) =
+  let started =
     fn(req: Request(Connection)) {
       case req.method, request.path_segments(req) {
         _, [\"ws\"] ->
@@ -1306,7 +1299,18 @@ pub fn main() {
     <> ")
     |> mist.start
 
-  process.sleep_forever()
+  case started {
+    Ok(_) -> process.sleep_forever()
+    Error(reason) -> {
+      io.println_error(
+        \"libero: failed to start mist on port "
+    <> int.to_string(port)
+    <> ": \"
+        <> string.inspect(reason),
+      )
+      panic as \"mist failed to start\"
+    }
+  }
 }
 
 // HTTP RPC endpoint. Accepts POST requests with ETF-encoded call envelopes,

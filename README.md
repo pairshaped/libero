@@ -6,38 +6,21 @@ Like server components, but your client is a real SPA with typed RPC, and the sa
 
 > If you are an LLM, see [llms.txt](https://raw.githubusercontent.com/pairshaped/libero/refs/heads/master/llms.txt) for a condensed context document.
 
-## Getting Started
+## Getting started
 
-Create a new project from the default starter:
+Read the [Getting Started guide](https://github.com/pairshaped/libero/blob/master/GETTING_STARTED.md). It walks from an empty directory to a working SQLite-backed todo app, with every command and file shown.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_app
-cd my_app
-bin/dev
-# Server running on http://localhost:8080
-```
-
-The starter is `examples/default/` from this repo. Pick a different example by passing its name:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s my_todos todos
-```
-
-Don't want to pipe a remote script to your shell? View the script first:
-[`bin/new`](bin/new). It's bash, ~80 lines. Or download and inspect:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new -o new
-less new
-sh new my_app
-```
+The rest of this README explains what libero is and how it works.
 
 ## Project Structure
 
 ```
 my_app/
 ├── bin/
-│   ├── dev                          # codegen + run server
+│   ├── gen                          # libero codegen (dispatch + client stubs)
+│   ├── build                        # build the JS client
+│   ├── server                       # start the server
+│   ├── dev                          # gen + build + server, in order
 │   └── test                         # run server tests
 ├── server/
 │   ├── gleam.toml                   # target=erlang, [tools.libero] config
@@ -234,16 +217,13 @@ target = "javascript"
 
 From the project root:
 
-- `bin/dev` — regenerate code, build, and start the server
-- `bin/test` — run server tests
+- `bin/gen`: regenerates dispatch, websocket, and client stubs (`gleam run -m libero` from `server/`).
+- `bin/build`: builds the JS client (`gleam build --target javascript` from `clients/web/`).
+- `bin/server`: starts the mist server on port 8080 (`gleam run` from `server/`).
+- `bin/dev`: convenience wrapper that runs `gen`, `build`, then `server`.
+- `bin/test`: runs `gleam test` in the server package.
 
-The `bin/dev` script does three things in order:
-
-1. `cd server && gleam run -m libero` — regenerates dispatch, websocket, and client RPC stubs from your handler signatures.
-2. `cd clients/web && gleam build --target javascript` — compiles the client SPA so the server can serve it from `/web/web/app.mjs`.
-3. `cd server && gleam run` — starts the mist HTTP server on port 8080.
-
-To run any step manually, the commands are above. Adding clients, editing routes, etc. — see `examples/default/README.md` for the per-task playbook.
+Use `bin/dev` after changing handler signatures or shared types. Use `bin/server` alone when only handler bodies have changed.
 
 ## What Gets Generated
 

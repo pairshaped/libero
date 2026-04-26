@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-"$DIR/bin/gen"
-"$DIR/bin/build"
-"$DIR/bin/server"
+cd "$DIR/server"
+gleam run -m libero

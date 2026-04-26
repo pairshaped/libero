@@ -28,7 +28,7 @@ pub fn parse_uses_shared_plus_server_defaults_test() {
 
 pub fn parse_with_clients_test() {
   let toml =
-    "name = \"myapp\"\n\n[tools.libero.server]\nrest = true\n\n[tools.libero.clients.web]\ntarget = \"javascript\"\n\n[tools.libero.clients.cli]\ntarget = \"erlang\"\n"
+    "name = \"myapp\"\n\n[tools.libero.server]\nrest = true\n\n[tools.libero.clients.web]\ntarget = \"javascript\"\n\n[tools.libero.clients.admin]\ntarget = \"javascript\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 8080 = cfg.port
@@ -40,8 +40,16 @@ pub fn parse_with_clients_test() {
     })
   let assert True =
     list.any(cfg.clients, fn(c: ClientConfig) {
-      c.name == "cli" && c.target == "erlang"
+      c.name == "admin" && c.target == "javascript"
     })
+}
+
+pub fn parse_rejects_unsupported_client_target_test() {
+  let toml =
+    "name = \"myapp\"\n\n[tools.libero.clients.cli]\ntarget = \"erlang\"\n"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Unsupported client target")
+  let assert True = string.contains(msg, "erlang")
 }
 
 pub fn parse_no_tools_libero_section_test() {

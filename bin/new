@@ -5,7 +5,7 @@ NAME="${1:-}"
 TEMPLATE="${2:-default}"
 
 if [ -z "$NAME" ]; then
-  echo "usage: curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/main/bin/new | sh -s <project_name> [template]"
+  echo "usage: curl -fsSL https://raw.githubusercontent.com/pairshaped/libero/master/bin/new | sh -s <project_name> [template]"
   echo ""
   echo "Examples:"
   echo "  ... | sh -s my_app           # uses examples/default"
@@ -31,7 +31,7 @@ if [ -e "$NAME" ]; then
   exit 1
 fi
 
-TARBALL="https://github.com/pairshaped/libero/archive/main.tar.gz"
+TARBALL="https://github.com/pairshaped/libero/archive/master.tar.gz"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -46,7 +46,7 @@ fi
 echo "Downloading libero (extracting examples/$TEMPLATE) ..."
 curl -fsSL "$TARBALL" | tar xz -C "$TMPDIR"
 
-SRC="$TMPDIR/libero-main/examples/$TEMPLATE"
+SRC="$TMPDIR/libero-master/examples/$TEMPLATE"
 if [ ! -d "$SRC" ]; then
   echo "error: examples/$TEMPLATE not found in libero"
   exit 1
