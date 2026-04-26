@@ -213,21 +213,3 @@ fn validate_namespace(
     }
   }
 }
-
-/// Extract a `--name=value` flag from the argument list.
-///
-/// Only supports `--key=value` syntax (not space-separated `--key value`).
-/// This is intentional: `find_flag` is used for libero's internal codegen
-/// flags which always use `=` form. The space-separated pattern
-/// (`--database pg`, `--target javascript`) is handled by positional
-/// matching in `cli.parse_args` and is **not** interchangeable with this
-/// function.
-pub fn find_flag(
-  args args: List(String),
-  name name: String,
-) -> Result(String, Nil) {
-  let prefix = name <> "="
-  args
-  |> list.find(fn(arg) { string.starts_with(arg, prefix) })
-  |> result.map(fn(arg) { string.drop_start(arg, string.length(prefix)) })
-}
