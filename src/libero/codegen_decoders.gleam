@@ -225,7 +225,7 @@ fn emit_type_decoder(t: DiscoveredType) -> String {
     variants ->
       case all_variants_zero_arity(variants) {
         True -> emit_enum_decoder(variants)
-        False -> emit_tagged_union_decoder(variants, error_label: "variant")
+        False -> emit_tagged_union_decoder(variants)
       }
   }
   "export function " <> fn_name <> "(term) {\n" <> body <> "\n}"
@@ -272,11 +272,7 @@ fn emit_record_decoder(variant: DiscoveredVariant) -> String {
 }
 
 /// Emit the body of a multi-variant tagged union decoder.
-/// `error_label` is used in the default throw message (e.g. "variant").
-fn emit_tagged_union_decoder(
-  variants: List(DiscoveredVariant),
-  error_label error_label: String,
-) -> String {
+fn emit_tagged_union_decoder(variants: List(DiscoveredVariant)) -> String {
   let arms =
     list.map(variants, fn(v) {
       let args = case v.fields {
@@ -297,9 +293,7 @@ fn emit_tagged_union_decoder(
   "  const tag = Array.isArray(term) ? term[0] : term;\n"
   <> "  switch (tag) {\n"
   <> string.join(arms, "\n")
-  <> "\n    default:\n      throw new DecodeError(\"unknown "
-  <> error_label
-  <> ": \" + String(tag));\n"
+  <> "\n    default:\n      throw new DecodeError(\"unknown variant: \" + String(tag));\n"
   <> "  }"
 }
 
