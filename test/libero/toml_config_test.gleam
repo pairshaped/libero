@@ -2,7 +2,6 @@
 
 import gleam/list
 import gleam/string
-import libero/config.{WsPathOnly}
 import libero/toml_config.{type ClientConfig, ClientConfig, TomlConfig}
 
 pub fn parse_minimal_toml_test() {
@@ -91,7 +90,7 @@ pub fn to_codegen_config_javascript_client_test() {
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
   let assert "../clients/web/src/generated" = cfg.client_generated
   let assert "src/generated" = cfg.server_generated
-  let assert WsPathOnly(path: "/ws") = cfg.ws_mode
+  let assert "/ws" = cfg.ws_path
 }
 
 pub fn to_codegen_config_missing_client_test() {

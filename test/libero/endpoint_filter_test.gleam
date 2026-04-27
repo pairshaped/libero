@@ -1,5 +1,7 @@
 import gleam/list
+import libero/gen_error
 import libero/scanner
+import simplifile
 
 // Four criteria for an RPC endpoint (as documented in the README):
 // 1. Public function
@@ -77,4 +79,68 @@ fn scan_fixture_names() -> List(String) {
       shared_src: "test/fixtures/endpoint_scan/shared",
     )
   list.map(endpoints, fn(e) { e.fn_name })
+}
+
+/// Two handler files exporting the same function name would compile into
+/// duplicate ClientMsg variants and duplicate dispatch arms. The scanner
+/// surfaces this as a libero-level error before codegen runs.
+pub fn rejects_duplicate_fn_name_across_modules_test() {
+  let dir = "build/.test_duplicate_fn_names"
+  let server_dir = dir <> "/server"
+  let shared_dir = dir <> "/shared"
+  let assert Ok(Nil) = simplifile.create_directory_all(server_dir)
+  let assert Ok(Nil) = simplifile.create_directory_all(shared_dir)
+
+  // Shared types referenced from both handlers.
+  let assert Ok(Nil) =
+    simplifile.write(
+      shared_dir <> "/items.gleam",
+      "pub type Item {
+  Item(id: Int)
+}
+pub type ItemError {
+  NotFound
+}
+",
+    )
+
+  let make_handler = fn(file: String) -> Nil {
+    let assert Ok(Nil) =
+      simplifile.write(
+        server_dir <> "/" <> file <> ".gleam",
+        "import handler_context.{type HandlerContext}
+import items.{type Item, type ItemError}
+
+pub fn get_items(
+  handler_ctx handler_ctx: HandlerContext,
+) -> #(Result(List(Item), ItemError), HandlerContext) {
+  #(Ok([]), handler_ctx)
+}
+",
+      )
+    Nil
+  }
+  make_handler("a")
+  make_handler("b")
+
+  // Local HandlerContext so the fixture compiles standalone.
+  let assert Ok(Nil) =
+    simplifile.write(
+      server_dir <> "/handler_context.gleam",
+      "pub type HandlerContext {
+  HandlerContext
+}
+",
+    )
+
+  let assert Error(errors) =
+    scanner.scan_handler_endpoints(
+      server_src: server_dir,
+      shared_src: shared_dir,
+    )
+  let assert [gen_error.DuplicateEndpoint(fn_name: "get_items", modules:)] =
+    errors
+  let assert True = list.length(modules) == 2
+
+  let assert Ok(Nil) = simplifile.delete_all([dir])
 }

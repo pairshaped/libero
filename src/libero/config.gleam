@@ -1,19 +1,13 @@
 // ---------- Types ----------
 
-/// How the generated client resolves its WebSocket URL.
-pub type WsMode {
-  /// Hardcoded full URL (from --ws-url). Single-host deployments.
-  WsFullUrl(url: String)
-  /// Path-only, resolved at runtime from window.location (from --ws-path).
-  /// Multi-tenant deployments where multiple subdomains share one bundle.
-  WsPathOnly(path: String)
-}
-
 /// Everything libero needs to drive a single client's codegen output.
 /// Built by `toml_config.to_codegen_config` from gleam.toml.
 pub type Config {
   Config(
-    ws_mode: WsMode,
+    /// Path-only WebSocket route. The generated client resolves it
+    /// against `window.location` at boot, which lets multi-tenant
+    /// deployments share one bundle across subdomains.
+    ws_path: String,
     /// Path to the generated .erl file that pre-registers all
     /// constructor atoms for safe ETF decoding.
     atoms_output: String,

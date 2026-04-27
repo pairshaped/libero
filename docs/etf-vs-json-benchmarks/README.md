@@ -69,7 +69,7 @@ JSON decode = `JSON.parse` + `rebuild` (constructor instantiation + linked list 
 | 80 games (no shots) | 23.0 KB | 26.5 KB | 15% larger |
 | 80 games + shots | 374 KB | 446 KB | 19% larger |
 
-### Key findings
+### Findings
 
 **ETF is faster on both server and client.** Every operation - server encode, server decode, client decode - is faster with ETF across all payload sizes tested.
 
@@ -79,7 +79,7 @@ JSON decode = `JSON.parse` + `rebuild` (constructor instantiation + linked list 
 
 **JSON payloads are 19-69% larger.** The `{"@":"tag","v":[...]}` wrapper for every custom type adds overhead. The gap narrows for large payloads dominated by primitive values. WebSocket frames are not compressed by default (no `permessage-deflate`).
 
-**ETF eliminates type-mapping bugs.** Beyond performance, ETF preserves BEAM type structure natively - no more None vs Nil confusion, tuple/list conflation, Dict encoding issues, 0-arity constructor ambiguity, or server-side rebuild failures. The JSON wire format required ~200 lines of server-side rebuild code and caused 5+ bugs during the v3 pilot.
+**ETF eliminates type-mapping bugs.** Beyond performance, ETF preserves BEAM type structure natively, so there's no None vs Nil confusion, tuple/list conflation, Dict encoding issues, 0-arity constructor ambiguity, or server-side rebuild failures. The JSON wire format required around 200 lines of server-side rebuild code and caused several bugs during the JSON-wire pilot.
 
 ### Why ETF is faster
 

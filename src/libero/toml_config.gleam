@@ -7,7 +7,7 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
-import libero/config.{type Config, Config, WsPathOnly}
+import libero/config.{type Config, Config}
 import tom
 
 // ---------- Types ----------
@@ -181,7 +181,7 @@ pub fn to_codegen_config(
   let decoders_prelude_import_path =
     register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
   Ok(Config(
-    ws_mode: WsPathOnly(path: ws_path),
+    ws_path: ws_path,
     atoms_output: atoms_output,
     atoms_module: atoms_module,
     config_output: config_output,

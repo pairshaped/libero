@@ -1,13 +1,13 @@
-//// Tests for generated config file content (WsFullUrl vs WsPathOnly).
+//// Tests for generated rpc_config.gleam content.
 
 import gleam/string
 import libero/codegen
-import libero/config.{type Config, Config, WsFullUrl, WsPathOnly}
+import libero/config.{type Config, Config}
 import simplifile
 
-fn make_config(ws_mode: config.WsMode, output_dir: String) -> Config {
+fn make_config(ws_path: String, output_dir: String) -> Config {
   Config(
-    ws_mode: ws_mode,
+    ws_path: ws_path,
     atoms_output: output_dir <> "/atoms.erl",
     atoms_module: "test@generated@rpc_atoms",
     config_output: output_dir <> "/src/generated/rpc_config.gleam",
@@ -20,31 +20,9 @@ fn make_config(ws_mode: config.WsMode, output_dir: String) -> Config {
   )
 }
 
-pub fn write_config_full_url_test() {
-  let output_dir = "build/.test_config_full_url"
-  let cfg = make_config(WsFullUrl(url: "wss://example.com/ws"), output_dir)
-  let assert Ok(Nil) =
-    simplifile.create_directory_all(output_dir <> "/src/generated")
-  let assert Ok(Nil) = codegen.write_config(config: cfg)
-
-  let assert Ok(content) =
-    simplifile.read(output_dir <> "/src/generated/rpc_config.gleam")
-
-  // Should contain the hardcoded URL
-  let assert True = string.contains(content, "wss://example.com/ws")
-  // Should not have the resolve function
-  let assert False = string.contains(content, "resolve_ws_url")
-
-  // No FFI file should be created for full-url mode
-  let assert Error(_) =
-    simplifile.read(output_dir <> "/src/generated/rpc_config_ffi.mjs")
-
-  let assert Ok(Nil) = simplifile.delete_all([output_dir])
-}
-
-pub fn write_config_path_only_test() {
+pub fn write_config_emits_resolver_test() {
   let output_dir = "build/.test_config_path_only"
-  let cfg = make_config(WsPathOnly(path: "/ws/admin"), output_dir)
+  let cfg = make_config("/ws/admin", output_dir)
   let assert Ok(Nil) =
     simplifile.create_directory_all(output_dir <> "/src/generated")
   let assert Ok(Nil) = codegen.write_config(config: cfg)

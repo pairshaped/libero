@@ -3,8 +3,6 @@
 //// Writes code to a temp file, runs the formatter, reads back the result.
 //// Falls back to the original string if formatting fails.
 
-import gleam/dynamic.{type Dynamic}
-import gleam/dynamic/decode
 import gleam/int
 import gleam/io
 import gleam/option.{type Option}
@@ -88,28 +86,8 @@ fn get_tmp_dir() -> String {
   |> option.unwrap("/tmp")
 }
 
-// Uses os:getenv/0 + linear scan rather than os:getenv/1, because on OTP 27
-// the /1 variant requires a charlist argument and crashes with badarg when
-// passed a Gleam String (binary).
-@external(erlang, "os", "getenv")
-fn getenv_list_ffi() -> Dynamic
-
-/// nolint: thrown_away_error -- env var lookup failure is expected (var not set)
-fn get_env(name: String) -> Option(String) {
-  let raw = getenv_list_ffi()
-  case decode.run(raw, decode.list(decode.string)) {
-    Ok(entries) -> find_env(entries, name <> "=")
-    Error(_) -> option.None
-  }
-}
-
-fn find_env(entries: List(String), prefix: String) -> Option(String) {
-  case entries {
-    [] -> option.None
-    [entry, ..rest] ->
-      case string.starts_with(entry, prefix) {
-        True -> option.Some(string.drop_start(entry, string.length(prefix)))
-        False -> find_env(rest, prefix)
-      }
-  }
-}
+// Wraps os:getenv/1 with charlist↔binary conversion. We can't call
+// os:getenv/1 directly with a Gleam String because OTP 27 raises badarg
+// when the argument is a binary rather than a charlist.
+@external(erlang, "libero_cli_ffi", "get_env")
+fn get_env(name: String) -> Option(String)

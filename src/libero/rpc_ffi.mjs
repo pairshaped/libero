@@ -128,7 +128,7 @@ function gleamListToArray(list) {
 //
 // Design note: no wrapper classes for atoms or tuples.
 //
-// A general-purpose ETF decoder (e.g. arnu515/erlang-etf.js — see
+// A general-purpose ETF decoder (e.g. arnu515/erlang-etf.js; see
 // https://github.com/arnu515/erlang-etf.js, MIT) wraps atoms in `Atom`
 // and tuples in `Tuple` because, in raw JS, atoms collide with
 // binaries (both are strings) and tuples collide with lists (both are
@@ -143,7 +143,7 @@ function gleamListToArray(list) {
 // type tells the decoder which one to expect.
 //
 // Adding wrapper classes here would just be one more layer the typed
-// decoder unwraps. The cost is that raw mode is ambiguous on its own —
+// decoder unwraps. The cost is that raw mode is ambiguous on its own,
 // fine for libero, but the reason a future standalone ETF library
 // (split from this codec) would need wrappers.
 //
@@ -366,7 +366,7 @@ class ETFDecoder {
     const name = this.readString(len);
     // Erlang's hard limit is 255 codepoints (not bytes). UTF-8 codepoints
     // are 1-4 bytes, so a byte length under 256 can still produce <= 255
-    // codepoints — but ATOM_UTF8_EXT (uint16 length) can exceed this.
+    // codepoints; but ATOM_UTF8_EXT (uint16 length) can exceed this.
     let codepointCount = 0;
     for (const _ of name) {
       codepointCount++;
@@ -661,7 +661,7 @@ class ETFEncoder {
       return;
     }
 
-    // Fallback: this indicates a bug in the calling code — all Gleam
+    // Fallback: this indicates a bug in the calling code; all Gleam
     // types should be handled above. Throw rather than silently
     // producing "[object Object]" which would be a corrupt payload.
     throw new Error(
@@ -776,7 +776,7 @@ class ETFEncoder {
  * Handles consecutive uppercase: "XMLParser" → "xml_parser",
  * "HTTPSConnection" → "https_connection".
  *
- * Digits are treated as lowercase — no underscore is inserted before
+ * Digits are treated as lowercase; no underscore is inserted before
  * a digit run. This matches Gleam's compiler behavior and the Erlang
  * side (walker.to_snake_case). Verified by snake_case_test.gleam.
  * @param {string} name
@@ -817,7 +817,7 @@ function snakeCase(name) {
 /**
  * Encode a standalone Gleam value to an ETF binary. Used by the
  * public `libero.wire.encode` function. Unlike `encode_call`, there
- * is no envelope — the result is the raw ETF encoding of a single
+ * is no envelope; the result is the raw ETF encoding of a single
  * value. Intended for non-RPC paths like passing state into a
  * Lustre SPA via init flags.
  * @param {any} value
@@ -845,7 +845,7 @@ export function decode_value(buffer) {
 /**
  * Raw variant of `decode_value`: atoms stay as strings and tagged
  * tuples stay as plain JS arrays. Used internally when the typed
- * decoder (decode_msg_from_server) will re-interpret the result.
+ * decoder (`ensure_decoders`) will re-interpret the result.
  * @param {DecoderInput} buffer
  * @returns {any}
  */
@@ -895,13 +895,13 @@ export function decode_safe(buffer) {
 //
 // Responses are matched by request ID (monotonic counter assigned by
 // the client). This allows safe timeout handling without closing the
-// WebSocket — late responses for timed-out requests are harmlessly
+// WebSocket; late responses for timed-out requests are harmlessly
 // dropped since their ID has been removed from the callback Map.
 //
 // Reconnection is automatic. On unexpected close (network blip, server
 // restart, page resume from sleep), the socket reconnects with
 // exponential backoff (500ms → 30s, full jitter). Pending requests
-// reject with a connection-lost error rather than wait — application
+// reject with a connection-lost error rather than wait; application
 // code retries idempotently or surfaces the error. Push handlers
 // remain registered across reconnects, so push frames resume once the
 // socket is back. Apps that need to refetch state on reconnect should
@@ -917,7 +917,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const pushHandlers = new Map();
 
 // Connection lifecycle listeners. `on_connect` fires on every socket
-// open — first connect AND reconnects — so apps can use one path for
+// open; first connect AND reconnects; so apps can use one path for
 // "load initial state". `on_disconnect` fires when the socket closes
 // (the reason string is human-readable and intended for UX).
 const onConnectListeners = new Set();
@@ -1030,7 +1030,7 @@ function ensureSocket(url) {
 
     if (tag === 0x01) {
       // Push frame: payload is ETF-encoded {module, value}. The handler
-      // registered via rpc.update_from_server receives the decoded value
+      // registered via rpc.on_push receives the decoded value
       // through the global ctor registry.
       const decoded = decode_value(payload);
       if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
@@ -1089,7 +1089,7 @@ function ensureSocket(url) {
 
 /**
  * Register a callback that fires whenever the WebSocket connection
- * opens — both the initial connect and every successful reconnect.
+ * opens; both the initial connect and every successful reconnect.
  * Use this to load (or reload) state without a separate code path
  * for the first connection.
  * @param {() => void} callback
@@ -1110,7 +1110,7 @@ export function registerOnDisconnect(callback) {
 /**
  * Send a message and queue a callback for the server's response.
  * Responses are matched by request ID. Each request has a 30-second
- * timeout — if no response arrives, the callback receives an
+ * timeout; if no response arrives, the callback receives an
  * InternalError so the UI doesn't hang indefinitely.
  * @param {string} url WebSocket URL (typically from rpc_config)
  * @param {string} module wire envelope string (codegen emits "rpc")
@@ -1130,7 +1130,7 @@ export function send(url, module, msg, callback) {
     }
     responseCallbacks.delete(requestId);
     callback(makeConnectionError("Request timed out"));
-    // No need to close the WebSocket — request IDs prevent FIFO desync.
+    // No need to close the WebSocket; request IDs prevent FIFO desync.
   }, REQUEST_TIMEOUT_MS);
 
   if (ws && ws.readyState === WebSocket.OPEN) {

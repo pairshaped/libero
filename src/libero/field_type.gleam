@@ -1,12 +1,26 @@
 //// The structured Gleam type representation libero uses for both
 //// shared-type discovery (walker) and handler signature scanning
 //// (scanner). Lifting it out of either module lets both produce and
-//// consume the same shape — and lets codegen pattern-match
-//// structurally instead of re-parsing strings.
+//// consume the same shape, and lets codegen pattern-match structurally
+//// instead of re-parsing strings.
 
 import gleam/bool
 import gleam/list
 import gleam/string
+
+/// Names of Gleam types that libero treats as builtin: not user-defined,
+/// not requiring atom registration, and not from the shared/ tree. Both
+/// the scanner and the walker consult this list, so they agree on what
+/// counts as a primitive across the codegen pipeline.
+pub const builtin_type_names = [
+  "Int", "Float", "String", "Bool", "Nil", "BitArray", "List", "Result",
+  "Option", "Dict",
+]
+
+/// True if `name` is one of the builtin Gleam type names libero recognises.
+pub fn is_builtin(name: String) -> Bool {
+  list.contains(builtin_type_names, name)
+}
 
 /// A Gleam type, resolved to a structured form. Module-qualified
 /// references (e.g. `types.Item` written in user code) are resolved
@@ -29,13 +43,6 @@ pub type FieldType {
   /// A type variable (generic parameter) that survives to runtime.
   /// Cannot be encoded over the wire; codegen emits a runtime error.
   TypeVar(name: String)
-}
-
-/// Placeholder FieldType useful for test fixtures where only the label
-/// of a `HandlerEndpoint.params` entry matters (e.g. dispatch generation
-/// tests that only check label destructure shape, not the type).
-pub fn placeholder() -> FieldType {
-  IntField
 }
 
 /// Render a FieldType as the user-readable Gleam type syntax it came

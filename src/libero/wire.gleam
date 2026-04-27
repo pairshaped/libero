@@ -1,8 +1,8 @@
 //// ETF (Erlang Term Format) wire codec for Libero RPC.
 ////
 //// Encoding walks any Gleam value through `erlang:term_to_binary/1`,
-//// which preserves the full Erlang type structure - atoms, tuples,
-//// maps, lists - natively. Decoding uses `erlang:binary_to_term/1`
+//// which preserves the full Erlang type structure (atoms, tuples,
+//// maps, lists) natively. Decoding uses `erlang:binary_to_term/1`
 //// to reconstruct the original terms. No manual walk or rebuild is
 //// needed because ETF is the BEAM's native serialization format.
 ////
@@ -20,9 +20,10 @@
 //// `term_to_binary` / `binary_to_term`. The JavaScript path uses
 //// libero's own ETF encoder/decoder in `rpc_ffi.mjs`, which requires
 //// that any custom-type constructors in the value have been registered
-//// via `register_all()` at boot (libero's generator emits that
+//// via the generated `rpc_decoders.gleam` module (which surfaces
+//// `ensure_decoders` from the FFI). Libero's generator emits that
 //// registration for every type reachable from a handler's params or
-//// return type).
+//// return type.
 
 import gleam/dynamic.{type Dynamic}
 
@@ -49,19 +50,20 @@ pub fn encode(value: a) -> BitArray
 ///
 /// Any custom types in the decoded value must be reachable from a
 /// handler's params or return type so their constructors are registered
-/// with the JavaScript codec (via `register_all()` at boot). On Erlang
-/// this is automatic because atoms are pre-registered by the generated
+/// with the JavaScript codec (via the generated `rpc_decoders.gleam`
+/// module, which calls `ensure_decoders` on import). On Erlang this
+/// is automatic because atoms are pre-registered by the generated
 /// `rpc_atoms` module.
 ///
 /// **Warning: type safety is the caller's responsibility.** The return
-/// type `a` is unwitnessed — the function returns whatever the ETF
+/// type `a` is unwitnessed: the function returns whatever the ETF
 /// binary deserializes to, cast to the caller's expected type. A
 /// version skew between client and server will produce silent data
 /// corruption, not a runtime error. This is an intentional tradeoff
 /// for ergonomics in controlled deployments where both sides are
 /// built from the same source.
 ///
-/// This is by design — the generated code is the enforcement point.
+/// This is by design: the generated code is the enforcement point.
 ///
 /// **Panics on malformed input.** In a typical libero deployment
 /// both sides are controlled, so this is a sharp-edge check rather
@@ -183,11 +185,11 @@ fn ffi_variant_tag(value: dynamic.Dynamic) -> Result(String, Nil) {
 /// `ClientMsg` value to its typed form. Safe when client and server are
 /// built from the same source (the generator guarantees the types match).
 ///
-/// **Warning: unwitnessed cast.** Same safety model as `decode` —
-/// type correctness depends on both sides being built from the same
-/// source. A mismatch produces silent data corruption.
+/// **Warning: unwitnessed cast.** Same safety model as `decode`. Type
+/// correctness depends on both sides being built from the same source.
+/// A mismatch produces silent data corruption.
 ///
-/// This is by design — the generated code is the enforcement point.
+/// This is by design: the generated code is the enforcement point.
 /// Making this internal would break the generated dispatch modules
 /// which live in consumer packages and need pub access.
 @external(erlang, "libero_ffi", "identity")

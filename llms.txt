@@ -1,6 +1,6 @@
 # Libero Context
 
-Libero is a full-stack Gleam framework with typed RPC. Write handler functions with the right signature, Libero generates dispatch, client stubs, and server bootstrap from them. Transport is WebSocket with ETF encoding. No REST, no JSON codecs, no manual dispatch, no message types to maintain.
+Libero is a full-stack Gleam framework with typed RPC. Write handler functions with the right signature, and Libero generates dispatch, client stubs, and server bootstrap from them. Transport is WebSocket with ETF encoding; you don't write REST endpoints, JSON codecs, manual dispatch, or message types.
 
 ## Project Structure
 
@@ -215,7 +215,7 @@ Common patterns:
 - `RemoteData(value, error)` carries typed domain errors: `Failure(NotFound)` not `Failure("string")`.
 - Store `RemoteData` in your model. Assign load responses directly: `GotItems(rd) -> Model(..model, items: rd)`.
 - Use `remote_data.map` to update loaded data: `remote_data.map(data: model.items, transform: fn(items) { ... })`.
-- Pattern match all states in the view: `Success`, `Loading`, `Failure`, `NotAsked`.
+- Pattern match all states in the view: `Success`, `Loading`, `Failure`, `TransportFailure`, `NotAsked`.
 
 ### Connection lifecycle
 
@@ -304,7 +304,7 @@ Usage in the server's mist router:
 ```gleam
 ssr.handle_request(
   req:,
-  parse: router.parse,
+  parse: router.parse_route,
   load: page.load_page,
   render: page.render_page,
   handler_ctx:,
@@ -335,12 +335,13 @@ html.body([], [
 
 ### SSR project structure
 
-For SSR, view functions must live in `shared/` so they compile to both Erlang (server rendering) and JavaScript (client hydration). The `shared/` package needs a `lustre` dependency.
+For SSR, view functions must live in `shared/` so they compile to both Erlang (server rendering) and JavaScript (client hydration). The `shared/` package needs a `lustre` dependency. The shared/ split mirrors what scaffolds emit:
 
 ```
 shared/src/shared/
+  router.gleam       # Route type, parse_route, route_to_path
   types.gleam        # domain types
-  views.gleam        # view functions, Model, Msg, Route types
+  views.gleam        # Model, Msg, view function, title
 ```
 
 The server entry point (`server/src/<app>.gleam`) is generated once and never overwritten, so it can be customized to add SSR routes.
@@ -383,14 +384,23 @@ Two tiers:
 
 ```gleam
 pub type RemoteData(value, error) {
-  NotAsked    // No request made
-  Loading     // Request in flight
-  Failure(error)
+  NotAsked              // No request made
+  Loading               // Request in flight
+  Failure(error)        // Typed domain error from the handler
+  TransportFailure(message: String)  // Framework / wire-level failure
   Success(value)
+}
+
+pub type RpcData(value) =
+  RemoteData(value, RpcFailure)
+
+pub type RpcFailure {
+  DomainFailure(message: String)
+  FrameworkFailure(message: String)
 }
 ```
 
-Helpers: `from_response`, `map`, `map_error`, `unwrap`, `to_option`, `is_success`, `is_loading`.
+Helpers: `from_response`, `map`, `map_error`, `unwrap`, `to_option`, `fold`, `is_success`, `is_loading`, `is_not_asked`, `is_failure`, `is_transport_failure`, `is_error`.
 
 ## Dependencies
 

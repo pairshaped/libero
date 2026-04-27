@@ -60,7 +60,7 @@ pub fn prefix_paths_with_dot_is_identity_for_paths_test() {
 
 fn base_config() -> config.Config {
   config.Config(
-    ws_mode: config.WsPathOnly(path: "/ws"),
+    ws_path: "/ws",
     atoms_output: "src/myapp@generated@rpc_atoms.erl",
     atoms_module: "myapp@generated@rpc_atoms",
     config_output: "clients/web/src/generated/rpc_config.gleam",

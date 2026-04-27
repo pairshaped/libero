@@ -114,7 +114,7 @@ pub fn decode_flags(flags: Dynamic) -> Result(a, SsrError) {
 /// ```
 ///
 /// `client_module` is a JS import path controlled by the developer, not user
-/// input — it is concatenated into the generated `<script type="module">`
+/// input. It is concatenated into the generated `<script type="module">`
 /// without escaping. If you derive this value from external input, you must
 /// validate it yourself.
 pub fn boot_script(
@@ -122,7 +122,7 @@ pub fn boot_script(
   flags flags: a,
 ) -> Element(msg) {
   let encoded = encode_flags(flags)
-  // encoded is base64 (alphabet [A-Za-z0-9+/=]) — safe inside a JS string literal.
+  // encoded is base64 (alphabet [A-Za-z0-9+/=]), safe inside a JS string literal.
   element.fragment([
     html.script([], "window.__LIBERO_FLAGS__ = \"" <> encoded <> "\";"),
     html.script(
@@ -149,7 +149,7 @@ pub fn boot_script(
 /// ```gleam
 /// ssr.handle_request(
 ///   req:,
-///   parse: views.parse_route,
+///   parse: router.parse_route,
 ///   load: load_page,
 ///   render: render_page,
 ///   handler_ctx:,

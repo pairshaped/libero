@@ -15,7 +15,7 @@ import gleam/set
 import gleam/string
 import libero/field_type
 import libero/gen_error.{
-  type GenError, CannotReadDir, CannotReadFile, ParseFailed,
+  type GenError, CannotReadDir, CannotReadFile, DuplicateEndpoint, ParseFailed,
 }
 import simplifile
 
@@ -27,15 +27,15 @@ pub type HandlerEndpoint {
   HandlerEndpoint(
     /// Handler module path, e.g. "server/handler"
     module_path: String,
-    /// Function name, e.g. "get_todos"
+    /// Function name, e.g. "get_items"
     fn_name: String,
     /// Structured return type, with module-qualified user types resolved
     /// to their full path. Codegen pattern-matches on this directly
-    /// instead of re-parsing strings — the failure mode that made the
-    /// `bool.guard`-recursion bug class possible.
+    /// instead of re-parsing strings, which is the failure mode that
+    /// made the `bool.guard`-recursion bug class possible.
     return_type: field_type.FieldType,
-    /// Parameters excluding state, with labels and resolved types.
-    /// Each entry is #(label, FieldType).
+    /// Parameters excluding HandlerContext, with labels and resolved
+    /// types. Each entry is #(label, FieldType).
     params: List(#(String, field_type.FieldType)),
   )
 }
@@ -110,8 +110,11 @@ fn visit_file(
 
 // ---------- Module path derivation ----------
 
-/// Derive the Gleam module path from a file path by finding `/src/` and
-/// taking everything after it, then stripping the `.gleam` extension.
+/// Derive the Gleam module path from a file path by finding the last
+/// occurrence of `/src/` and taking everything after it, then stripping
+/// the `.gleam` extension. Splitting on the LAST `/src/` (not the first)
+/// matters for vendored paths like `vendor/x/src/lib/src/types.gleam`,
+/// where the leftmost match would yield the wrong module path.
 /// E.g. `examples/checklist/shared/src/shared/items.gleam` -> `shared/items`.
 pub fn derive_module_path(file_path file_path: String) -> String {
   let without_extension = case string.ends_with(file_path, ".gleam") {
@@ -123,14 +126,15 @@ pub fn derive_module_path(file_path file_path: String) -> String {
       )
     False -> file_path
   }
-  string.split_once(without_extension, "/src/")
-  |> result.map(fn(pair) { pair.1 })
-  |> result.unwrap(or: without_extension)
+  case string.split(without_extension, "/src/") {
+    [_only] -> without_extension
+    parts -> list.last(parts) |> result.unwrap(or: without_extension)
+  }
 }
 
 /// Extract the last path segment from a module path.
 /// E.g. `shared/items` -> `items`, `items` -> `items`.
-pub fn last_module_segment(module_path module_path: String) -> String {
+fn last_module_segment(module_path module_path: String) -> String {
   string.split(module_path, "/")
   |> list.last
   |> result.unwrap(or: module_path)
@@ -165,8 +169,52 @@ pub fn scan_handler_endpoints(
       }
     })
   case errors_rev {
-    [] -> Ok(list.reverse(endpoints_rev))
+    [] -> {
+      let endpoints = list.reverse(endpoints_rev)
+      case duplicate_fn_name_errors(endpoints) {
+        [] -> Ok(endpoints)
+        dup_errors -> Error(dup_errors)
+      }
+    }
     _ -> Error(list.reverse(errors_rev))
+  }
+}
+
+/// Detect handler functions sharing a name across modules. Each duplicate
+/// would compile into the same ClientMsg variant constructor and the same
+/// dispatch case arm, so codegen would emit two definitions of each and the
+/// generated module would fail to compile. Surface as a libero-level error
+/// before that happens.
+fn duplicate_fn_name_errors(
+  endpoints: List(HandlerEndpoint),
+) -> List(GenError) {
+  let by_name =
+    list.fold(endpoints, dict.new(), fn(acc, ep) {
+      let existing = dict.get(acc, ep.fn_name) |> result.unwrap([])
+      dict.insert(acc, ep.fn_name, [ep.module_path, ..existing])
+    })
+  by_name
+  |> dict.to_list
+  |> list.filter_map(fn(pair) {
+    let #(fn_name, modules_rev) = pair
+    case modules_rev {
+      [_, _, ..] ->
+        Ok(DuplicateEndpoint(
+          fn_name:,
+          modules: list.reverse(modules_rev) |> list.unique,
+        ))
+      _ -> Error(Nil)
+    }
+  })
+  |> list.sort(by: fn(a, b) {
+    string.compare(duplicate_fn_name(a), duplicate_fn_name(b))
+  })
+}
+
+fn duplicate_fn_name(err: GenError) -> String {
+  case err {
+    DuplicateEndpoint(fn_name:, ..) -> fn_name
+    _ -> ""
   }
 }
 
@@ -306,10 +354,11 @@ fn parse_single_endpoint(
   // "not an endpoint" so we don't silently emit broken codegen.
   use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
 
-  // Extract non-state parameters with their labels and structured types.
-  let non_state_params = list.take(params, list.length(params) - 1)
+  // Extract payload parameters (everything before the trailing
+  // HandlerContext) with their labels and structured types.
+  let payload_params = list.take(params, list.length(params) - 1)
   let params_typed =
-    list.filter_map(non_state_params, fn(p) {
+    list.filter_map(payload_params, fn(p) {
       case p.label, p.type_ {
         option.Some(label), option.Some(type_) ->
           Ok(#(
@@ -326,7 +375,7 @@ fn parse_single_endpoint(
 
   // All non-builtin types must be from shared/
   let all_param_types =
-    list.filter_map(non_state_params, fn(p) { option.to_result(p.type_, Nil) })
+    list.filter_map(payload_params, fn(p) { option.to_result(p.type_, Nil) })
   let all_types = [response_type, ..all_param_types]
   use <- bool.guard(
     when: !all_types_shared(all_types, shared_types),
@@ -345,10 +394,14 @@ fn parse_single_endpoint(
   ))
 }
 
-/// Check if a type annotation is HandlerContext (possibly qualified).
+/// Check if a type annotation is the project's HandlerContext, brought
+/// into local scope by an unqualified import. We deliberately reject
+/// module-qualified `pkg.HandlerContext` references so that types named
+/// `HandlerContext` from unrelated modules aren't treated as handler
+/// endpoints.
 fn is_handler_context_type(t: glance.Type) -> Bool {
   case t {
-    glance.NamedType(name: "HandlerContext", ..) -> True
+    glance.NamedType(name: "HandlerContext", module: option.None, ..) -> True
     _ -> False
   }
 }
@@ -418,7 +471,7 @@ fn glance_type_to_field_type(
 /// FieldType directly. Other names are looked up in `imports` to
 /// produce a `UserType` with the import's full module path. Unknown
 /// names fall back to a `UserType` with the bare name as `module_path`
-/// — caller is expected to have validated all types via
+/// (caller is expected to have validated all types via
 /// `all_types_shared` first, so this branch is unreachable in practice.
 fn builtin_or_user(
   name name: String,
@@ -463,15 +516,12 @@ fn all_types_shared(
 }
 
 /// Check if a single type (and all its parameters) are shared or builtins.
+/// `field_type.is_builtin` is the single source of truth for builtin
+/// names, shared with the walker.
 fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
-  let builtins =
-    set.from_list([
-      "Int", "String", "Float", "Bool", "Nil", "List", "Result", "Option",
-      "Dict", "BitArray", "Dynamic",
-    ])
   case t {
     glance.NamedType(name:, parameters:, ..) ->
-      { set.contains(builtins, name) || set.contains(shared_types, name) }
+      { field_type.is_builtin(name) || set.contains(shared_types, name) }
       && list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
     glance.TupleType(elements:, ..) ->
       list.all(elements, fn(e) { is_type_shared(e, shared_types) })

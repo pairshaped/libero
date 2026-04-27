@@ -106,7 +106,7 @@ export const decode_nil = (term) => {
   // Gleam `Nil` compiles to `undefined` on JS. Wire value is an empty
   // tuple on Erlang; the raw decoder hands us back either `undefined` or
   // `[]` (empty tuple) depending on context. Either way, Nil has no
-  // runtime payload — validate then return undefined.
+  // runtime payload; validate then return undefined.
   if (term === undefined || term === null) return undefined;
   if (Array.isArray(term) && term.length === 0) return undefined;
   throw new DecodeError("expected Nil, got " + typeof term);

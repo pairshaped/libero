@@ -1,5 +1,6 @@
 import glance
 import gleam/io
+import gleam/string
 import simplifile
 
 pub type GenError {
@@ -9,13 +10,15 @@ pub type GenError {
   ParseFailed(path: String, cause: glance.Error)
   UnresolvedTypeModule(module_path: String, type_name: String)
   TypeNotFound(module_path: String, type_name: String)
+  NoEndpointsFound(server_src: String)
+  DuplicateEndpoint(fn_name: String, modules: List(String))
 }
 
 pub fn print_error(err: GenError) -> Nil {
   io.println_error(to_string(err))
 }
 
-pub fn to_string(err: GenError) -> String {
+fn to_string(err: GenError) -> String {
   case err {
     CannotReadDir(path, cause) -> "error: Cannot read directory
   \u{250c}\u{2500} " <> path <> "
@@ -58,6 +61,25 @@ pub fn to_string(err: GenError) -> String {
   \u{2502}
   hint: The type may be private (add `pub`) or the module path may be
         incorrect. Libero scans for custom types, not type aliases."
+
+    NoEndpointsFound(server_src) -> "error: No handler endpoints found
+  \u{250c}\u{2500} " <> server_src <> "
+  \u{2502}
+  \u{2502} The server source tree contains no public function whose last
+  \u{2502} parameter is HandlerContext and whose return type is
+  \u{2502} #(Result(_, _), HandlerContext).
+  \u{2502}
+  hint: Add at least one handler function before running `libero gen`."
+
+    DuplicateEndpoint(fn_name, modules) -> "error: Duplicate handler endpoint
+  \u{250c}\u{2500} " <> fn_name <> "
+  \u{2502}
+  \u{2502} The same function name is exported from multiple handler
+  \u{2502} modules:
+  \u{2502}   " <> string.join(modules, "\n  \u{2502}   ") <> "
+  \u{2502}
+  hint: Handler function names must be unique across the server source
+        tree, since each one becomes a ClientMsg variant."
   }
 }
 

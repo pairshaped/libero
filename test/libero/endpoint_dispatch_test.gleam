@@ -11,25 +11,25 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_items",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "create_item",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [#("params", item_params)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "toggle_item",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [#("id", field_type.IntField)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "delete_item",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [#("id", field_type.IntField)],
     ),
   ]
@@ -40,7 +40,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       server_generated: output_dir,
       atoms_module: "checklist@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "rpc",
+      wire_module_tag: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -86,7 +86,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_items",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [],
     ),
   ]
@@ -97,7 +97,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
       server_generated: output_dir,
       atoms_module: "checklist@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "rpc",
+      wire_module_tag: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -128,7 +128,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [
         #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
       ],
@@ -136,7 +136,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "get_widget",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [#("id", field_type.IntField)],
     ),
   ]
@@ -147,7 +147,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "shared/types",
+      wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -172,7 +172,7 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      return_type: field_type.placeholder(),
+      return_type: field_type.IntField,
       params: [
         #(
           "value",
@@ -188,7 +188,7 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
       context_module: "handler_context",
-      shared_module_path: "shared/types",
+      wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
 
@@ -225,7 +225,7 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
     codegen.write_endpoint_client_stubs(
       endpoints: endpoints,
       client_generated: output_dir,
-      shared_module_path: "shared/types",
+      wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
 
@@ -259,7 +259,7 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
     codegen.write_endpoint_client_stubs(
       endpoints: endpoints,
       client_generated: output_dir,
-      shared_module_path: "shared/types",
+      wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
 

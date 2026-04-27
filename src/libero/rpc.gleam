@@ -39,7 +39,7 @@ pub fn send(
 /// Handle server-initiated push messages on a module.
 /// When the server pushes a typed message without a prior request,
 /// the callback wraps it into a Lustre Msg for dispatch.
-pub fn update_from_server(
+pub fn on_push(
   module module: String,
   handler handler: fn(Dynamic) -> msg,
 ) -> Effect(msg) {
@@ -48,7 +48,7 @@ pub fn update_from_server(
   })
 }
 
-/// Register a callback that fires whenever the WebSocket connects —
+/// Register a callback that fires whenever the WebSocket connects:
 /// the initial connection and every successful reconnect. Use this
 /// to load (or reload) state without a separate code path for the
 /// first connection. Register early in your app's `init`.

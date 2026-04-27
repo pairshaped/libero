@@ -78,12 +78,9 @@ type WalkerState {
 /// handled by libero's auto-wire blocks in rpc_ffi.mjs.
 const registry_skip_prefixes = ["libero/", "gleam/"]
 
-/// Primitive/builtin type names - not custom types, never walked.
-const registry_primitives = [
-  "Int", "Float", "String", "Bool", "Nil", "BitArray", "List", "Result",
-  "Option", "Dict",
-]
-
+/// Primitive/builtin type names: not custom types, never walked.
+/// Sourced from `field_type.builtin_type_names` so scanner and walker
+/// agree on what counts as a builtin.
 /// True if a module path should not be walked by the type graph walker.
 fn is_skipped_module(module_path: String) -> Bool {
   list.any(registry_skip_prefixes, fn(prefix) {
@@ -93,7 +90,7 @@ fn is_skipped_module(module_path: String) -> Bool {
 
 /// True if a type name is a primitive/builtin that needs no registration.
 fn is_primitive_type(name: String) -> Bool {
-  list.contains(registry_primitives, name)
+  field_type.is_builtin(name)
 }
 
 /// True when a NamedType reference points to a Gleam stdlib type, not a
@@ -163,7 +160,7 @@ pub fn walk_shared_types(
     })
 
   // Seed from all exported custom types in all shared files. Surface
-  // any read/parse errors instead of silently dropping them — a file
+  // any read/parse errors instead of silently dropping them. A file
   // that fails to parse here would otherwise contribute zero seed types
   // with no warning, then later show up as TypeNotFound.
   let #(seed_set, errors_rev) =
@@ -212,12 +209,17 @@ fn read_public_type_pairs(
   })
 }
 
-/// Derive a module path from a shared file path.
+/// Derive a module path from a shared file path. Splits on the LAST
+/// `shared/src/` so vendored paths with nested `shared/src/` resolve
+/// to the inner module path rather than the outermost segment.
 /// e.g. "examples/checklist/shared/src/shared/items.gleam" -> "shared/items"
 fn derive_shared_module_path(file_path: String) -> String {
-  case string.split_once(file_path, "shared/src/") {
-    Ok(#(_, after)) -> string.replace(after, ".gleam", "")
-    Error(Nil) -> string.replace(file_path, ".gleam", "")
+  case string.split(file_path, "shared/src/") {
+    [_only] -> string.replace(file_path, ".gleam", "")
+    parts ->
+      list.last(parts)
+      |> result.map(fn(after) { string.replace(after, ".gleam", "") })
+      |> result.unwrap(or: string.replace(file_path, ".gleam", ""))
   }
 }
 
@@ -311,7 +313,7 @@ fn process_type_ast(
         })
       do_walk(WalkerState(..state, queue: list.append(new_refs, state.queue)))
     }
-    // Not an alias — find the custom type definition
+    // Not an alias: find the custom type definition
     Error(Nil) ->
       process_type_ast_custom(module_path:, type_name:, ast:, state:)
   }
@@ -555,7 +557,7 @@ fn field_type_of(
       )
     // Functions and holes cannot be serialized over ETF. Mapped to TypeVar
     // which throws at runtime in the typed decoder ("TypeVar<_fn> not supported").
-    // This is intentional — a build-time error would require tracking which
+    // This is intentional: a build-time error would require tracking which
     // fields are transitively reachable from messages, which the walker doesn't
     // do for non-custom types. The runtime error is clear and immediate.
     glance.FunctionType(..) -> TypeVar(name: "_fn")
@@ -608,7 +610,7 @@ fn stdlib_field_type(
     "Result", [ok, err] -> ResultOf(ok: recurse(ok), err: recurse(err))
     "Dict", [key, value] -> DictOf(key: recurse(key), value: recurse(value))
     // Arity mismatch (e.g. bare `Result` used as a type name with zero
-    // args) — fall through to UserType so codegen produces a decoder
+    // args): fall through to UserType so codegen produces a decoder
     // reference rather than a malformed primitive.
     _, _ ->
       UserType(
@@ -629,7 +631,7 @@ fn resolve_field_type(
   aliases aliases: Dict(String, glance.Type),
   current_module current_module: String,
 ) -> FieldType {
-  // Unqualified name matching a local type alias — resolve through it
+  // Unqualified name matching a local type alias: resolve through it
   case module, dict.get(aliases, name) {
     option.None, Ok(aliased_type) ->
       field_type_of(t: aliased_type, resolver:, aliases:, current_module:)
@@ -759,7 +761,7 @@ fn is_upper_grapheme(g: String) -> Bool {
 }
 
 /// Extract the type from a variant field, whether labelled or unlabelled.
-pub fn variant_field_type(field: glance.VariantField) -> glance.Type {
+fn variant_field_type(field: glance.VariantField) -> glance.Type {
   case field {
     glance.LabelledVariantField(item:, ..) -> item
     glance.UnlabelledVariantField(item:) -> item

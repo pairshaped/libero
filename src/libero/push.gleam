@@ -10,7 +10,7 @@
 import libero/wire
 
 /// Ensure the push pg scope is started. Call once at server boot.
-/// Idempotent — safe to call multiple times.
+/// Idempotent: safe to call multiple times.
 pub fn init() -> Nil {
   ensure_started()
 }

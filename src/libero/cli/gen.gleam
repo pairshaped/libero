@@ -1,4 +1,4 @@
-//// `libero gen` — TOML-driven codegen command.
+//// `libero gen`: TOML-driven codegen command.
 ////
 //// Reads `gleam.toml` from the project path, scans the server source tree
 //// for handler endpoint functions, and runs the full codegen pipeline for
@@ -55,7 +55,7 @@ fn run_with_clients(
   let shared_src = project_path <> "/" <> toml_cfg.shared_src_dir
   let server_src = project_path <> "/" <> toml_cfg.server_src_dir
 
-  // Scan for handler endpoints (per-function convention)
+  // Scan for handler endpoints
   use endpoints <- result.try(
     scanner.scan_handler_endpoints(server_src:, shared_src:)
     |> result.map_error(fn(errors) {
@@ -63,6 +63,14 @@ fn run_with_clients(
       "endpoint scan failed"
     }),
   )
+
+  use endpoints <- result.try(case endpoints {
+    [] -> {
+      gen_error.print_error(gen_error.NoEndpointsFound(server_src:))
+      Error("no handler endpoints found")
+    }
+    _ -> Ok(endpoints)
+  })
 
   io.println(
     "libero: found "
@@ -74,7 +82,7 @@ fn run_with_clients(
   // The wire envelope is a stable string both ends agree on; it has no
   // semantic meaning beyond routing. A constant keeps it predictable and
   // legible in error messages and wire logs.
-  let shared_module_path = "rpc"
+  let wire_module_tag = "rpc"
 
   // Walk shared types for atom registration and decoder generation
   use discovered <- result.try(
@@ -93,7 +101,7 @@ fn run_with_clients(
         toml_cfg:,
         client:,
         endpoints:,
-        shared_module_path:,
+        wire_module_tag:,
         discovered:,
       )
     }),
@@ -141,7 +149,7 @@ fn run_client_codegen(
   toml_cfg toml_cfg: toml_config.TomlConfig,
   client client: toml_config.ClientConfig,
   endpoints endpoints: List(scanner.HandlerEndpoint),
-  shared_module_path shared_module_path: String,
+  wire_module_tag wire_module_tag: String,
   discovered discovered: List(DiscoveredType),
 ) -> Result(Nil, String) {
   io.println("libero: generating stubs for client: " <> client.name)
@@ -179,7 +187,7 @@ fn run_client_codegen(
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
       context_module: toml_cfg.context_module,
-      shared_module_path:,
+      wire_module_tag:,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
@@ -192,7 +200,7 @@ fn run_client_codegen(
     codegen.write_endpoint_client_stubs(
       endpoints:,
       client_generated: config.client_generated,
-      shared_module_path:,
+      wire_module_tag:,
     )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
