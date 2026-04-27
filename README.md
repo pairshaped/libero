@@ -161,22 +161,30 @@ GotCreated(Success(item)) -> #(
 )
 ```
 
-In the view, pattern match on the four states. Drill into the `Failure` outcome only when transport and domain errors need different UX:
+In the view, pattern match on the four states. Use `format_failure` to render either error tier with one helper, supplying your own formatter for the domain side:
 
 ```gleam
-import libero/remote_data.{DomainError, TransportError}
-
 case model.items {
   NotAsked -> element.none()
   Loading -> html.text("Loading...")
-  Failure(DomainError(err)) -> format_error(err)
-  Failure(TransportError(rpc_err)) ->
-    html.text("Connection error: " <> remote_data.format_rpc_error(rpc_err))
+  Failure(outcome) ->
+    html.text(remote_data.format_failure(
+      outcome:,
+      format_domain: format_error,
+    ))
   Success(items) -> view_item_list(items)
 }
 ```
 
-If both errors should render the same way, collapse with `Failure(_) -> generic_error()`.
+If transport and domain errors need different UX, drill into the outcome:
+
+```gleam
+import libero/remote_data.{DomainError, TransportError}
+
+Failure(DomainError(err)) -> format_error(err)
+Failure(TransportError(rpc_err)) ->
+  html.text("Connection error: " <> remote_data.format_transport_error(rpc_err))
+```
 
 ## Connection Management
 

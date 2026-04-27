@@ -1,6 +1,8 @@
 import gleam/option.{None, Some}
 import libero/error
-import libero/remote_data.{Failure, Loading, NotAsked, Success}
+import libero/remote_data.{
+  DomainError, Failure, Loading, NotAsked, Success, TransportError,
+}
 
 // -- map --
 
@@ -78,19 +80,37 @@ pub fn to_option_not_asked_test() {
   let assert None = remote_data.to_option(NotAsked)
 }
 
-// -- format_rpc_error --
+// -- format_transport_error --
 
-pub fn format_rpc_error_internal_test() {
+pub fn format_transport_error_internal_test() {
   let assert "boom" =
-    remote_data.format_rpc_error(error.InternalError("trace-1", "boom"))
+    remote_data.format_transport_error(error.InternalError("trace-1", "boom"))
 }
 
-pub fn format_rpc_error_unknown_function_test() {
+pub fn format_transport_error_unknown_function_test() {
   let assert "Unknown RPC: bad_fn" =
-    remote_data.format_rpc_error(error.UnknownFunction("bad_fn"))
+    remote_data.format_transport_error(error.UnknownFunction("bad_fn"))
 }
 
-pub fn format_rpc_error_malformed_test() {
+pub fn format_transport_error_malformed_test() {
   let assert "Malformed request" =
-    remote_data.format_rpc_error(error.MalformedRequest)
+    remote_data.format_transport_error(error.MalformedRequest)
+}
+
+// -- format_failure --
+
+pub fn format_failure_routes_transport_error_test() {
+  let assert "Unknown RPC: bad_fn" =
+    remote_data.format_failure(
+      outcome: TransportError(error.UnknownFunction("bad_fn")),
+      format_domain: fn(_) { "domain" },
+    )
+}
+
+pub fn format_failure_routes_domain_error_test() {
+  let assert "ITEM_NOT_FOUND" =
+    remote_data.format_failure(
+      outcome: DomainError("ITEM_NOT_FOUND"),
+      format_domain: fn(code) { code },
+    )
 }

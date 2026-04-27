@@ -19,15 +19,6 @@ pub type ClientMsg {
 @external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_delete_item")
 fn decode_response_delete_item(raw: Dynamic) -> Dynamic
 
-@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_toggle_item")
-fn decode_response_toggle_item(raw: Dynamic) -> Dynamic
-
-@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_create_item")
-fn decode_response_create_item(raw: Dynamic) -> Dynamic
-
-@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_get_items")
-fn decode_response_get_items(raw: Dynamic) -> Dynamic
-
 pub fn delete_item(
   id id: Int,
   on_response on_response: fn(RpcData(Int, types.ItemError)) -> msg,
@@ -36,6 +27,9 @@ pub fn delete_item(
     on_response(wire.coerce(decode_response_delete_item(raw)))
   })
 }
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_toggle_item")
+fn decode_response_toggle_item(raw: Dynamic) -> Dynamic
 
 pub fn toggle_item(
   id id: Int,
@@ -46,6 +40,9 @@ pub fn toggle_item(
   })
 }
 
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_create_item")
+fn decode_response_create_item(raw: Dynamic) -> Dynamic
+
 pub fn create_item(
   params params: types.ItemParams,
   on_response on_response: fn(RpcData(types.Item, types.ItemError)) -> msg,
@@ -54,6 +51,9 @@ pub fn create_item(
     on_response(wire.coerce(decode_response_create_item(raw)))
   })
 }
+
+@external(javascript, "./rpc_decoders_ffi.mjs", "decode_response_get_items")
+fn decode_response_get_items(raw: Dynamic) -> Dynamic
 
 pub fn get_items(
   on_response on_response: fn(RpcData(List(types.Item), types.ItemError)) -> msg,

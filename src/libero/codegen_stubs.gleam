@@ -28,32 +28,15 @@ pub fn write_endpoint_client_stubs(
 
   let client_msg_variants = codegen.emit_client_msg_variants(endpoints:)
 
-  // Generate FFI external declarations and stub functions
-  let decoder_externals =
-    list.map(endpoints, fn(e) {
-      "@external(javascript, \"./rpc_decoders_ffi.mjs\", \"decode_response_"
-      <> e.fn_name
-      <> "\")\n"
-      <> "fn decode_response_"
-      <> e.fn_name
-      <> "(raw: Dynamic) -> Dynamic"
-    })
-
-  let stub_fns =
+  // For each endpoint, emit the decoder extern immediately above its stub
+  // so a reader sees the full triplet (extern + stub) without scrolling
+  // hundreds of lines between them.
+  let endpoint_blocks =
     list.map(endpoints, fn(e) {
       let fn_name = e.fn_name
       let variant_name = codegen.to_pascal_case(e.fn_name)
-      // The scanner's parse_single_endpoint enforces that the return is
-      // Result-shaped, so this match is total in practice. Fall back to
-      // (Nil, Nil) defensively if a future scanner change would let
-      // something else through.
-      let #(payload_type, error_type) = case e.return_type {
-        field_type.ResultOf(ok:, err:) -> #(
-          field_type.to_gleam_source(ok),
-          field_type.to_gleam_source(err),
-        )
-        other -> #(field_type.to_gleam_source(other), "Nil")
-      }
+      let payload_type = field_type.to_gleam_source(e.return_ok)
+      let error_type = field_type.to_gleam_source(e.return_err)
 
       // Build function params (endpoint params + on_response)
       let fn_params = case e.params {
@@ -86,7 +69,13 @@ pub fn write_endpoint_client_stubs(
       let msg_construct =
         codegen.variant_pattern(variant_name:, params: e.params)
 
-      "pub fn "
+      "@external(javascript, \"./rpc_decoders_ffi.mjs\", \"decode_response_"
+      <> fn_name
+      <> "\")\n"
+      <> "fn decode_response_"
+      <> fn_name
+      <> "(raw: Dynamic) -> Dynamic\n\n"
+      <> "pub fn "
       <> fn_name
       <> "(\n"
       <> fn_params
@@ -125,9 +114,7 @@ pub type ClientMsg {
 " <> string.join(client_msg_variants, "\n") <> "
 }
 
-" <> string.join(decoder_externals, "\n\n") <> "
-
-" <> string.join(stub_fns, "\n\n") <> "
+" <> string.join(endpoint_blocks, "\n\n") <> "
 
 fn send(msg: ClientMsg, on_response: fn(Dynamic) -> msg) -> Effect(msg) {
   let _ = rpc_decoders.ensure_decoders

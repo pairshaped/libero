@@ -1,8 +1,11 @@
 import glance
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import glexer
+import glexer/token
 import simplifile
 
 pub type GenError {
@@ -91,11 +94,11 @@ fn to_string(err: GenError) -> String {
         ),
       )
 
-    ParseFailed(path, _cause) ->
+    ParseFailed(path, cause) ->
       error_box(
         title: "Failed to parse Gleam source",
         path:,
-        body_lines: ["glance could not parse this file as valid Gleam"],
+        body_lines: format_glance_error(cause),
         hint: Some("Run `gleam check` to see the full compiler error"),
       )
 
@@ -155,4 +158,22 @@ fn to_string(err: GenError) -> String {
 
 fn format_file_error(err: simplifile.FileError) -> String {
   simplifile.describe_error(err)
+}
+
+/// Format a `glance.Error` cause into the body lines of a parse-failure
+/// box. Surfaces the offending token's source text and its byte offset
+/// so the user can locate the problem without re-running another tool.
+/// `byte_offset` is the lexer's offset (codeunit offset on JavaScript).
+fn format_glance_error(err: glance.Error) -> List(String) {
+  case err {
+    glance.UnexpectedEndOfInput -> [
+      "glance hit unexpected end of input while parsing this file",
+    ]
+    glance.UnexpectedToken(token: tok, position: glexer.Position(byte_offset:)) -> [
+      "unexpected token `"
+      <> token.to_source(tok)
+      <> "` at byte offset "
+      <> int.to_string(byte_offset),
+    ]
+  }
 }

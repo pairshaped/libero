@@ -190,7 +190,7 @@ Rules:
 // clients/web/src/app.gleam
 
 import generated/messages as rpc
-import libero/remote_data.{type RpcData, DomainError, Failure, Loading, Success, TransportError}
+import libero/remote_data.{type RpcData, Failure, Loading, Success}
 import shared/types.{type Item, type ItemError, ItemParams}
 
 pub type Model {
@@ -215,7 +215,7 @@ Common patterns:
 - `RpcData(value, domain)` keeps domain *and* transport errors typed: `Failure(DomainError(NotFound))`, `Failure(TransportError(error.MalformedRequest))`.
 - Store `RpcData` in your model. Assign load responses directly: `GotItems(rd) -> Model(..model, items: rd)`.
 - Use `remote_data.map` to update loaded data: `remote_data.map(data: model.items, transform: fn(items) { ... })`.
-- Pattern match the four states in the view: `NotAsked`, `Loading`, `Failure(_)`, `Success`. Drill into `Failure(DomainError(...))` / `Failure(TransportError(...))` only when the UX differs.
+- Pattern match the four states in the view: `NotAsked`, `Loading`, `Failure(outcome)`, `Success`. Use `remote_data.format_failure(outcome:, format_domain:)` to render either error tier with one branch. Only drill into `Failure(DomainError(...))` / `Failure(TransportError(...))` when transport and domain errors need distinct UX.
 
 ### Connection lifecycle
 
@@ -403,7 +403,10 @@ Mirrors Elm's `WebData a = RemoteData Http.Error a`. Domain errors stay typed al
 
 Generated stubs build `RpcData` directly via the per-endpoint `decode_response_<fn>` FFI; callers `case` on the variants.
 
-Helpers: `format_rpc_error`, `map`, `map_error`, `unwrap`, `to_option`, `fold`.
+Helpers:
+- `format_failure(outcome:, format_domain:)` -- collapse the `TransportError` / `DomainError` arms into one `Failure(outcome)` branch, supplying a domain-error formatter.
+- `format_transport_error` -- single-string view of an `RpcError` (used internally by `format_failure`).
+- `map`, `map_error`, `unwrap`, `to_option`, `fold` -- standard `RemoteData` combinators.
 
 ## Dependencies
 

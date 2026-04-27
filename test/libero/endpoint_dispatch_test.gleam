@@ -12,25 +12,29 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_items",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "create_item",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [#("params", item_params)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "toggle_item",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "delete_item",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
     ),
   ]
@@ -87,7 +91,8 @@ pub fn endpoint_dispatch_is_server_only_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "get_items",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [],
     ),
   ]
@@ -121,7 +126,8 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       fn_name: "list_widgets",
       // Return type references widget_detail to verify dispatch does
       // NOT pull return-type-only modules into its imports.
-      return_type: field_type.UserType("shared/widget_detail", "Widget", []),
+      return_ok: field_type.UserType("shared/widget_detail", "Widget", []),
+      return_err: field_type.NilField,
       params: [
         #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
       ],
@@ -129,7 +135,8 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [
         #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
       ],
@@ -137,7 +144,8 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "get_widget",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
     ),
   ]
@@ -173,7 +181,8 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      return_type: field_type.IntField,
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
       params: [
         #(
           "value",
@@ -207,7 +216,8 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      return_type: field_type.UserType("shared/widgets", "WidgetList", []),
+      return_ok: field_type.UserType("shared/widgets", "WidgetList", []),
+      return_err: field_type.NilField,
       params: [
         #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
       ],
@@ -215,7 +225,8 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
       fn_name: "send_alert",
-      return_type: field_type.UserType("shared/alerts", "AlertResult", []),
+      return_ok: field_type.UserType("shared/alerts", "AlertResult", []),
+      return_err: field_type.NilField,
       params: [
         #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
       ],
@@ -243,10 +254,8 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
     scanner.HandlerEndpoint(
       module_path: "server/handler",
       fn_name: "echo_dict",
-      return_type: field_type.ResultOf(
-        field_type.DictOf(field_type.StringField, field_type.IntField),
-        field_type.NilField,
-      ),
+      return_ok: field_type.DictOf(field_type.StringField, field_type.IntField),
+      return_err: field_type.NilField,
       params: [
         #(
           "value",
@@ -321,10 +330,10 @@ pub fn create_gadget(
   let assert [
     #("params", field_type.UserType("shared/gadgets", "GadgetParams", [])),
   ] = endpoint.params
-  let assert field_type.ResultOf(
-    ok: field_type.UserType("shared/gadgets", "GadgetParams", []),
-    err: field_type.UserType("shared/gadgets", "GadgetError", []),
-  ) = endpoint.return_type
+  let assert field_type.UserType("shared/gadgets", "GadgetParams", []) =
+    endpoint.return_ok
+  let assert field_type.UserType("shared/gadgets", "GadgetError", []) =
+    endpoint.return_err
 
   // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([fixture_dir])

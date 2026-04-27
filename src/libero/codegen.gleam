@@ -129,7 +129,8 @@ pub fn endpoints_contain(
   predicate predicate: fn(field_type.FieldType) -> Bool,
 ) -> Bool {
   list.any(endpoints, fn(e) {
-    field_type.contains(e.return_type, predicate)
+    field_type.contains(e.return_ok, predicate)
+    || field_type.contains(e.return_err, predicate)
     || list.any(e.params, fn(p) { field_type.contains(p.1, predicate) })
   })
 }
@@ -187,7 +188,9 @@ pub fn collect_endpoint_type_imports(
       list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
     case include_return {
       True ->
-        list.append(from_params, field_type.collect_user_types(e.return_type))
+        from_params
+        |> list.append(field_type.collect_user_types(e.return_ok))
+        |> list.append(field_type.collect_user_types(e.return_err))
       False -> from_params
     }
   })

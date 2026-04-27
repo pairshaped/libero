@@ -423,56 +423,55 @@ fn emit_rpc_error_decoder() -> String {
   <> "}"
 }
 
+/// Emit the shared response-shape decoder. Maps the wire shape
+/// `Result(Result(payload, domain), RpcError)` into an
+/// `RpcData(payload, domain)` value. Per-endpoint decoders just supply
+/// the two payload-level decoders, removing ~14 lines of boilerplate
+/// each from the generated FFI.
+fn emit_response_helper() -> String {
+  // nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
+  "function _decode_response(raw, decode_ok, decode_err) {\n"
+  <> "  if (Array.isArray(raw)) {\n"
+  <> "    if (raw[0] === \"ok\") {\n"
+  <> "      const inner = raw[1];\n"
+  <> "      if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
+  <> "        return new _Success(decode_ok(inner[1]));\n"
+  <> "      } else if (Array.isArray(inner) && inner[0] === \"error\") {\n"
+  <> "        return new _Failure(new _DomainError(decode_err(inner[1])));\n"
+  <> "      }\n"
+  <> "    } else if (raw[0] === \"error\") {\n"
+  <> "      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));\n"
+  <> "    }\n"
+  <> "  }\n"
+  <> "  return new _Failure(new _TransportError(new _MalformedRequest()));\n"
+  <> "}"
+}
+
 /// Emit per-endpoint response decoder functions for the FFI file.
-/// Each decoder maps the wire shape `Result(Result(payload, domain), RpcError)`
-/// to an `RpcData(payload, domain)` value: outer Ok + inner Ok → `Success`,
-/// outer Ok + inner Error → `Failure(DomainError(domain))`, outer Error →
-/// `Failure(TransportError(rpc))`, malformed → `Failure(TransportError(MalformedRequest))`.
+/// Each decoder is a thin wrapper around `_decode_response`, supplying the
+/// payload and domain-error decoders for that endpoint's `Result` return.
 fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
   case endpoints {
     [] -> ""
     _ -> {
       let decoders =
         list.map(endpoints, fn(e) {
-          // Pattern-match on the structured return type. Scanner has
-          // already confirmed `parse_single_endpoint` that the return
-          // shape is Result(payload, error), so this match is total in
-          // practice. The fallback arm exists to satisfy exhaustiveness
-          // and would only fire on a future scanner regression.
-          let #(ok_decoder, err_decoder) = case e.return_type {
-            ResultOf(ok:, err:) -> #(
-              field_decoder_call(ok, "inner[1]"),
-              field_decoder_call(err, "inner[1]"),
-            )
-            _ -> #(
-              "(() => { throw new DecodeError(\"non-Result return\"); })()",
-              "(() => { throw new DecodeError(\"non-Result return\"); })()",
-            )
-          }
+          let ok_decoder = field_decoder_call(e.return_ok, "t")
+          let err_decoder = field_decoder_call(e.return_err, "t")
           "export function decode_response_"
           <> e.fn_name
           <> "(raw) {\n"
-          <> "  if (Array.isArray(raw)) {\n"
-          <> "    if (raw[0] === \"ok\") {\n"
-          <> "      const inner = raw[1];\n"
-          <> "      if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
-          <> "        return new _Success("
+          <> "  return _decode_response(raw, (t) => "
           <> ok_decoder
-          <> ");\n"
-          <> "      } else if (Array.isArray(inner) && inner[0] === \"error\") {\n"
-          <> "        return new _Failure(new _DomainError("
+          <> ", (t) => "
           <> err_decoder
-          <> "));\n"
-          <> "      }\n"
-          <> "    } else if (raw[0] === \"error\") {\n"
-          <> "      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));\n"
-          <> "    }\n"
-          <> "  }\n"
-          <> "  return new _Failure(new _TransportError(new _MalformedRequest()));\n"
+          <> ");\n"
           <> "}"
         })
       "\n// --- Per-endpoint response decoders ---\n\n"
       <> emit_rpc_error_decoder()
+      <> "\n\n"
+      <> emit_response_helper()
       <> "\n\n"
       <> string.join(decoders, "\n\n")
       <> "\n"

@@ -99,13 +99,36 @@ pub fn fold(
   }
 }
 
-/// Default formatter for framework-level RPC errors. Useful when the
-/// caller wants a single string for transport failures rather than
-/// pattern-matching each `RpcError` variant.
-pub fn format_rpc_error(err: RpcError) -> String {
+/// Default formatter for framework-level transport errors. Useful when
+/// the caller wants a single string for `RpcError` values rather than
+/// pattern-matching each variant.
+pub fn format_transport_error(err: RpcError) -> String {
   case err {
     error.InternalError(_, message) -> message
     error.UnknownFunction(name) -> "Unknown RPC: " <> name
     error.MalformedRequest -> "Malformed request"
+  }
+}
+
+/// Render an `RpcOutcome` as a single user-facing string. The caller
+/// supplies a formatter for their domain error type; transport errors
+/// are routed through `format_transport_error`.
+///
+/// Use this in views to collapse the common `Failure(TransportError(_))` /
+/// `Failure(DomainError(_))` dual arm into one branch:
+///
+/// ```
+/// Failure(outcome) -> render(format_failure(outcome, format_my_error))
+/// ```
+///
+/// The match becomes exhaustive over `RpcOutcome`, so no `Failure(_)`
+/// catch-all is needed.
+pub fn format_failure(
+  outcome outcome: RpcOutcome(domain),
+  format_domain format_domain: fn(domain) -> String,
+) -> String {
+  case outcome {
+    TransportError(err) -> format_transport_error(err)
+    DomainError(err) -> format_domain(err)
   }
 }

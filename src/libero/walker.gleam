@@ -6,12 +6,9 @@ import gleam/option.{None, Some}
 import gleam/result
 import gleam/set.{type Set}
 import gleam/string
-import simplifile
 
 import libero/field_type.{type FieldType, TupleOf, TypeVar, UserType}
-import libero/gen_error.{
-  type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
-}
+import libero/gen_error.{type GenError, TypeNotFound, UnresolvedTypeModule}
 import libero/scanner
 
 /// A custom type discovered by the walker, grouping all its variants.
@@ -152,7 +149,7 @@ pub fn walk_shared_types(
   // Build module_files dict
   let module_files =
     list.fold(files, dict.new(), fn(acc, file_path) {
-      let module_path = derive_shared_module_path(file_path)
+      let module_path = scanner.derive_module_path(file_path:)
       dict.insert(acc, module_path, file_path)
     })
 
@@ -163,7 +160,7 @@ pub fn walk_shared_types(
   let #(seed_set, errors_rev) =
     list.fold(files, #(set.new(), []), fn(acc, file_path) {
       let #(set_acc, errs_acc) = acc
-      let module_path = derive_shared_module_path(file_path)
+      let module_path = scanner.derive_module_path(file_path:)
       case read_public_type_pairs(module_path, file_path) {
         Ok(pairs) -> #(list.fold(pairs, set_acc, set.insert), errs_acc)
         Error(err) -> #(set_acc, [err, ..errs_acc])
@@ -189,14 +186,7 @@ fn read_public_type_pairs(
   module_path: String,
   file_path: String,
 ) -> Result(List(#(String, String)), GenError) {
-  use content <- result.try(
-    simplifile.read(file_path)
-    |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
-  )
-  use parsed <- result.map(
-    glance.module(content)
-    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
-  )
+  use parsed <- result.map(scanner.parse_module(file_path:))
   list.fold(parsed.custom_types, [], fn(acc, ct) {
     let glance.Definition(_, t) = ct
     case t.publicity == glance.Public {
@@ -204,20 +194,6 @@ fn read_public_type_pairs(
       False -> acc
     }
   })
-}
-
-/// Derive a module path from a shared file path. Splits on the LAST
-/// `shared/src/` so vendored paths with nested `shared/src/` resolve
-/// to the inner module path rather than the outermost segment.
-/// e.g. "examples/checklist/shared/src/shared/items.gleam" -> "shared/items"
-fn derive_shared_module_path(file_path: String) -> String {
-  case string.split(file_path, "shared/src/") {
-    [_only] -> string.replace(file_path, ".gleam", "")
-    parts ->
-      list.last(parts)
-      |> result.map(fn(after) { string.replace(after, ".gleam", "") })
-      |> result.unwrap(or: string.replace(file_path, ".gleam", ""))
-  }
 }
 
 fn do_walk(state: WalkerState) -> Result(List(DiscoveredType), List(GenError)) {
@@ -393,16 +369,7 @@ fn load_ast(
   case dict.get(parsed_cache, module_path) {
     Ok(ast) -> Ok(#(ast, parsed_cache))
     Error(Nil) -> {
-      use source <- result.try(
-        simplifile.read(file_path)
-        |> result.map_error(fn(cause) {
-          CannotReadFile(path: file_path, cause:)
-        }),
-      )
-      use ast <- result.map(
-        glance.module(source)
-        |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
-      )
+      use ast <- result.map(scanner.parse_module(file_path:))
       #(ast, dict.insert(parsed_cache, module_path, ast))
     }
   }

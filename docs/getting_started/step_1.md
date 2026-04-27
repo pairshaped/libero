@@ -123,7 +123,7 @@ The view function lives in `shared/` so the server can render it during SSR and 
 ```gleam
 import gleam/list
 import libero/remote_data.{
-  type RpcData, DomainError, Failure, Loading, NotAsked, Success, TransportError,
+  type RpcData, Failure, Loading, NotAsked, Success,
 }
 import lustre/attribute
 import lustre/element.{type Element}
@@ -201,15 +201,12 @@ fn view_items(items: RpcData(List(Item), ItemError)) -> Element(Msg) {
   case items {
     NotAsked -> element.none()
     Loading -> html.p([], [html.text("Loading…")])
-    Failure(DomainError(err)) ->
+    Failure(outcome) ->
       html.p([attribute.style("color", "crimson")], [
-        html.text(format_error(err)),
-      ])
-    Failure(TransportError(rpc_err)) ->
-      html.p([attribute.style("color", "crimson")], [
-        html.text(
-          "Connection error: " <> remote_data.format_rpc_error(rpc_err),
-        ),
+        html.text(remote_data.format_failure(
+          outcome:,
+          format_domain: format_error,
+        )),
       ])
     Success(items) ->
       html.ul(

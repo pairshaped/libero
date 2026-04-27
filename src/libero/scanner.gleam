@@ -23,17 +23,21 @@ import simplifile
 
 /// A single handler endpoint discovered by scanning function signatures.
 /// Each represents one RPC function that clients can call.
+///
+/// Scanner enforces that every endpoint's return shape is `Result(ok, err)`,
+/// so the two halves are stored separately rather than under a broader
+/// `FieldType` that would force every consumer to re-pattern-match.
 pub type HandlerEndpoint {
   HandlerEndpoint(
     /// Handler module path, e.g. "server/handler"
     module_path: String,
     /// Function name, e.g. "get_items"
     fn_name: String,
-    /// Structured return type, with module-qualified user types resolved
-    /// to their full path. Codegen pattern-matches on this directly
-    /// instead of re-parsing strings, which is the failure mode that
-    /// made the `bool.guard`-recursion bug class possible.
-    return_type: field_type.FieldType,
+    /// Ok payload of the handler's `Result`, with module-qualified user
+    /// types resolved to their full path.
+    return_ok: field_type.FieldType,
+    /// Err payload of the handler's `Result`.
+    return_err: field_type.FieldType,
     /// Parameters excluding HandlerContext, with labels and resolved
     /// types. Each entry is #(label, FieldType).
     params: List(#(String, field_type.FieldType)),
@@ -231,15 +235,23 @@ fn scan_shared_type_names(
   }
 }
 
-fn read_public_type_names(file_path: String) -> Result(List(String), GenError) {
+/// Read a `.gleam` file and parse it via `glance`, surfacing both I/O and
+/// parser failures as `GenError` variants tagged with the file path.
+/// Shared by the handler scanner and the type walker so every codegen
+/// stage produces consistent errors for the same file.
+pub fn parse_module(
+  file_path file_path: String,
+) -> Result(glance.Module, GenError) {
   use content <- result.try(
     simplifile.read(file_path)
     |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
   )
-  use parsed <- result.map(
-    glance.module(content)
-    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
-  )
+  glance.module(content)
+  |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) })
+}
+
+fn read_public_type_names(file_path: String) -> Result(List(String), GenError) {
+  use parsed <- result.map(parse_module(file_path:))
   list.fold(parsed.custom_types, [], fn(acc, ct) {
     let glance.Definition(_, t) = ct
     case t.publicity == glance.Public {
@@ -253,14 +265,7 @@ fn parse_endpoints(
   file_path file_path: String,
   shared_types shared_types: set.Set(String),
 ) -> Result(List(HandlerEndpoint), GenError) {
-  use content <- result.try(
-    simplifile.read(file_path)
-    |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
-  )
-  use parsed <- result.map(
-    glance.module(content)
-    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
-  )
+  use parsed <- result.map(parse_module(file_path:))
   let module_path = derive_module_path(file_path: file_path)
   let type_imports = build_type_import_map(parsed.imports)
   let alias_map = build_alias_resolution_map(parsed.imports)
@@ -349,14 +354,14 @@ fn parse_single_endpoint(
   type_alias_originals type_alias_originals: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
-  use #(response_type, payload_params) <- result.try(validate_handler_signature(
-    func,
-  ))
+  use #(ok_type, err_type, payload_params) <- result.try(
+    validate_handler_signature(func),
+  )
 
   // All non-builtin types must be from shared/
   let all_param_types =
     list.filter_map(payload_params, fn(p) { option.to_result(p.type_, Nil) })
-  let all_types = [response_type, ..all_param_types]
+  let all_types = [ok_type, err_type, ..all_param_types]
   use <- bool.guard(
     when: !all_types_shared(
       types: all_types,
@@ -385,19 +390,24 @@ fn parse_single_endpoint(
   Ok(HandlerEndpoint(
     module_path: module_path,
     fn_name: func.name,
-    return_type: to_ft(response_type),
+    return_ok: to_ft(ok_type),
+    return_err: to_ft(err_type),
     params: params_typed,
   ))
 }
 
 /// Verify the function's signature matches the handler-as-contract shape:
 /// at least one param, last param typed `HandlerContext`, return type
-/// `#(Result(_, _), HandlerContext)`. On success returns the response
-/// type (the `Result(_, _)` slot) and the payload parameter list (every
-/// parameter before the trailing HandlerContext).
+/// `#(Result(ok, err), HandlerContext)`. On success returns the two halves
+/// of the `Result` and the payload parameter list (every parameter before
+/// the trailing HandlerContext).
+///
+/// The wire envelope, dispatch, and client codecs all assume Result-shaped
+/// responses; a bare value would compile but produce broken serialization
+/// at runtime. Filter at scan time so codegen never sees a non-Result.
 fn validate_handler_signature(
   func: glance.Function,
-) -> Result(#(glance.Type, List(glance.FunctionParameter)), Nil) {
+) -> Result(#(glance.Type, glance.Type, List(glance.FunctionParameter)), Nil) {
   let params = func.parameters
   use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
 
@@ -413,14 +423,10 @@ fn validate_handler_signature(
     return_type,
   ))
 
-  // The response slot must be a Result(_, _). The wire envelope, dispatch,
-  // and client codecs all assume Result-shaped responses; a bare value here
-  // would compile but produce broken serialization at runtime. Treat it as
-  // "not an endpoint" so we don't silently emit broken codegen.
-  use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
+  use #(ok_type, err_type) <- result.try(extract_result_args(response_type))
 
   let payload_params = list.take(params, list.length(params) - 1)
-  Ok(#(response_type, payload_params))
+  Ok(#(ok_type, err_type, payload_params))
 }
 
 /// Check if a type annotation is the project's HandlerContext, brought
@@ -435,11 +441,14 @@ fn is_handler_context_type(t: glance.Type) -> Bool {
   }
 }
 
-/// Check if a type annotation is a Result(_, _).
-fn is_result_type(t: glance.Type) -> Bool {
+/// Pull `ok` and `err` out of a `Result(ok, err)` type annotation.
+fn extract_result_args(
+  t: glance.Type,
+) -> Result(#(glance.Type, glance.Type), Nil) {
   case t {
-    glance.NamedType(name: "Result", parameters: [_, _], ..) -> True
-    _ -> False
+    glance.NamedType(name: "Result", parameters: [ok, err], ..) ->
+      Ok(#(ok, err))
+    _ -> Error(Nil)
   }
 }
 
