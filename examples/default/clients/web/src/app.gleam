@@ -2,7 +2,7 @@ import generated/messages as rpc
 import generated/ssr.{read_flags}
 import gleam/dynamic.{type Dynamic}
 import gleam/uri.{type Uri}
-import libero/remote_data.{type RemoteData, Success}
+import libero/remote_data.{type RpcData, Success}
 import libero/ssr as libero_ssr
 import lustre
 import lustre/effect.{type Effect}
@@ -16,7 +16,7 @@ import shared/views.{
 
 pub type ClientMsg {
   ViewMsg(Msg)
-  GotPing(RemoteData(String, PingError))
+  GotPing(RpcData(String, PingError))
 }
 
 pub fn main() {

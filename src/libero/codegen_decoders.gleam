@@ -141,14 +141,23 @@ fn emit_decoder_imports(
     [] -> ""
     _ ->
       "\nimport { Success as _Success, Failure as _Failure, "
-      <> "TransportFailure as _TransportFailure } from \""
+      <> "TransportError as _TransportError, DomainError as _DomainError } from \""
       <> prefix
       <> "libero/libero/remote_data.mjs\";"
+  }
+  let rpc_error_import = case endpoints {
+    [] -> ""
+    _ ->
+      "\nimport { MalformedRequest as _MalformedRequest, "
+      <> "UnknownFunction as _UnknownFunction, "
+      <> "InternalError as _InternalError } from \""
+      <> prefix
+      <> "libero/libero/error.mjs\";"
   }
   string.join(
     [
       prelude_import,
-      stdlib_imports <> float_import <> remote_data_import,
+      stdlib_imports <> float_import <> remote_data_import <> rpc_error_import,
       ..module_imports
     ],
     "\n",
@@ -397,9 +406,28 @@ fn emit_ensure_decoders() -> String {
   "export function ensure_decoders() { return true; }"
 }
 
+/// Emit a hand-written decoder for `RpcError`. The shape is fixed
+/// (libero/error.gleam: `MalformedRequest | UnknownFunction(name) |
+/// InternalError(trace_id, message)`) so it isn't discovered through
+/// the type walker. Generated once, called by every per-endpoint
+/// response decoder for the outer-Error path.
+// nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
+fn emit_rpc_error_decoder() -> String {
+  "function _decode_rpc_error(term) {\n"
+  <> "  if (term === \"malformed_request\") return new _MalformedRequest();\n"
+  <> "  if (Array.isArray(term)) {\n"
+  <> "    if (term[0] === \"unknown_function\") return new _UnknownFunction(decode_string(term[1]));\n"
+  <> "    if (term[0] === \"internal_error\") return new _InternalError(decode_string(term[1]), decode_string(term[2]));\n"
+  <> "  }\n"
+  <> "  return new _MalformedRequest();\n"
+  <> "}"
+}
+
 /// Emit per-endpoint response decoder functions for the FFI file.
-/// Each decoder takes the response handler's output (Ok(raw) or Error(rpc_error)),
-/// decodes the inner Result using per-type decoders, and returns RemoteData.
+/// Each decoder maps the wire shape `Result(Result(payload, domain), RpcError)`
+/// to an `RpcData(payload, domain)` value: outer Ok + inner Ok → `Success`,
+/// outer Ok + inner Error → `Failure(DomainError(domain))`, outer Error →
+/// `Failure(TransportError(rpc))`, malformed → `Failure(TransportError(MalformedRequest))`.
 fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
   case endpoints {
     [] -> ""
@@ -424,22 +452,28 @@ fn emit_response_decoders(endpoints: List(scanner.HandlerEndpoint)) -> String {
           "export function decode_response_"
           <> e.fn_name
           <> "(raw) {\n"
-          <> "  if (Array.isArray(raw) && raw[0] === \"ok\") {\n"
-          <> "    const inner = raw[1];\n"
-          <> "    if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
-          <> "      return new _Success("
+          <> "  if (Array.isArray(raw)) {\n"
+          <> "    if (raw[0] === \"ok\") {\n"
+          <> "      const inner = raw[1];\n"
+          <> "      if (Array.isArray(inner) && inner[0] === \"ok\") {\n"
+          <> "        return new _Success("
           <> ok_decoder
           <> ");\n"
-          <> "    } else if (Array.isArray(inner) && inner[0] === \"error\") {\n"
-          <> "      return new _Failure("
+          <> "      } else if (Array.isArray(inner) && inner[0] === \"error\") {\n"
+          <> "        return new _Failure(new _DomainError("
           <> err_decoder
-          <> ");\n"
+          <> "));\n"
+          <> "      }\n"
+          <> "    } else if (raw[0] === \"error\") {\n"
+          <> "      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));\n"
           <> "    }\n"
           <> "  }\n"
-          <> "  return new _TransportFailure(\"RPC framework error\");\n"
+          <> "  return new _Failure(new _TransportError(new _MalformedRequest()));\n"
           <> "}"
         })
       "\n// --- Per-endpoint response decoders ---\n\n"
+      <> emit_rpc_error_decoder()
+      <> "\n\n"
       <> string.join(decoders, "\n\n")
       <> "\n"
     }

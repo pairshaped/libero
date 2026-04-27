@@ -98,9 +98,10 @@ From these signatures, Libero generates:
 - A dispatch module that routes each variant to its handler function
 - Typed client stubs: `rpc.get_items(on_response: GotItems)`
 
-The return type `Result(a, e)` maps directly to `RemoteData` on the client:
+The return type `Result(a, e)` maps directly to `RpcData` on the client:
 - `Ok(value)` becomes `Success(value)`
-- `Error(err)` becomes `Failure(err)` (typed domain error, not a string)
+- `Error(err)` becomes `Failure(DomainError(err))` (typed domain error)
+- A framework-level failure (malformed wire, unknown function, server panic) becomes `Failure(TransportError(rpc_err))` with a typed `RpcError`
 
 ## Shared Types
 
@@ -125,20 +126,20 @@ pub type ItemError {
 
 ## Client Usage
 
-The generated stubs let clients send typed messages. Use `RemoteData` with typed domain errors to track loading state:
+The generated stubs let clients send typed messages. Use `RpcData` to track loading state. Domain errors stay typed; transport errors carry a typed `RpcError`:
 
 ```gleam
 import generated/messages as rpc
-import libero/remote_data.{type RemoteData, Failure, Loading, Success}
+import libero/remote_data.{type RpcData, Failure, Loading, Success}
 import shared/types.{type Item, type ItemError}
 
 pub type Model {
-  Model(items: RemoteData(List(Item), ItemError), input: String)
+  Model(items: RpcData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
-  GotItems(RemoteData(List(Item), ItemError))
-  GotCreated(RemoteData(Item, ItemError))
+  GotItems(RpcData(List(Item), ItemError))
+  GotCreated(RpcData(Item, ItemError))
   UserToggled(id: Int)
   // ...
 }
@@ -160,16 +161,22 @@ GotCreated(Success(item)) -> #(
 )
 ```
 
-In the view, pattern match on all states:
+In the view, pattern match on the four states. Drill into the `Failure` outcome only when transport and domain errors need different UX:
 
 ```gleam
+import libero/remote_data.{DomainError, TransportError}
+
 case model.items {
+  NotAsked -> element.none()
   Loading -> html.text("Loading...")
-  Failure(err) -> format_error(err)
+  Failure(DomainError(err)) -> format_error(err)
+  Failure(TransportError(rpc_err)) ->
+    html.text("Connection error: " <> remote_data.format_rpc_error(rpc_err))
   Success(items) -> view_item_list(items)
-  _ -> element.none()
 }
 ```
+
+If both errors should render the same way, collapse with `Failure(_) -> generic_error()`.
 
 ## Connection Management
 
@@ -263,7 +270,7 @@ Generation rules:
 
 The wire format is [ETF](https://www.erlang.org/doc/apps/erts/erl_ext_dist.html) (Erlang Term Format) over binary WebSocket frames. Gleam types serialize automatically without explicit codecs.
 
-The client sends a typed message over the WebSocket. The server dispatch decodes it, routes by function, and calls the handler. The response flows back as `Result(payload, RpcError)`, which the client stub converts to `RemoteData`.
+The client sends a typed message over the WebSocket. The server dispatch decodes it, routes by function, and calls the handler. The response flows back as `Result(Result(payload, domain), RpcError)`, which the client stub converts to `RpcData(payload, domain)`.
 
 ## Multiple Clients
 

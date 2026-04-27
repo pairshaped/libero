@@ -16,7 +16,7 @@ import libero/scanner
 
 /// Generate typed client stubs from handler endpoints.
 /// Each endpoint becomes a function that sends a ClientMsg variant
-/// and decodes the response to RemoteData(payload, error).
+/// and decodes the response to RpcData(payload, domain).
 pub fn write_endpoint_client_stubs(
   endpoints endpoints: List(scanner.HandlerEndpoint),
   client_generated client_generated: String,
@@ -58,7 +58,7 @@ pub fn write_endpoint_client_stubs(
       // Build function params (endpoint params + on_response)
       let fn_params = case e.params {
         [] ->
-          "  on_response on_response: fn(RemoteData("
+          "  on_response on_response: fn(RpcData("
           <> payload_type
           <> ", "
           <> error_type
@@ -75,7 +75,7 @@ pub fn write_endpoint_client_stubs(
               <> ","
             })
           string.join(param_lines, "\n")
-          <> "\n  on_response on_response: fn(RemoteData("
+          <> "\n  on_response on_response: fn(RpcData("
           <> payload_type
           <> ", "
           <> error_type
@@ -115,7 +115,7 @@ pub fn write_endpoint_client_stubs(
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
-import libero/remote_data.{type RemoteData}
+import libero/remote_data.{type RpcData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}" <> option_import <> dict_import <> "

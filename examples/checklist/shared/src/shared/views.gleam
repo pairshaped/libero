@@ -1,6 +1,6 @@
 import gleam/list
 import libero/remote_data.{
-  type RemoteData, Failure, Loading, NotAsked, Success, TransportFailure,
+  type RpcData, DomainError, Failure, Loading, NotAsked, Success, TransportError,
 }
 import lustre/attribute
 import lustre/element.{type Element}
@@ -10,7 +10,7 @@ import shared/router.{type Route, Home}
 import shared/types.{type Item, type ItemError, NotFound, TitleRequired}
 
 pub type Model {
-  Model(route: Route, items: RemoteData(List(Item), ItemError), input: String)
+  Model(route: Route, items: RpcData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
@@ -70,17 +70,17 @@ fn view_form(input: String) -> Element(Msg) {
   )
 }
 
-fn view_items(items: RemoteData(List(Item), ItemError)) -> Element(Msg) {
+fn view_items(items: RpcData(List(Item), ItemError)) -> Element(Msg) {
   case items {
     NotAsked -> element.none()
     Loading -> html.p([], [html.text("Loading…")])
-    Failure(err) ->
+    Failure(DomainError(err)) ->
       html.p([attribute.style("color", "crimson")], [
         html.text(format_error(err)),
       ])
-    TransportFailure(message) ->
+    Failure(TransportError(rpc_err)) ->
       html.p([attribute.style("color", "crimson")], [
-        html.text("Connection error: " <> message),
+        html.text("Connection error: " <> remote_data.format_rpc_error(rpc_err)),
       ])
     Success(items) ->
       html.ul([attribute.style("padding", "0")], list.map(items, view_item))

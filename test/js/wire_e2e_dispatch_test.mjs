@@ -50,6 +50,12 @@ function expectFailure(frame, decoder) {
   return data[0];
 }
 
+function expectDomainFailure(frame, decoder) {
+  const outcome = expectFailure(frame, decoder);
+  assert.ok(outcome instanceof remoteData.DomainError);
+  return outcome[0];
+}
+
 function dictGet(dictValue, key) {
   const result = dict.get(dictValue, key);
   assert.ok(result instanceof gleam.Ok);
@@ -194,7 +200,7 @@ assert.ok(nested instanceof types.NestedRecord);
 expectItem(dictGet(nested.by_id, "one"), 7);
 
 expectValidationFailed(
-  expectFailure(
+  expectDomainFailure(
     decodeFrame(manifest["echo_typed_err/validation_failed"]),
     decoders.decode_response_echo_typed_err,
   ),

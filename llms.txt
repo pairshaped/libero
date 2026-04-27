@@ -190,16 +190,16 @@ Rules:
 // clients/web/src/app.gleam
 
 import generated/messages as rpc
-import libero/remote_data.{type RemoteData, Loading, Success, Failure}
+import libero/remote_data.{type RpcData, DomainError, Failure, Loading, Success, TransportError}
 import shared/types.{type Item, type ItemError, ItemParams}
 
 pub type Model {
-  Model(items: RemoteData(List(Item), ItemError), input: String)
+  Model(items: RpcData(List(Item), ItemError), input: String)
 }
 
 pub type Msg {
-  GotItems(RemoteData(List(Item), ItemError))
-  GotCreated(RemoteData(Item, ItemError))
+  GotItems(RpcData(List(Item), ItemError))
+  GotCreated(RpcData(Item, ItemError))
   UserToggled(id: Int)
   UserDeleted(id: Int)
 }
@@ -212,10 +212,10 @@ pub fn init(_flags) -> #(Model, Effect(Msg)) {
 Common patterns:
 - Generated stubs return a Lustre `Effect`. Wire encoding handled internally.
 - Each stub takes an `on_response` callback that wraps the decoded `RemoteData` in your `Msg` type.
-- `RemoteData(value, error)` carries typed domain errors: `Failure(NotFound)` not `Failure("string")`.
-- Store `RemoteData` in your model. Assign load responses directly: `GotItems(rd) -> Model(..model, items: rd)`.
+- `RpcData(value, domain)` keeps domain *and* transport errors typed: `Failure(DomainError(NotFound))`, `Failure(TransportError(error.MalformedRequest))`.
+- Store `RpcData` in your model. Assign load responses directly: `GotItems(rd) -> Model(..model, items: rd)`.
 - Use `remote_data.map` to update loaded data: `remote_data.map(data: model.items, transform: fn(items) { ... })`.
-- Pattern match all states in the view: `Success`, `Loading`, `Failure`, `TransportFailure`, `NotAsked`.
+- Pattern match the four states in the view: `NotAsked`, `Loading`, `Failure(_)`, `Success`. Drill into `Failure(DomainError(...))` / `Failure(TransportError(...))` only when the UX differs.
 
 ### Connection lifecycle
 
@@ -376,31 +376,32 @@ The server entry point (`server/src/<app>.gleam`) is generated once and never ov
 
 ## Error Model
 
-Two tiers:
-1. **Domain errors** -- inside the handler's `Result`: `#(Error(NotFound), handler_ctx)`. Typed, user-facing. Arrives as `Failure(NotFound)` in client's `RemoteData`.
-2. **Framework errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`. Caught by dispatch, logged server-side.
+Two tiers, both typed:
+1. **Domain errors** -- inside the handler's `Result`: `#(Error(NotFound), handler_ctx)`. Arrives as `Failure(DomainError(NotFound))` in the client's `RpcData`.
+2. **Transport errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`. Caught by dispatch, logged server-side. Arrives as `Failure(TransportError(rpc_err))` in the client's `RpcData`.
 
 ## RemoteData
 
 ```gleam
 pub type RemoteData(value, error) {
-  NotAsked              // No request made
-  Loading               // Request in flight
-  Failure(error)        // Typed domain error from the handler
-  TransportFailure(message: String)  // Framework / wire-level failure
+  NotAsked          // No request made
+  Loading           // Request in flight
+  Failure(error)    // Any failure (typed)
   Success(value)
 }
 
-pub type RpcData(value) =
-  RemoteData(value, RpcFailure)
-
-pub type RpcFailure {
-  DomainFailure(message: String)
-  FrameworkFailure(message: String)
+pub type RpcOutcome(domain) {
+  TransportError(RpcError)  // Framework / wire-level failure (typed)
+  DomainError(domain)       // Typed domain error from the handler
 }
+
+pub type RpcData(value, domain) =
+  RemoteData(value, RpcOutcome(domain))
 ```
 
-Helpers: `from_response`, `map`, `map_error`, `unwrap`, `to_option`, `fold`, `is_success`, `is_loading`, `is_not_asked`, `is_failure`, `is_transport_failure`, `is_error`.
+Mirrors Elm's `WebData a = RemoteData Http.Error a`. Domain errors stay typed all the way through; no string flattening.
+
+Helpers: `from_response`, `format_rpc_error`, `map`, `map_error`, `unwrap`, `to_option`, `fold`, `is_success`, `is_loading`, `is_not_asked`, `is_failure`.
 
 ## Dependencies
 

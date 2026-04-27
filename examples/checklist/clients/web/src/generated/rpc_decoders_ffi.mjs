@@ -8,6 +8,8 @@ import { decode_int, decode_float, decode_string, decode_bool, decode_bit_array,
 import { Ok, Error as ResultError, Empty, NonEmpty } from "../../gleam_stdlib/gleam.mjs";
 import { Some, None } from "../../gleam_stdlib/gleam/option.mjs";
 import { from_list as dictFromList } from "../../gleam_stdlib/gleam/dict.mjs";
+import { Success as _Success, Failure as _Failure, TransportError as _TransportError, DomainError as _DomainError } from "../../libero/libero/remote_data.mjs";
+import { MalformedRequest as _MalformedRequest, UnknownFunction as _UnknownFunction, InternalError as _InternalError } from "../../libero/libero/error.mjs";
 import * as _m_shared_router from "../../shared/shared/router.mjs";
 import * as _m_shared_types from "../../shared/shared/types.mjs";
 import * as _m_shared_views from "../../shared/shared/views.mjs";
@@ -45,7 +47,7 @@ export function decode_shared_types_item_params(term) {
 export function decode_shared_views_model(term) {
   return new _m_shared_views.Model(
     decode_shared_router_route(term[1]),
-    decode_libero_remote_data_remote_data(term[2]),
+    decode_libero_remote_data_rpc_data(term[2]),
     decode_string(term[3])
   );
 }
@@ -74,52 +76,75 @@ export function ensure_decoders() { return true; }
 
 // --- Per-endpoint response decoders ---
 
-import { Success as _Success, Failure as _Failure, TransportFailure as _TransportFailure } from "../../libero/libero/remote_data.mjs";
+function _decode_rpc_error(term) {
+  if (term === "malformed_request") return new _MalformedRequest();
+  if (Array.isArray(term)) {
+    if (term[0] === "unknown_function") return new _UnknownFunction(decode_string(term[1]));
+    if (term[0] === "internal_error") return new _InternalError(decode_string(term[1]), decode_string(term[2]));
+  }
+  return new _MalformedRequest();
+}
 
 export function decode_response_delete_item(raw) {
-  if (Array.isArray(raw) && raw[0] === "ok") {
-    const inner = raw[1];
-    if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_int(inner[1]));
-    } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_item_error(inner[1]));
+  if (Array.isArray(raw)) {
+    if (raw[0] === "ok") {
+      const inner = raw[1];
+      if (Array.isArray(inner) && inner[0] === "ok") {
+        return new _Success(decode_int(inner[1]));
+      } else if (Array.isArray(inner) && inner[0] === "error") {
+        return new _Failure(new _DomainError(decode_shared_types_item_error(inner[1])));
+      }
+    } else if (raw[0] === "error") {
+      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));
     }
   }
-  return new _TransportFailure("RPC framework error");
+  return new _Failure(new _TransportError(new _MalformedRequest()));
 }
 
 export function decode_response_toggle_item(raw) {
-  if (Array.isArray(raw) && raw[0] === "ok") {
-    const inner = raw[1];
-    if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_shared_types_item(inner[1]));
-    } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_item_error(inner[1]));
+  if (Array.isArray(raw)) {
+    if (raw[0] === "ok") {
+      const inner = raw[1];
+      if (Array.isArray(inner) && inner[0] === "ok") {
+        return new _Success(decode_shared_types_item(inner[1]));
+      } else if (Array.isArray(inner) && inner[0] === "error") {
+        return new _Failure(new _DomainError(decode_shared_types_item_error(inner[1])));
+      }
+    } else if (raw[0] === "error") {
+      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));
     }
   }
-  return new _TransportFailure("RPC framework error");
+  return new _Failure(new _TransportError(new _MalformedRequest()));
 }
 
 export function decode_response_create_item(raw) {
-  if (Array.isArray(raw) && raw[0] === "ok") {
-    const inner = raw[1];
-    if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_shared_types_item(inner[1]));
-    } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_item_error(inner[1]));
+  if (Array.isArray(raw)) {
+    if (raw[0] === "ok") {
+      const inner = raw[1];
+      if (Array.isArray(inner) && inner[0] === "ok") {
+        return new _Success(decode_shared_types_item(inner[1]));
+      } else if (Array.isArray(inner) && inner[0] === "error") {
+        return new _Failure(new _DomainError(decode_shared_types_item_error(inner[1])));
+      }
+    } else if (raw[0] === "error") {
+      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));
     }
   }
-  return new _TransportFailure("RPC framework error");
+  return new _Failure(new _TransportError(new _MalformedRequest()));
 }
 
 export function decode_response_get_items(raw) {
-  if (Array.isArray(raw) && raw[0] === "ok") {
-    const inner = raw[1];
-    if (Array.isArray(inner) && inner[0] === "ok") {
-      return new _Success(decode_list_of((t0) => decode_shared_types_item(t0), inner[1]));
-    } else if (Array.isArray(inner) && inner[0] === "error") {
-      return new _Failure(decode_shared_types_item_error(inner[1]));
+  if (Array.isArray(raw)) {
+    if (raw[0] === "ok") {
+      const inner = raw[1];
+      if (Array.isArray(inner) && inner[0] === "ok") {
+        return new _Success(decode_list_of((t0) => decode_shared_types_item(t0), inner[1]));
+      } else if (Array.isArray(inner) && inner[0] === "error") {
+        return new _Failure(new _DomainError(decode_shared_types_item_error(inner[1])));
+      }
+    } else if (raw[0] === "error") {
+      return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));
     }
   }
-  return new _TransportFailure("RPC framework error");
+  return new _Failure(new _TransportError(new _MalformedRequest()));
 }

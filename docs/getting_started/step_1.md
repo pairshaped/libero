@@ -114,7 +114,7 @@ pub type ItemError {
 }
 ```
 
-`Item` is the domain object. `ItemParams` is the input shape for `create_item`. `ItemError` is the typed error returned when something goes wrong. Libero uses these directly: `ItemError` shows up on the client as `Failure(NotFound)`, no string parsing required.
+`Item` is the domain object. `ItemParams` is the input shape for `create_item`. `ItemError` is the typed error returned when something goes wrong. Libero uses these directly: `ItemError` shows up on the client as `Failure(DomainError(NotFound))`, no string parsing required.
 
 ## 4. Update the shared views
 
@@ -123,7 +123,7 @@ The view function lives in `shared/` so the server can render it during SSR and 
 ```gleam
 import gleam/list
 import libero/remote_data.{
-  type RemoteData, Failure, Loading, NotAsked, Success, TransportFailure,
+  type RpcData, DomainError, Failure, Loading, NotAsked, Success, TransportError,
 }
 import lustre/attribute
 import lustre/element.{type Element}
@@ -135,7 +135,7 @@ import shared/types.{type Item, type ItemError, NotFound, TitleRequired}
 pub type Model {
   Model(
     route: Route,
-    items: RemoteData(List(Item), ItemError),
+    items: RpcData(List(Item), ItemError),
     input: String,
   )
 }
@@ -197,17 +197,19 @@ fn view_form(input: String) -> Element(Msg) {
   )
 }
 
-fn view_items(items: RemoteData(List(Item), ItemError)) -> Element(Msg) {
+fn view_items(items: RpcData(List(Item), ItemError)) -> Element(Msg) {
   case items {
     NotAsked -> element.none()
     Loading -> html.p([], [html.text("Loading…")])
-    Failure(err) ->
+    Failure(DomainError(err)) ->
       html.p([attribute.style("color", "crimson")], [
         html.text(format_error(err)),
       ])
-    TransportFailure(message) ->
+    Failure(TransportError(rpc_err)) ->
       html.p([attribute.style("color", "crimson")], [
-        html.text("Connection error: " <> message),
+        html.text(
+          "Connection error: " <> remote_data.format_rpc_error(rpc_err),
+        ),
       ])
     Success(items) ->
       html.ul(
@@ -262,7 +264,7 @@ fn format_error(err: ItemError) -> String {
 }
 ```
 
-`Model` holds the current route, the item list as a `RemoteData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
+`Model` holds the current route, the item list as an `RpcData` (so loading and failure states have a place to live), and the form input string. `Msg` enumerates the things the user can do. `view` renders one of several pages based on the route; for now, `Home` is the only one.
 
 ## 5. Wire the in-memory store into handler_context
 
@@ -427,7 +429,7 @@ import generated/ssr.{read_flags}
 import gleam/dynamic.{type Dynamic}
 import gleam/list
 import gleam/uri.{type Uri}
-import libero/remote_data.{type RemoteData, Success}
+import libero/remote_data.{type RpcData, Success}
 import libero/ssr as libero_ssr
 import lustre
 import lustre/effect.{type Effect}
@@ -442,10 +444,10 @@ import shared/views.{
 
 pub type ClientMsg {
   ViewMsg(Msg)
-  GotItems(RemoteData(List(Item), ItemError))
-  GotCreated(RemoteData(Item, ItemError))
-  GotToggled(RemoteData(Item, ItemError))
-  GotDeleted(RemoteData(Int, ItemError))
+  GotItems(RpcData(List(Item), ItemError))
+  GotCreated(RpcData(Item, ItemError))
+  GotToggled(RpcData(Item, ItemError))
+  GotDeleted(RpcData(Int, ItemError))
 }
 
 pub fn main() {
@@ -541,9 +543,9 @@ fn view_wrap(model: Model) -> element.Element(ClientMsg) {
 }
 ```
 
-`ClientMsg` wraps the shared `Msg` (so user actions from the view reach the update function) plus the four `Got*` variants for RPC responses. `rpc.create_item`, `rpc.toggle_item`, and `rpc.delete_item` are the typed stubs libero generates from your handler signatures. They take an `on_response` callback that receives a `RemoteData(value, error)`.
+`ClientMsg` wraps the shared `Msg` (so user actions from the view reach the update function) plus the four `Got*` variants for RPC responses. `rpc.create_item`, `rpc.toggle_item`, and `rpc.delete_item` are the typed stubs libero generates from your handler signatures. They take an `on_response` callback that receives an `RpcData(value, domain)`.
 
-`remote_data.map` is the helper for updating the loaded list when a single-item response arrives. It is a no-op when the list is in `NotAsked`, `Loading`, `Failure`, or `TransportFailure` states. The trailing arms for `GotCreated`, `GotToggled`, and `GotDeleted` swallow non-success responses; a real app would surface the error in the UI.
+`remote_data.map` is the helper for updating the loaded list when a single-item response arrives. It is a no-op when the list is in `NotAsked`, `Loading`, or `Failure` states. The trailing arms for `GotCreated`, `GotToggled`, and `GotDeleted` swallow non-success responses; a real app would surface the error in the UI.
 
 ## 9. Replace the starter test
 

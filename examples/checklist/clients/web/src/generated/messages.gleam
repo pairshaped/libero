@@ -3,7 +3,7 @@
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
-import libero/remote_data.{type RemoteData}
+import libero/remote_data.{type RpcData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
@@ -30,7 +30,7 @@ fn decode_response_get_items(raw: Dynamic) -> Dynamic
 
 pub fn delete_item(
   id id: Int,
-  on_response on_response: fn(RemoteData(Int, types.ItemError)) -> msg,
+  on_response on_response: fn(RpcData(Int, types.ItemError)) -> msg,
 ) -> Effect(msg) {
   send(DeleteItem(id:), fn(raw) {
     on_response(wire.coerce(decode_response_delete_item(raw)))
@@ -39,7 +39,7 @@ pub fn delete_item(
 
 pub fn toggle_item(
   id id: Int,
-  on_response on_response: fn(RemoteData(types.Item, types.ItemError)) -> msg,
+  on_response on_response: fn(RpcData(types.Item, types.ItemError)) -> msg,
 ) -> Effect(msg) {
   send(ToggleItem(id:), fn(raw) {
     on_response(wire.coerce(decode_response_toggle_item(raw)))
@@ -48,7 +48,7 @@ pub fn toggle_item(
 
 pub fn create_item(
   params params: types.ItemParams,
-  on_response on_response: fn(RemoteData(types.Item, types.ItemError)) -> msg,
+  on_response on_response: fn(RpcData(types.Item, types.ItemError)) -> msg,
 ) -> Effect(msg) {
   send(CreateItem(params:), fn(raw) {
     on_response(wire.coerce(decode_response_create_item(raw)))
@@ -56,8 +56,7 @@ pub fn create_item(
 }
 
 pub fn get_items(
-  on_response on_response: fn(RemoteData(List(types.Item), types.ItemError)) ->
-    msg,
+  on_response on_response: fn(RpcData(List(types.Item), types.ItemError)) -> msg,
 ) -> Effect(msg) {
   send(GetItems, fn(raw) {
     on_response(wire.coerce(decode_response_get_items(raw)))

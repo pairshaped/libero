@@ -44,6 +44,12 @@ function expectFailure(data) {
   return data[0];
 }
 
+function expectDomainFailure(data) {
+  const outcome = expectFailure(data);
+  assert.ok(outcome instanceof remoteData.DomainError);
+  return outcome[0];
+}
+
 function listToArray(list) {
   return Array.from(list);
 }
@@ -186,7 +192,7 @@ for (const [name, decoder, assertValue] of cases) {
 }
 
 expectValidationFailed(
-  expectFailure(
+  expectDomainFailure(
     decodeCase(
       "echo_typed_err/validation_failed",
       decoders.decode_response_echo_typed_err,

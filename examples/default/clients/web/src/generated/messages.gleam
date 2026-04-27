@@ -3,7 +3,7 @@
 import generated/rpc_config
 import generated/rpc_decoders
 import gleam/dynamic.{type Dynamic}
-import libero/remote_data.{type RemoteData}
+import libero/remote_data.{type RpcData}
 import libero/rpc
 import libero/wire
 import lustre/effect.{type Effect}
@@ -17,7 +17,7 @@ pub type ClientMsg {
 fn decode_response_ping(raw: Dynamic) -> Dynamic
 
 pub fn ping(
-  on_response on_response: fn(RemoteData(String, types.PingError)) -> msg,
+  on_response on_response: fn(RpcData(String, types.PingError)) -> msg,
 ) -> Effect(msg) {
   send(Ping, fn(raw) { on_response(wire.coerce(decode_response_ping(raw))) })
 }

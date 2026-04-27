@@ -3,7 +3,7 @@ import generated/ssr.{read_flags}
 import gleam/dynamic.{type Dynamic}
 import gleam/list
 import gleam/uri.{type Uri}
-import libero/remote_data.{type RemoteData, Success}
+import libero/remote_data.{type RpcData, Success}
 import libero/ssr as libero_ssr
 import lustre
 import lustre/effect.{type Effect}
@@ -18,10 +18,10 @@ import shared/views.{
 
 pub type ClientMsg {
   ViewMsg(Msg)
-  GotItems(RemoteData(List(Item), ItemError))
-  GotCreated(RemoteData(Item, ItemError))
-  GotToggled(RemoteData(Item, ItemError))
-  GotDeleted(RemoteData(Int, ItemError))
+  GotItems(RpcData(List(Item), ItemError))
+  GotCreated(RpcData(Item, ItemError))
+  GotToggled(RpcData(Item, ItemError))
+  GotDeleted(RpcData(Int, ItemError))
 }
 
 pub fn main() {
