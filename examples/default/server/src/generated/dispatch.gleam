@@ -32,7 +32,7 @@ pub fn handle(
           case typed_msg {
             Ping ->
               dispatch(handler_ctx, request_id, fn() {
-                handler_handler.ping(handler_ctx:)
+                #(handler_handler.ping(handler_ctx:), handler_ctx)
               })
           }
         }
@@ -86,19 +86,14 @@ fn dispatch(
         request_id,
         "dispatch_encode_ok",
       )
-    Error(reason) -> {
-      let trace_id = trace.new_trace_id()
-      #(
-        wire.tag_response(
-          request_id:,
-          data: wire.encode(
-            Error(InternalError(trace_id, "Internal server error")),
-          ),
-        ),
-        Some(error.PanicInfo(trace_id:, fn_name: "dispatch", reason:)),
-        handler_ctx,
+    Error(reason) ->
+      internal_error_response(
+        request_id:,
+        fn_name: "dispatch",
+        message: "Internal server error",
+        reason:,
+        handler_ctx:,
       )
-    }
   }
 }
 
@@ -114,18 +109,31 @@ fn safe_encode(
       None,
       handler_ctx,
     )
-    Error(reason) -> {
-      let trace_id = trace.new_trace_id()
-      #(
-        wire.tag_response(
-          request_id:,
-          data: wire.encode(
-            Error(InternalError(trace_id, "Response encoding failed")),
-          ),
-        ),
-        Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
-        handler_ctx,
+    Error(reason) ->
+      internal_error_response(
+        request_id:,
+        fn_name:,
+        message: "Response encoding failed",
+        reason:,
+        handler_ctx:,
       )
-    }
   }
+}
+
+fn internal_error_response(
+  request_id request_id: Int,
+  fn_name fn_name: String,
+  message message: String,
+  reason reason: String,
+  handler_ctx handler_ctx: HandlerContext,
+) -> #(BitArray, Option(PanicInfo), HandlerContext) {
+  let trace_id = trace.new_trace_id()
+  #(
+    wire.tag_response(
+      request_id:,
+      data: wire.encode(Error(InternalError(trace_id, message))),
+    ),
+    Some(error.PanicInfo(trace_id:, fn_name:, reason:)),
+    handler_ctx,
+  )
 }

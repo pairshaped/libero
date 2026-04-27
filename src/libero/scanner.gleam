@@ -41,6 +41,13 @@ pub type HandlerEndpoint {
     /// Parameters excluding HandlerContext, with labels and resolved
     /// types. Each entry is #(label, FieldType).
     params: List(#(String, field_type.FieldType)),
+    /// True when the handler returns `#(Result(_, _), HandlerContext)`,
+    /// signalling it may have produced a new context value (e.g. a login
+    /// handler that swaps the session). False when the handler returns a
+    /// bare `Result(_, _)`; codegen then threads the inbound context
+    /// through unchanged. The two shapes are equivalent on the wire — this
+    /// flag controls only how generated dispatch invokes the handler.
+    mutates_context: Bool,
   )
 }
 
@@ -345,7 +352,7 @@ fn parse_single_endpoint(
   type_alias_originals type_alias_originals: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
-  use #(ok_type, err_type, payload_params) <- result.try(
+  use #(ok_type, err_type, payload_params, mutates_context) <- result.try(
     validate_handler_signature(func),
   )
 
@@ -384,21 +391,31 @@ fn parse_single_endpoint(
     return_ok: to_ft(ok_type),
     return_err: to_ft(err_type),
     params: params_typed,
+    mutates_context: mutates_context,
   ))
 }
 
-/// Verify the function's signature matches the handler-as-contract shape:
-/// at least one param, last param typed `HandlerContext`, return type
-/// `#(Result(ok, err), HandlerContext)`. On success returns the two halves
-/// of the `Result` and the payload parameter list (every parameter before
-/// the trailing HandlerContext).
+/// Verify the function's signature matches the handler-as-contract shape.
+/// Two return shapes are accepted:
+///   - `#(Result(ok, err), HandlerContext)` — handler may emit a new
+///     context value (e.g. login swapping the session).
+///   - `Result(ok, err)` — read-only; codegen threads the inbound context
+///     through unchanged.
+/// In both cases the last parameter must be typed `HandlerContext`.
+///
+/// Returns the two halves of the `Result`, the payload parameter list
+/// (everything before the trailing HandlerContext), and a flag indicating
+/// which return shape was used.
 ///
 /// The wire envelope, dispatch, and client codecs all assume Result-shaped
 /// responses; a bare value would compile but produce broken serialization
 /// at runtime. Filter at scan time so codegen never sees a non-Result.
 fn validate_handler_signature(
   func: glance.Function,
-) -> Result(#(glance.Type, glance.Type, List(glance.FunctionParameter)), Nil) {
+) -> Result(
+  #(glance.Type, glance.Type, List(glance.FunctionParameter), Bool),
+  Nil,
+) {
   let params = func.parameters
   use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
 
@@ -410,14 +427,30 @@ fn validate_handler_signature(
   )
 
   use return_type <- result.try(option.to_result(func.return, Nil))
-  use #(response_type, _state_type) <- result.try(extract_handler_return(
+  use #(response_type, mutates_context) <- result.try(extract_response_type(
     return_type,
   ))
 
   use #(ok_type, err_type) <- result.try(extract_result_args(response_type))
 
   let payload_params = list.take(params, list.length(params) - 1)
-  Ok(#(ok_type, err_type, payload_params))
+  Ok(#(ok_type, err_type, payload_params, mutates_context))
+}
+
+/// Pull the response slot out of the function's return type.
+/// `#(R, HandlerContext)` returns `(R, mutates_context: True)`.
+/// `R` (already a Result) returns `(R, mutates_context: False)`.
+/// Any other shape rejects the function as a non-handler.
+fn extract_response_type(t: glance.Type) -> Result(#(glance.Type, Bool), Nil) {
+  case t {
+    glance.TupleType(elements: [response, state], ..) ->
+      case is_handler_context_type(state) {
+        True -> Ok(#(response, True))
+        False -> Error(Nil)
+      }
+    glance.NamedType(name: "Result", ..) -> Ok(#(t, False))
+    _ -> Error(Nil)
+  }
 }
 
 /// Check if a type annotation is the project's HandlerContext, brought
@@ -439,21 +472,6 @@ fn extract_result_args(
   case t {
     glance.NamedType(name: "Result", parameters: [ok, err], ..) ->
       Ok(#(ok, err))
-    _ -> Error(Nil)
-  }
-}
-
-/// Extract the two elements from a #(response, HandlerContext) return type.
-/// Returns Error(Nil) if the return type doesn't match this pattern.
-fn extract_handler_return(
-  t: glance.Type,
-) -> Result(#(glance.Type, glance.Type), Nil) {
-  case t {
-    glance.TupleType(elements: [response, state], ..) ->
-      case is_handler_context_type(state) {
-        True -> Ok(#(response, state))
-        False -> Error(Nil)
-      }
     _ -> Error(Nil)
   }
 }

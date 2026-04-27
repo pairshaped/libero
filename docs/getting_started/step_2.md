@@ -202,7 +202,9 @@ Add `import sqlight` to the imports near the top of the file (the imports are al
 
 ## 7. Rewrite the handlers
 
-The handler signatures stay the same. The bodies swap list operations for SQL calls. Replace `server/src/handler.gleam`:
+Step 1's mutating handlers used the tuple form `#(Result(_, _), HandlerContext)` because each call produced a new in-memory list. SQLite changes the picture: state lives in the database, not in `HandlerContext`, so every handler returns the inbound context unchanged. That makes all four handlers read-only from libero's perspective, and they can use the bare-Result return shape. Less ceremony, same wire contract.
+
+Replace `server/src/handler.gleam`:
 
 ```gleam
 import generated/sql/server_sql
@@ -215,24 +217,24 @@ import shared/types.{
 
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(List(Item), ItemError), HandlerContext) {
+) -> Result(List(Item), ItemError) {
   case server_sql.list_items(db: handler_ctx.db) {
-    Ok(rows) -> #(Ok(list.map(rows, row_to_item)), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
+    Ok(rows) -> Ok(list.map(rows, row_to_item))
+    Error(_) -> Error(DatabaseError)
   }
 }
 
 pub fn create_item(
   params params: ItemParams,
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(Item, ItemError), HandlerContext) {
+) -> Result(Item, ItemError) {
   case params.title {
-    "" -> #(Error(TitleRequired), handler_ctx)
+    "" -> Error(TitleRequired)
     title ->
       case server_sql.create_item(db: handler_ctx.db, title:) {
-        Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
-        Ok(_) -> #(Error(DatabaseError), handler_ctx)
-        Error(_) -> #(Error(DatabaseError), handler_ctx)
+        Ok([row]) -> Ok(row_to_item(row))
+        Ok(_) -> Error(DatabaseError)
+        Error(_) -> Error(DatabaseError)
       }
   }
 }
@@ -240,24 +242,24 @@ pub fn create_item(
 pub fn toggle_item(
   id id: Int,
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(Item, ItemError), HandlerContext) {
+) -> Result(Item, ItemError) {
   case server_sql.toggle_item(db: handler_ctx.db, id:) {
-    Ok([row]) -> #(Ok(row_to_item(row)), handler_ctx)
-    Ok([]) -> #(Error(NotFound), handler_ctx)
-    Ok(_) -> #(Error(DatabaseError), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
+    Ok([row]) -> Ok(row_to_item(row))
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(DatabaseError)
+    Error(_) -> Error(DatabaseError)
   }
 }
 
 pub fn delete_item(
   id id: Int,
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(Int, ItemError), HandlerContext) {
+) -> Result(Int, ItemError) {
   case server_sql.delete_item(db: handler_ctx.db, id:) {
-    Ok([row]) -> #(Ok(row.id), handler_ctx)
-    Ok([]) -> #(Error(NotFound), handler_ctx)
-    Ok(_) -> #(Error(DatabaseError), handler_ctx)
-    Error(_) -> #(Error(DatabaseError), handler_ctx)
+    Ok([row]) -> Ok(row.id)
+    Ok([]) -> Error(NotFound)
+    Ok(_) -> Error(DatabaseError)
+    Error(_) -> Error(DatabaseError)
   }
 }
 
@@ -299,12 +301,11 @@ pub fn create_item_persists_test() {
       on: db,
     )
   let handler_ctx = handler_context.new(db:)
-  let #(result, _) =
+  let assert Ok(item) =
     handler.create_item(
       params: ItemParams(title: "Buy milk"),
       handler_ctx:,
     )
-  let assert Ok(item) = result
   let assert "Buy milk" = item.title
   let assert False = item.completed
 }

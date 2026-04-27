@@ -51,7 +51,7 @@ pub fn handle(
               })
             GetItems ->
               dispatch(handler_ctx, request_id, fn() {
-                handler_handler.get_items(handler_ctx:)
+                #(handler_handler.get_items(handler_ctx:), handler_ctx)
               })
           }
         }

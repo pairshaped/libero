@@ -98,8 +98,12 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 
 1. Public function
 2. Last parameter is `HandlerContext`
-3. Returns `#(Result(value, error), HandlerContext)`
+3. Return type is one of:
+   - `Result(value, error)` for read-only handlers
+   - `#(Result(value, error), HandlerContext)` for handlers that emit a new context
 4. All types in the signature come from `shared/` or are builtins
+
+Read-only handlers (the common case) return `Result(_, _)` directly. Generated dispatch threads the inbound context through unchanged. Use the tuple form when the handler produces a new `HandlerContext` (login flows that swap the session, anything that mutates server state).
 
 ```gleam
 // server/src/handler.gleam
@@ -110,12 +114,14 @@ import shared/types.{
   type Item, type ItemError, type ItemParams, Item, TitleRequired,
 }
 
+// Read-only: bare Result. Dispatch reuses the inbound context.
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(handler_ctx.items), handler_ctx)
+) -> Result(List(Item), ItemError) {
+  Ok(handler_ctx.items)
 }
 
+// Mutating: tuple form. The new HandlerContext flows back to the session.
 pub fn create_item(
   params params: ItemParams,
   handler_ctx handler_ctx: HandlerContext,
@@ -377,7 +383,7 @@ The server entry point (`server/src/<app>.gleam`) is generated once and never ov
 ## Error Model
 
 Two tiers, both typed:
-1. **Domain errors** -- inside the handler's `Result`: `#(Error(NotFound), handler_ctx)`. Arrives as `Failure(DomainError(NotFound))` in the client's `RpcData`.
+1. **Domain errors** -- inside the handler's `Result`: `Error(NotFound)` (or `#(Error(NotFound), handler_ctx)` for the tuple form). Arrives as `Failure(DomainError(NotFound))` in the client's `RpcData`.
 2. **Transport errors** -- `MalformedRequest`, `UnknownFunction(name)`, `InternalError(trace_id, message)`. Caught by dispatch, logged server-side. Arrives as `Failure(TransportError(rpc_err))` in the client's `RpcData`.
 
 ## RemoteData

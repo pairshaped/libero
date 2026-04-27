@@ -283,7 +283,9 @@ A note on lifetime: this state lives per WebSocket connection. Refresh the page 
 
 ## 6. Write the RPC handlers
 
-This is where libero's "handler as contract" pattern shows up: every public function in `server/src/handler.gleam` whose last parameter is `HandlerContext` and whose return type is `#(Result(value, error), HandlerContext)` becomes an RPC endpoint automatically. No registration, no routing tables.
+This is where libero's "handler as contract" pattern shows up: every public function in `server/src/handler.gleam` whose last parameter is `HandlerContext` and whose return type is either `Result(value, error)` (for read-only handlers) or `#(Result(value, error), HandlerContext)` (when the handler emits a new context) becomes an RPC endpoint automatically. No registration, no routing tables.
+
+`get_items` only reads from the context, so it returns `Result(_, _)` directly. The mutating handlers below produce a new `HandlerContext` and use the tuple form so libero can thread the new state into the next call.
 
 Replace `server/src/handler.gleam`:
 
@@ -296,8 +298,8 @@ import shared/types.{
 
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(handler_ctx.items), handler_ctx)
+) -> Result(List(Item), ItemError) {
+  Ok(handler_ctx.items)
 }
 
 pub fn create_item(
@@ -386,8 +388,7 @@ pub fn load_page(
   route: Route,
   handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
-  let #(result, _) = handler.get_items(handler_ctx:)
-  let items = case result {
+  let items = case handler.get_items(handler_ctx:) {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
   }
@@ -566,6 +567,12 @@ pub fn create_item_returns_item_test() {
   let assert "Buy milk" = item.title
   let assert False = item.completed
 }
+```
+
+Note: `create_item` still returns `#(Result(_, _), HandlerContext)` (it produces a new list), so the test destructures the tuple. `get_items` would just unwrap a `Result` directly.
+
+```gleam
+let assert Ok(_items) = handler.get_items(handler_ctx:)
 ```
 
 Run it:

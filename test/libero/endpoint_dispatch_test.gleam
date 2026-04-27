@@ -15,6 +15,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
@@ -22,6 +23,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [#("params", item_params)],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
@@ -29,6 +31,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/handler",
@@ -36,6 +39,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch"
@@ -82,6 +86,61 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
+/// Read-only handlers (mutates_context = False) return `Result(_, _)`
+/// directly. The generated dispatch must wrap the call so it still feeds
+/// `dispatch` the `#(_, HandlerContext)` shape it expects.
+pub fn endpoint_dispatch_wraps_read_only_handler_test() {
+  let endpoints = [
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "list_things",
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
+      params: [],
+      mutates_context: False,
+    ),
+    scanner.HandlerEndpoint(
+      module_path: "server/handler",
+      fn_name: "rename_thing",
+      return_ok: field_type.IntField,
+      return_err: field_type.NilField,
+      params: [#("id", field_type.IntField)],
+      mutates_context: True,
+    ),
+  ]
+  let output_dir = "build/.test_endpoint_dispatch_read_only"
+  let assert Ok(Nil) =
+    codegen_dispatch.write_endpoint_dispatch(
+      endpoints: endpoints,
+      server_generated: output_dir,
+      atoms_module: "app@generated@rpc_atoms",
+      context_module: "handler_context",
+      wire_module_tag: "rpc",
+    )
+  let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
+
+  // Read-only handler is wrapped: dispatch threads the inbound ctx through.
+  let assert True =
+    string.contains(
+      content,
+      "#(server_handler_handler.list_things(handler_ctx:), handler_ctx)",
+    )
+
+  // Mutating handler is invoked directly; no #(...) wrap around the call.
+  let assert True =
+    string.contains(
+      content,
+      "server_handler_handler.rename_thing(id:, handler_ctx:)",
+    )
+  let assert False =
+    string.contains(
+      content,
+      "#(server_handler_handler.rename_thing(id:, handler_ctx:), handler_ctx)",
+    )
+
+  let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
+
 /// dispatch.gleam declares `ensure_atoms` as an Erlang-only external with no
 /// JS fallback. That fails JS compilation at the unresolved-external
 /// boundary, which is the signal that this module is server-only. The doc
@@ -94,6 +153,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_server_only"
@@ -131,6 +191,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       params: [
         #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
       ],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
@@ -140,6 +201,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       params: [
         #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
       ],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/store",
@@ -147,6 +209,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       return_ok: field_type.IntField,
       return_err: field_type.NilField,
       params: [#("id", field_type.IntField)],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_imports"
@@ -189,6 +252,7 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
           field_type.DictOf(field_type.StringField, field_type.IntField),
         ),
       ],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_dispatch_stdlib_imports"
@@ -221,6 +285,7 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
       params: [
         #("filters", field_type.UserType("shared/widgets", "WidgetFilters", [])),
       ],
+      mutates_context: True,
     ),
     scanner.HandlerEndpoint(
       module_path: "server/notifier",
@@ -230,6 +295,7 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
       params: [
         #("params", field_type.UserType("shared/alerts", "AlertParams", [])),
       ],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_stubs_imports"
@@ -262,6 +328,7 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
           field_type.DictOf(field_type.StringField, field_type.IntField),
         ),
       ],
+      mutates_context: True,
     ),
   ]
   let output_dir = "build/.test_endpoint_stubs_stdlib_imports"

@@ -16,8 +16,7 @@ pub fn load_page(
   route: Route,
   handler_ctx: HandlerContext,
 ) -> Result(Model, Response(ResponseData)) {
-  let #(result, _) = handler.get_items(handler_ctx:)
-  let items = case result {
+  let items = case handler.get_items(handler_ctx:) {
     Ok(items) -> Success(items)
     Error(err) -> Failure(err)
   }

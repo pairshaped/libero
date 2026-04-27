@@ -4,10 +4,13 @@ import shared/types.{
   type Item, type ItemError, type ItemParams, Item, NotFound, TitleRequired,
 }
 
+// `get_items` reads from the context without producing a new one, so it
+// uses the bare-Result return shape. The mutating handlers below emit a
+// new HandlerContext and use the `#(Result(_, _), HandlerContext)` form.
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(handler_ctx.items), handler_ctx)
+) -> Result(List(Item), ItemError) {
+  Ok(handler_ctx.items)
 }
 
 pub fn create_item(

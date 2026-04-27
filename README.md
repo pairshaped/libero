@@ -56,8 +56,12 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 
 1. **Public function** (not private)
 2. **Last parameter is `HandlerContext`**
-3. **Returns `#(Result(value, error), HandlerContext)`**
+3. **Return type** is one of:
+   - `Result(value, error)` for read-only handlers (the common case)
+   - `#(Result(value, error), HandlerContext)` for handlers that emit a new context
 4. **All types in the signature come from `shared/` or are builtins**
+
+Read-only handlers return `Result(_, _)` directly; libero's generated dispatch threads the inbound context through unchanged. Use the tuple form only when the handler produces a new `HandlerContext` (login flows, session swaps, anything that mutates server state).
 
 ```gleam
 // server/src/handler.gleam
@@ -68,12 +72,15 @@ import shared/types.{
   type Item, type ItemError, type ItemParams, Item, TitleRequired,
 }
 
+// Read-only handler: bare Result.
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
-) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(handler_ctx.items), handler_ctx)
+) -> Result(List(Item), ItemError) {
+  Ok(handler_ctx.items)
 }
 
+// Mutating handler: tuple form. The new HandlerContext flows back into
+// the session.
 pub fn create_item(
   params params: ItemParams,
   handler_ctx handler_ctx: HandlerContext,

@@ -78,9 +78,20 @@ pub fn utility_function(x x: Int) -> Int {
   x + 1
 }
 
-// Criterion 3 missing: return is not a #(_, HandlerContext) tuple.
+// Bare-Result handler shape: read-only handlers may return Result(_, _)
+// directly. The scanner treats this as equivalent to the tuple shape with
+// an unchanged HandlerContext. Last param is still HandlerContext.
 pub fn process_items(
-  state _state: HandlerContext,
+  handler_ctx _handler_ctx: HandlerContext,
+) -> Result(List(Item), ItemError) {
+  Ok([])
+}
+
+// Bare-Result handler with payload params, exercising parameter handling
+// on the new shape.
+pub fn search_items(
+  query _query: String,
+  handler_ctx _handler_ctx: HandlerContext,
 ) -> Result(List(Item), ItemError) {
   Ok([])
 }

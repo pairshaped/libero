@@ -63,18 +63,22 @@ function _decode_rpc_error(term) {
   return new _MalformedRequest();
 }
 
-export function decode_response_ping(raw) {
+function _decode_response(raw, decode_ok, decode_err) {
   if (Array.isArray(raw)) {
     if (raw[0] === "ok") {
       const inner = raw[1];
       if (Array.isArray(inner) && inner[0] === "ok") {
-        return new _Success(decode_string(inner[1]));
+        return new _Success(decode_ok(inner[1]));
       } else if (Array.isArray(inner) && inner[0] === "error") {
-        return new _Failure(new _DomainError(decode_shared_types_ping_error(inner[1])));
+        return new _Failure(new _DomainError(decode_err(inner[1])));
       }
     } else if (raw[0] === "error") {
       return new _Failure(new _TransportError(_decode_rpc_error(raw[1])));
     }
   }
   return new _Failure(new _TransportError(new _MalformedRequest()));
+}
+
+export function decode_response_ping(raw) {
+  return _decode_response(raw, (t) => decode_string(t), (t) => decode_shared_types_ping_error(t));
 }

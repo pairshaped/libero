@@ -6,13 +6,10 @@ import simplifile
 // Four criteria for an RPC endpoint (as documented in the README):
 // 1. Public function
 // 2. Last parameter is HandlerContext
-// 3. Returns #(Result(value, error), HandlerContext)
+// 3. Return type is one of:
+//    a. #(Result(ok, err), HandlerContext) — handler may mutate context
+//    b. Result(ok, err) — read-only; codegen wraps with the unchanged ctx
 // 4. All types in params and return are shared (or builtins)
-//
-// Criterion 3 has two sub-shapes the scanner enforces independently:
-//   3a. Tuple shape: #(_, HandlerContext)
-//   3b. The first slot is a Result(_, _)
-// The tests below split these into separate cases to isolate failures.
 
 /// Missing criterion 1: private function
 pub fn excludes_private_function_test() {
@@ -26,10 +23,23 @@ pub fn excludes_no_handler_context_param_test() {
   let assert False = list.contains(names, "utility_function")
 }
 
-/// Missing criterion 3a: doesn't return #(_, HandlerContext)
-pub fn excludes_wrong_return_shape_test() {
+/// Bare-Result handler shape is accepted (criterion 3b).
+pub fn includes_bare_result_handler_test() {
   let names = scan_fixture_names()
-  let assert False = list.contains(names, "process_items")
+  let assert True = list.contains(names, "process_items")
+  let assert True = list.contains(names, "search_items")
+}
+
+/// Bare-Result handlers carry the read-only marker so codegen can wrap them.
+pub fn bare_result_handler_marked_read_only_test() {
+  let endpoints = scan_fixture_endpoints()
+  let assert Ok(process_items) =
+    list.find(endpoints, fn(e) { e.fn_name == "process_items" })
+  let assert False = process_items.mutates_context
+
+  let assert Ok(get_items) =
+    list.find(endpoints, fn(e) { e.fn_name == "get_items" })
+  let assert True = get_items.mutates_context
 }
 
 /// Missing criterion 4: uses server-only type in return
@@ -72,13 +82,17 @@ pub fn includes_dict_typed_endpoint_test() {
   let assert True = list.contains(names, "lookup_items")
 }
 
-fn scan_fixture_names() -> List(String) {
+fn scan_fixture_endpoints() -> List(scanner.HandlerEndpoint) {
   let assert Ok(endpoints) =
     scanner.scan_handler_endpoints(
       server_src: "test/fixtures/endpoint_scan/server",
       shared_src: "test/fixtures/endpoint_scan/shared",
     )
-  list.map(endpoints, fn(e) { e.fn_name })
+  endpoints
+}
+
+fn scan_fixture_names() -> List(String) {
+  list.map(scan_fixture_endpoints(), fn(e) { e.fn_name })
 }
 
 /// Two handler files exporting the same function name would compile into
