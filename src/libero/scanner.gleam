@@ -131,14 +131,6 @@ pub fn derive_module_path(file_path file_path: String) -> String {
   }
 }
 
-/// Extract the last path segment from a module path.
-/// E.g. `shared/items` -> `items`, `items` -> `items`.
-fn last_module_segment(module_path module_path: String) -> String {
-  string.split(module_path, "/")
-  |> list.last
-  |> result.unwrap(or: module_path)
-}
-
 // ---------- Handler endpoint scanning ----------
 
 /// Scan server source for handler endpoint functions.
@@ -340,7 +332,7 @@ fn build_alias_resolution_map(
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
     let glance.Definition(_, imp) = def
-    let last_seg = last_module_segment(module_path: imp.module)
+    let last_seg = field_type.last_segment(imp.module)
     let alias = case imp.alias {
       option.Some(glance.Named(name)) -> name
       _ -> last_seg
@@ -357,49 +349,9 @@ fn parse_single_endpoint(
   type_alias_originals type_alias_originals: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
-  // Must have at least one parameter
-  let params = func.parameters
-  use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
-
-  // Last parameter must be typed as HandlerContext
-  use last_param <- result.try(list.last(params))
-  use last_type <- result.try(option.to_result(last_param.type_, Nil))
-  use <- bool.guard(
-    when: !is_handler_context_type(last_type),
-    return: Error(Nil),
-  )
-
-  // Return type must be a tuple #(something, HandlerContext)
-  use return_type <- result.try(option.to_result(func.return, Nil))
-  use #(response_type, _state_type) <- result.try(extract_handler_return(
-    return_type,
+  use #(response_type, payload_params) <- result.try(validate_handler_signature(
+    func,
   ))
-
-  // The response slot must be a Result(_, _). The wire envelope, dispatch,
-  // and client codecs all assume Result-shaped responses; a bare value here
-  // would compile but produce broken serialization at runtime. Treat it as
-  // "not an endpoint" so we don't silently emit broken codegen.
-  use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
-
-  // Extract payload parameters (everything before the trailing
-  // HandlerContext) with their labels and structured types.
-  let payload_params = list.take(params, list.length(params) - 1)
-  let params_typed =
-    list.filter_map(payload_params, fn(p) {
-      case p.label, p.type_ {
-        option.Some(label), option.Some(type_) ->
-          Ok(#(
-            label,
-            glance_type_to_field_type(
-              type_: type_,
-              imports: type_imports,
-              aliases: alias_map,
-              type_alias_originals: type_alias_originals,
-            ),
-          ))
-        _, _ -> Error(Nil)
-      }
-    })
 
   // All non-builtin types must be from shared/
   let all_param_types =
@@ -414,17 +366,61 @@ fn parse_single_endpoint(
     return: Error(Nil),
   )
 
-  Ok(HandlerEndpoint(
-    module_path: module_path,
-    fn_name: func.name,
-    return_type: glance_type_to_field_type(
-      type_: response_type,
+  let to_ft = fn(t) {
+    glance_type_to_field_type(
+      type_: t,
       imports: type_imports,
       aliases: alias_map,
       type_alias_originals: type_alias_originals,
-    ),
+    )
+  }
+  let params_typed =
+    list.filter_map(payload_params, fn(p) {
+      case p.label, p.type_ {
+        option.Some(label), option.Some(type_) -> Ok(#(label, to_ft(type_)))
+        _, _ -> Error(Nil)
+      }
+    })
+
+  Ok(HandlerEndpoint(
+    module_path: module_path,
+    fn_name: func.name,
+    return_type: to_ft(response_type),
     params: params_typed,
   ))
+}
+
+/// Verify the function's signature matches the handler-as-contract shape:
+/// at least one param, last param typed `HandlerContext`, return type
+/// `#(Result(_, _), HandlerContext)`. On success returns the response
+/// type (the `Result(_, _)` slot) and the payload parameter list (every
+/// parameter before the trailing HandlerContext).
+fn validate_handler_signature(
+  func: glance.Function,
+) -> Result(#(glance.Type, List(glance.FunctionParameter)), Nil) {
+  let params = func.parameters
+  use <- bool.guard(when: list.is_empty(params), return: Error(Nil))
+
+  use last_param <- result.try(list.last(params))
+  use last_type <- result.try(option.to_result(last_param.type_, Nil))
+  use <- bool.guard(
+    when: !is_handler_context_type(last_type),
+    return: Error(Nil),
+  )
+
+  use return_type <- result.try(option.to_result(func.return, Nil))
+  use #(response_type, _state_type) <- result.try(extract_handler_return(
+    return_type,
+  ))
+
+  // The response slot must be a Result(_, _). The wire envelope, dispatch,
+  // and client codecs all assume Result-shaped responses; a bare value here
+  // would compile but produce broken serialization at runtime. Treat it as
+  // "not an endpoint" so we don't silently emit broken codegen.
+  use <- bool.guard(when: !is_result_type(response_type), return: Error(Nil))
+
+  let payload_params = list.take(params, list.length(params) - 1)
+  Ok(#(response_type, payload_params))
 }
 
 /// Check if a type annotation is the project's HandlerContext, brought
@@ -518,13 +514,13 @@ fn glance_type_to_field_type(
 /// FieldType directly. Other names are looked up in `imports` to
 /// produce a `UserType` with the import's full module path.
 ///
-/// When a name passes `all_types_shared` (it appears in the shared-types
-/// set) but isn't in `imports`, the handler defines the type locally
-/// rather than importing it from shared. This happens in test fixtures
-/// where the same type name exists in both places. The fallback uses
-/// the bare name as `module_path`, which produces unusable codegen if
-/// the endpoint is actually compiled, but in practice consumers always
-/// import shared types rather than re-declaring them.
+/// Invariant: callers reach this function only after
+/// `all_types_shared` has accepted the name, meaning it's either a
+/// builtin or a shared-tree type. If the name is in shared but not in
+/// the file's imports, the handler is shadowing a shared type with a
+/// local definition (only seen in test fixtures); we fall back to the
+/// bare name as module_path. Production handlers always import their
+/// shared types, so this fallback never fires for compiled endpoints.
 fn builtin_or_user(
   name name: String,
   parameters parameters: List(glance.Type),
@@ -540,20 +536,9 @@ fn builtin_or_user(
       type_alias_originals:,
     )
   }
-  case name, parameters {
-    "Int", [] -> field_type.IntField
-    "Float", [] -> field_type.FloatField
-    "String", [] -> field_type.StringField
-    "Bool", [] -> field_type.BoolField
-    "BitArray", [] -> field_type.BitArrayField
-    "Nil", [] -> field_type.NilField
-    "List", [elem] -> field_type.ListOf(element: recurse(elem))
-    "Option", [inner] -> field_type.OptionOf(inner: recurse(inner))
-    "Result", [ok, err] ->
-      field_type.ResultOf(ok: recurse(ok), err: recurse(err))
-    "Dict", [key, val] ->
-      field_type.DictOf(key: recurse(key), value: recurse(val))
-    _, _ -> {
+  case field_type.builtin_field_type(name:, parameters:, recurse:) {
+    Ok(ft) -> ft
+    Error(Nil) -> {
       let module_path = dict.get(imports, name) |> result.unwrap(or: name)
       // If the local name is an aliased import (e.g. `type Item as MyItem`),
       // the source module knows it as the original name. Use that so the

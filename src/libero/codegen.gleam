@@ -97,6 +97,13 @@ pub fn module_to_mjs_path(module_path: String) -> String {
 
 // ---------- Naming ----------
 
+/// Convert a Gleam module path like "shared/discount" to a flat
+/// underscore-separated alias suitable for use as a Gleam identifier
+/// or import alias suffix. e.g. "shared/discount" -> "shared_discount".
+pub fn module_to_underscored(module_path: String) -> String {
+  string.replace(module_path, "/", "_")
+}
+
 /// Convert a snake_case name to PascalCase.
 /// e.g. "get_items" -> "GetItems", "create_item" -> "CreateItem"
 pub fn to_pascal_case(name: String) -> String {
@@ -124,6 +131,69 @@ pub fn endpoints_contain(
     field_type.contains(e.return_type, predicate)
     || list.any(e.params, fn(p) { field_type.contains(p.1, predicate) })
   })
+}
+
+/// Emit a constructor / pattern shape like `Variant(label1:, label2:)` or
+/// just `Variant` when there are no parameters. Used by both the dispatch
+/// match arms (destructure) and client stubs (constructor call).
+pub fn variant_pattern(
+  variant_name variant_name: String,
+  params params: List(#(String, field_type.FieldType)),
+) -> String {
+  case params {
+    [] -> variant_name
+    _ -> {
+      let labels = list.map(params, fn(p) { p.0 <> ":" })
+      variant_name <> "(" <> string.join(labels, ", ") <> ")"
+    }
+  }
+}
+
+/// Emit the body lines of the generated `ClientMsg` type — one variant
+/// per endpoint, indented by two spaces. Both the server dispatch and
+/// the client stubs need this exact shape; routing both through this
+/// helper guarantees they stay in sync (mismatched variants would
+/// silently break the wire contract).
+pub fn emit_client_msg_variants(
+  endpoints endpoints: List(scanner.HandlerEndpoint),
+) -> List(String) {
+  list.map(endpoints, fn(e) {
+    let variant_name = to_pascal_case(e.fn_name)
+    case e.params {
+      [] -> "  " <> variant_name
+      params -> {
+        let fields =
+          list.map(params, fn(p) {
+            let #(label, ft) = p
+            label <> ": " <> field_type.to_gleam_source(ft)
+          })
+        "  " <> variant_name <> "(" <> string.join(fields, ", ") <> ")"
+      }
+    }
+  })
+}
+
+/// Collect `import <module>` lines for every shared module path
+/// referenced (transitively) by the endpoints' parameter types and,
+/// optionally, return types. Output is unique and sorted.
+pub fn collect_endpoint_type_imports(
+  endpoints endpoints: List(scanner.HandlerEndpoint),
+  include_return include_return: Bool,
+) -> List(String) {
+  endpoints
+  |> list.flat_map(fn(e) {
+    let from_params =
+      list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
+    case include_return {
+      True ->
+        list.append(from_params, field_type.collect_user_types(e.return_type))
+      False -> from_params
+    }
+  })
+  |> list.map(fn(ref) { ref.0 })
+  |> list.unique()
+  |> list.sort(string.compare)
+  |> list.map(fn(mod) { "import " <> mod })
 }
 
 pub fn is_dict(ft: field_type.FieldType) -> Bool {

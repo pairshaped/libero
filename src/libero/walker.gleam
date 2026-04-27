@@ -8,10 +8,7 @@ import gleam/set.{type Set}
 import gleam/string
 import simplifile
 
-import libero/field_type.{
-  type FieldType, BitArrayField, BoolField, DictOf, FloatField, IntField, ListOf,
-  NilField, OptionOf, ResultOf, StringField, TupleOf, TypeVar, UserType,
-}
+import libero/field_type.{type FieldType, TupleOf, TypeVar, UserType}
 import libero/gen_error.{
   type GenError, CannotReadFile, ParseFailed, TypeNotFound, UnresolvedTypeModule,
 }
@@ -598,21 +595,12 @@ fn stdlib_field_type(
   let recurse = fn(t) {
     field_type_of(t:, resolver:, aliases:, current_module:)
   }
-  case name, parameters {
-    "Int", [] -> IntField
-    "Float", [] -> FloatField
-    "String", [] -> StringField
-    "Bool", [] -> BoolField
-    "BitArray", [] -> BitArrayField
-    "Nil", [] -> NilField
-    "List", [elem] -> ListOf(recurse(elem))
-    "Option", [inner] -> OptionOf(recurse(inner))
-    "Result", [ok, err] -> ResultOf(ok: recurse(ok), err: recurse(err))
-    "Dict", [key, value] -> DictOf(key: recurse(key), value: recurse(value))
+  case field_type.builtin_field_type(name:, parameters:, recurse:) {
+    Ok(ft) -> ft
     // Arity mismatch (e.g. bare `Result` used as a type name with zero
     // args): fall through to UserType so codegen produces a decoder
     // reference rather than a malformed primitive.
-    _, _ ->
+    Error(Nil) ->
       UserType(
         module_path: current_module,
         type_name: name,
@@ -697,19 +685,13 @@ fn build_type_resolver(
     // Module alias: `import shared/record` → "record" -> "shared/record"
     let alias_name = case imp.alias {
       Some(glance.Named(name)) -> name
-      _ -> default_module_alias(module_path)
+      _ -> field_type.last_segment(module_path)
     }
     TypeResolver(
       ..acc,
       aliased: dict.insert(acc.aliased, alias_name, module_path),
     )
   })
-}
-
-fn default_module_alias(module_path: String) -> String {
-  string.split(module_path, "/")
-  |> list.last
-  |> result.unwrap(module_path)
 }
 
 /// Convert a PascalCase variant name to snake_case for the wire atom.

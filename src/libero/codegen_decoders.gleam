@@ -131,7 +131,7 @@ fn emit_decoder_imports(
   let module_imports =
     list.map(module_paths, fn(mp) {
       "import * as _m_"
-      <> module_alias(mp)
+      <> codegen.module_to_underscored(mp)
       <> " from \""
       <> config.register_relpath_prefix
       <> codegen.module_to_mjs_path(mp)
@@ -189,17 +189,11 @@ fn emit_float_field_registrations(discovered: List(DiscoveredType)) -> String {
   }
 }
 
-/// Convert a module path to a flat JS identifier for use as a namespace alias.
-/// e.g. "shared/line_item" -> "shared_line_item"
-fn module_alias(module_path: String) -> String {
-  string.replace(module_path, "/", "_")
-}
-
 /// Derive the JS decoder function name for a discovered type.
 /// e.g. ("shared/line_item", "Status") -> "decode_shared_line_item_status"
 fn decoder_fn_name(module_path: String, type_name: String) -> String {
   "decode_"
-  <> module_alias(module_path)
+  <> codegen.module_to_underscored(module_path)
   <> "_"
   <> walker.to_snake_case(type_name)
 }
@@ -228,17 +222,31 @@ fn emit_type_decoder(t: DiscoveredType) -> String {
   "export function " <> fn_name <> "(term) {\n" <> body <> "\n}"
 }
 
+/// Emit `new _m_<alias>.<Variant>(<args>)` for a discovered variant.
+/// `args` is joined into the constructor call as-is; pass `""` for a
+/// zero-arg variant to get `new _m_alias.Variant()`.
+fn emit_variant_constructor_call(
+  variant: DiscoveredVariant,
+  args: String,
+) -> String {
+  "new _m_"
+  <> codegen.module_to_underscored(variant.module_path)
+  <> "."
+  <> variant.variant_name
+  <> "("
+  <> args
+  <> ")"
+}
+
 /// Emit the body of a pure-enum decoder (no-field variants only).
 fn emit_enum_decoder(variants: List(DiscoveredVariant)) -> String {
   let cases =
     list.map(variants, fn(v) {
       "  if (term === \""
       <> v.atom_name
-      <> "\") return new _m_"
-      <> module_alias(v.module_path)
-      <> "."
-      <> v.variant_name
-      <> "();"
+      <> "\") return "
+      <> emit_variant_constructor_call(v, "")
+      <> ";"
     })
   string.join(cases, "\n")
   <> "\n  throw new DecodeError(\"unknown variant: \" + String(term));"
@@ -250,13 +258,8 @@ fn emit_record_decoder(variant: DiscoveredVariant) -> String {
     list.index_map(variant.fields, fn(ft, i) {
       "    " <> field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]")
     })
-  "  return new _m_"
-  <> module_alias(variant.module_path)
-  <> "."
-  <> variant.variant_name
-  <> "(\n"
-  <> string.join(field_lines, ",\n")
-  <> "\n  );"
+  let args = "\n" <> string.join(field_lines, ",\n") <> "\n  "
+  "  return " <> emit_variant_constructor_call(variant, args) <> ";"
 }
 
 /// Emit the body of a multi-variant tagged union decoder.
@@ -267,31 +270,20 @@ fn emit_tagged_union_decoder(
 ) -> String {
   let arms =
     list.map(variants, fn(v) {
-      case v.fields {
-        [] ->
-          "    case \""
-          <> v.atom_name
-          <> "\":\n      return new _m_"
-          <> module_alias(v.module_path)
-          <> "."
-          <> v.variant_name
-          <> "();"
-        fields -> {
-          let field_args =
-            list.index_map(fields, fn(ft, i) {
-              field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]")
-            })
-          "    case \""
-          <> v.atom_name
-          <> "\":\n      return new _m_"
-          <> module_alias(v.module_path)
-          <> "."
-          <> v.variant_name
-          <> "("
-          <> string.join(field_args, ", ")
-          <> ");"
-        }
+      let args = case v.fields {
+        [] -> ""
+        fields ->
+          fields
+          |> list.index_map(fn(ft, i) {
+            field_decoder_call(ft, "term[" <> int.to_string(i + 1) <> "]")
+          })
+          |> string.join(", ")
       }
+      "    case \""
+      <> v.atom_name
+      <> "\":\n      return "
+      <> emit_variant_constructor_call(v, args)
+      <> ";"
     })
   "  const tag = Array.isArray(term) ? term[0] : term;\n"
   <> "  switch (tag) {\n"
@@ -339,53 +331,23 @@ fn field_decoder_call_depth(
       <> ", "
       <> term_expr
       <> ")"
-    ResultOf(ok, err) -> {
-      let ok_param = "t" <> int.to_string(next)
-      let err_depth = next + 1
-      let err_param = "t" <> int.to_string(err_depth)
-      "decode_result_of(("
-      <> ok_param
-      <> ") => "
-      <> field_decoder_call_depth(ok, ok_param, next + 1)
-      <> ", ("
-      <> err_param
-      <> ") => "
-      <> field_decoder_call_depth(err, err_param, err_depth + 1)
-      <> ", "
-      <> term_expr
-      <> ")"
-    }
-    DictOf(k, v) -> {
-      let key_param = "t" <> int.to_string(next)
-      let val_depth = next + 1
-      let val_param = "t" <> int.to_string(val_depth)
-      "decode_dict_of(("
-      <> key_param
-      <> ") => "
-      <> field_decoder_call_depth(k, key_param, next + 1)
-      <> ", ("
-      <> val_param
-      <> ") => "
-      <> field_decoder_call_depth(v, val_param, val_depth + 1)
-      <> ", "
-      <> term_expr
-      <> ")"
-    }
+    ResultOf(ok, err) ->
+      emit_higher_order_decoder(
+        fn_name: "decode_result_of",
+        inners: [ok, err],
+        term_expr:,
+        start_depth: next,
+      )
+    DictOf(k, v) ->
+      emit_higher_order_decoder(
+        fn_name: "decode_dict_of",
+        inners: [k, v],
+        term_expr:,
+        start_depth: next,
+      )
     TupleOf(elems) -> {
-      let decoders =
-        list.index_map(elems, fn(e, i) {
-          let elem_depth = next + i
-          let elem_param = "t" <> int.to_string(elem_depth)
-          "("
-          <> elem_param
-          <> ") => "
-          <> field_decoder_call_depth(e, elem_param, elem_depth + 1)
-        })
-      "decode_tuple_of(["
-      <> string.join(decoders, ", ")
-      <> "], "
-      <> term_expr
-      <> ")"
+      let decoders = emit_lambda_decoders(inners: elems, start_depth: next)
+      "decode_tuple_of([" <> decoders <> "], " <> term_expr <> ")"
     }
     TypeVar(name) ->
       "(() => { throw new DecodeError(\"TypeVar<"
@@ -394,6 +356,38 @@ fn field_decoder_call_depth(
     UserType(module_path, type_name, _args) ->
       decoder_fn_name(module_path, type_name) <> "(" <> term_expr <> ")"
   }
+}
+
+/// Emit `<fn_name>(<lambda1>, <lambda2>, ..., <term_expr>)` where each
+/// lambda decodes one of `inners`. Used for the Result/Dict shape where
+/// the wrapping JS function takes per-position decoders followed by the
+/// term to decode. `start_depth` is the depth assigned to the first
+/// lambda's parameter; subsequent lambdas advance by 1 each.
+fn emit_higher_order_decoder(
+  fn_name fn_name: String,
+  inners inners: List(FieldType),
+  term_expr term_expr: String,
+  start_depth start_depth: Int,
+) -> String {
+  let decoders = emit_lambda_decoders(inners:, start_depth:)
+  fn_name <> "(" <> decoders <> ", " <> term_expr <> ")"
+}
+
+/// Emit a comma-joined list of `(t<n>) => <decoder>` lambdas, one per
+/// element of `inners`. The first lambda uses parameter `t<start_depth>`
+/// and each subsequent lambda increments. The recursive decoder body
+/// starts from `param_depth + 1` so it never reuses the lambda's param.
+fn emit_lambda_decoders(
+  inners inners: List(FieldType),
+  start_depth start_depth: Int,
+) -> String {
+  inners
+  |> list.index_map(fn(ft, i) {
+    let p_depth = start_depth + i
+    let param = "t" <> int.to_string(p_depth)
+    "(" <> param <> ") => " <> field_decoder_call_depth(ft, param, p_depth + 1)
+  })
+  |> string.join(", ")
 }
 
 /// Emit the `ensure_decoders` FFI export. This is a no-op function whose

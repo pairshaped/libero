@@ -22,6 +22,33 @@ pub fn is_builtin(name: String) -> Bool {
   list.contains(builtin_type_names, name)
 }
 
+/// Map a builtin Gleam type name (and its parameters) to the
+/// corresponding FieldType. Returns Error(Nil) when the name isn't a
+/// recognised builtin or the parameter arity doesn't match. The caller
+/// supplies `recurse` to convert each parameter (typically a
+/// `glance.Type`) into a FieldType, keeping this module independent of
+/// glance. Used by scanner and walker so the builtin dispatch lives in
+/// one place.
+pub fn builtin_field_type(
+  name name: String,
+  parameters parameters: List(a),
+  recurse recurse: fn(a) -> FieldType,
+) -> Result(FieldType, Nil) {
+  case name, parameters {
+    "Int", [] -> Ok(IntField)
+    "Float", [] -> Ok(FloatField)
+    "String", [] -> Ok(StringField)
+    "Bool", [] -> Ok(BoolField)
+    "BitArray", [] -> Ok(BitArrayField)
+    "Nil", [] -> Ok(NilField)
+    "List", [elem] -> Ok(ListOf(element: recurse(elem)))
+    "Option", [inner] -> Ok(OptionOf(inner: recurse(inner)))
+    "Result", [ok, err] -> Ok(ResultOf(ok: recurse(ok), err: recurse(err)))
+    "Dict", [key, value] -> Ok(DictOf(key: recurse(key), value: recurse(value)))
+    _, _ -> Error(Nil)
+  }
+}
+
 /// A Gleam type, resolved to a structured form. Module-qualified
 /// references (e.g. `types.Item` written in user code) are resolved
 /// to their canonical module path (e.g. `shared/types`) at production
@@ -129,7 +156,10 @@ pub fn contains(ft: FieldType, predicate: fn(FieldType) -> Bool) -> Bool {
   }
 }
 
-fn last_segment(module_path: String) -> String {
+/// Last `/`-separated segment of a module path, or the path itself if
+/// no separator is present. Used wherever codegen needs the "short"
+/// module name for aliases or display.
+pub fn last_segment(module_path: String) -> String {
   case string.split(module_path, "/") {
     [] -> module_path
     parts ->

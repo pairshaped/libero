@@ -7,7 +7,6 @@
 import gleam/list
 import gleam/string
 import libero/codegen
-import libero/field_type
 import libero/gen_error.{type GenError}
 import libero/scanner
 
@@ -33,7 +32,8 @@ pub fn write_endpoint_dispatch(
     })
 
   // Collect shared type imports for parameter types used in ClientMsg variants.
-  let shared_type_imports = collect_param_type_imports(endpoints:)
+  let shared_type_imports =
+    codegen.collect_endpoint_type_imports(endpoints:, include_return: False)
   let dict_import = case
     codegen.endpoints_contain(endpoints:, predicate: codegen.is_dict)
   {
@@ -41,22 +41,7 @@ pub fn write_endpoint_dispatch(
     False -> ""
   }
 
-  // Generate ClientMsg variants from endpoints
-  let client_msg_variants =
-    list.map(endpoints, fn(e) {
-      let variant_name = codegen.to_pascal_case(e.fn_name)
-      case e.params {
-        [] -> "  " <> variant_name
-        params -> {
-          let fields =
-            list.map(params, fn(p) {
-              let #(label, ft) = p
-              label <> ": " <> field_type.to_gleam_source(ft)
-            })
-          "  " <> variant_name <> "(" <> string.join(fields, ", ") <> ")"
-        }
-      }
-    })
+  let client_msg_variants = codegen.emit_client_msg_variants(endpoints:)
 
   // Build an alternative-pattern of known variant tags so the inner
   // typed match runs only when the wire payload carries a recognized
@@ -73,20 +58,11 @@ pub fn write_endpoint_dispatch(
     list.map(endpoints, fn(e) {
       let variant_name = codegen.to_pascal_case(e.fn_name)
       let alias = handler_alias(e.module_path)
-      let param_destructure = case e.params {
-        [] -> variant_name
-        params -> {
-          let fields = list.map(params, fn(p) { p.0 <> ":" })
-          variant_name <> "(" <> string.join(fields, ", ") <> ")"
-        }
-      }
-      let handler_args = case e.params {
-        [] -> "handler_ctx:"
-        params -> {
-          let args = list.map(params, fn(p) { p.0 <> ":" })
-          string.join(list.append(args, ["handler_ctx:"]), ", ")
-        }
-      }
+      let param_destructure =
+        codegen.variant_pattern(variant_name:, params: e.params)
+      let labeled = list.map(e.params, fn(p) { p.0 <> ":" })
+      let handler_args =
+        string.join(list.append(labeled, ["handler_ctx:"]), ", ")
       "        "
       <> param_destructure
       <> " ->\n          dispatch(handler_ctx, request_id, fn() { "
@@ -192,21 +168,5 @@ fn safe_encode(
 /// Convert a module path to a safe Gleam import alias.
 /// e.g. "server/store" -> "server_store_handler"
 fn handler_alias(module_path: String) -> String {
-  string.replace(module_path, "/", "_") <> "_handler"
-}
-
-/// Collect import lines for shared modules referenced by parameter
-/// types in any endpoint. Skips builtins (those have no module path)
-/// and return types (dispatch only references param types statically).
-fn collect_param_type_imports(
-  endpoints endpoints: List(scanner.HandlerEndpoint),
-) -> List(String) {
-  endpoints
-  |> list.flat_map(fn(e) {
-    list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
-  })
-  |> list.map(fn(ref) { ref.0 })
-  |> list.unique()
-  |> list.sort(string.compare)
-  |> list.map(fn(mod) { "import " <> mod })
+  codegen.module_to_underscored(module_path) <> "_handler"
 }

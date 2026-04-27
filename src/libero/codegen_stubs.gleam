@@ -23,24 +23,10 @@ pub fn write_endpoint_client_stubs(
   wire_module_tag wire_module_tag: String,
 ) -> Result(Nil, GenError) {
   // Collect shared type imports from parameter and return type annotations.
-  let shared_type_imports = collect_shared_type_imports(endpoints:)
+  let shared_type_imports =
+    codegen.collect_endpoint_type_imports(endpoints:, include_return: True)
 
-  // Generate ClientMsg variants (same structure as in dispatch)
-  let client_msg_variants =
-    list.map(endpoints, fn(e) {
-      let variant_name = codegen.to_pascal_case(e.fn_name)
-      case e.params {
-        [] -> "  " <> variant_name
-        params -> {
-          let fields =
-            list.map(params, fn(p) {
-              let #(label, ft) = p
-              label <> ": " <> field_type.to_gleam_source(ft)
-            })
-          "  " <> variant_name <> "(" <> string.join(fields, ", ") <> ")"
-        }
-      }
-    })
+  let client_msg_variants = codegen.emit_client_msg_variants(endpoints:)
 
   // Generate FFI external declarations and stub functions
   let decoder_externals =
@@ -97,14 +83,8 @@ pub fn write_endpoint_client_stubs(
         }
       }
 
-      // Build ClientMsg constructor call
-      let msg_construct = case e.params {
-        [] -> variant_name
-        params -> {
-          let args = list.map(params, fn(p) { p.0 <> ":" })
-          variant_name <> "(" <> string.join(args, ", ") <> ")"
-        }
-      }
+      let msg_construct =
+        codegen.variant_pattern(variant_name:, params: e.params)
 
       "pub fn "
       <> fn_name
@@ -250,22 +230,4 @@ export function readFlags() {
     content: gleam_content,
   ))
   codegen.write_file(path: ffi_path, content: ffi_content)
-}
-
-/// Collect import lines for shared modules referenced by parameter OR
-/// return types. Used by client stubs which reference both (RemoteData
-/// annotations need return types).
-fn collect_shared_type_imports(
-  endpoints endpoints: List(scanner.HandlerEndpoint),
-) -> List(String) {
-  endpoints
-  |> list.flat_map(fn(e) {
-    let from_params =
-      list.flat_map(e.params, fn(p) { field_type.collect_user_types(p.1) })
-    list.append(from_params, field_type.collect_user_types(e.return_type))
-  })
-  |> list.map(fn(ref) { ref.0 })
-  |> list.unique()
-  |> list.sort(string.compare)
-  |> list.map(fn(mod) { "import " <> mod })
 }
