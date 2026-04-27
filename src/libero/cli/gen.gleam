@@ -8,7 +8,10 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/result
-import libero/codegen
+import libero/codegen_decoders
+import libero/codegen_dispatch
+import libero/codegen_server
+import libero/codegen_stubs
 import libero/config
 import libero/gen_error
 import libero/scanner
@@ -125,7 +128,7 @@ fn generate_main(
       }
     })
   use _ <- result.try(
-    codegen.write_main(
+    codegen_server.write_main(
       app_name: toml_cfg.name,
       port: toml_cfg.port,
       server_generated: project_path <> "/" <> toml_cfg.server_generated_dir,
@@ -182,7 +185,7 @@ fn run_client_codegen(
 
   // Server dispatch
   use _ <- result.try(
-    codegen.write_endpoint_dispatch(
+    codegen_dispatch.write_endpoint_dispatch(
       endpoints:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
@@ -197,7 +200,7 @@ fn run_client_codegen(
 
   // Client stubs
   use _ <- result.try(
-    codegen.write_endpoint_client_stubs(
+    codegen_stubs.write_endpoint_client_stubs(
       endpoints:,
       client_generated: config.client_generated,
       wire_module_tag:,
@@ -210,7 +213,7 @@ fn run_client_codegen(
 
   // WebSocket handler
   use _ <- result.try(
-    codegen.write_websocket(
+    codegen_server.write_websocket(
       server_generated: config.server_generated,
       context_module: toml_cfg.context_module,
     )
@@ -222,7 +225,7 @@ fn run_client_codegen(
 
   // Atom registration (server-side)
   use _ <- result.try(
-    codegen.write_atoms(config:, discovered:)
+    codegen_server.write_atoms(config:, discovered:)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_atoms failed"
@@ -231,28 +234,32 @@ fn run_client_codegen(
 
   // Client-side
   use _ <- result.try(
-    codegen.write_config(config:)
+    codegen_stubs.write_config(config:)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_config failed"
     }),
   )
   use _ <- result.try(
-    codegen.write_decoders_gleam(config:)
+    codegen_decoders.write_decoders_gleam(config:)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_decoders_gleam failed"
     }),
   )
   use _ <- result.try(
-    codegen.write_decoders_ffi(config:, discovered:, endpoints: endpoints)
+    codegen_decoders.write_decoders_ffi(
+      config:,
+      discovered:,
+      endpoints: endpoints,
+    )
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_decoders_ffi failed"
     }),
   )
   use _ <- result.try(
-    codegen.write_ssr_flags(client_generated: config.client_generated)
+    codegen_stubs.write_ssr_flags(client_generated: config.client_generated)
     |> result.map_error(fn(err) {
       gen_error.print_error(err)
       "write_ssr_flags failed"

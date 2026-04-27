@@ -1,5 +1,5 @@
 import gleam/string
-import libero/codegen
+import libero/codegen_decoders
 import libero/field_type
 import libero/walker
 
@@ -101,7 +101,7 @@ fn sample_notification_type() -> List(walker.DiscoveredType) {
 }
 
 pub fn decoder_ffi_emits_enum_decoder_test() {
-  let js = codegen.emit_typed_decoders(sample_status_enum())
+  let js = codegen_decoders.emit_typed_decoders(sample_status_enum())
   let assert True =
     string.contains(js, "export function decode_shared_line_item_status(term)")
   let assert True =
@@ -110,18 +110,18 @@ pub fn decoder_ffi_emits_enum_decoder_test() {
 }
 
 pub fn enum_decoder_checks_atom_strings_test() {
-  let js = codegen.emit_typed_decoders(sample_status_enum())
+  let js = codegen_decoders.emit_typed_decoders(sample_status_enum())
   let assert True = string.contains(js, "term === \"pending\"")
   let assert True = string.contains(js, "term === \"paid\"")
 }
 
 pub fn enum_decoder_throws_on_unknown_test() {
-  let js = codegen.emit_typed_decoders(sample_status_enum())
+  let js = codegen_decoders.emit_typed_decoders(sample_status_enum())
   let assert True = string.contains(js, "throw new DecodeError")
 }
 
 pub fn record_decoder_calls_primitive_decoders_test() {
-  let js = codegen.emit_typed_decoders(sample_record_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_record_type())
   let assert True =
     string.contains(js, "export function decode_shared_item_item(term)")
   let assert True = string.contains(js, "decode_string(term[1])")
@@ -130,23 +130,23 @@ pub fn record_decoder_calls_primitive_decoders_test() {
 }
 
 pub fn record_decoder_constructs_correct_variant_test() {
-  let js = codegen.emit_typed_decoders(sample_record_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_record_type())
   let assert True = string.contains(js, "return new _m_shared_item.Item(")
 }
 
 pub fn ensure_decoders_is_always_exported_test() {
-  let js = codegen.emit_typed_decoders(sample_notification_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_notification_type())
   let assert True = string.contains(js, "export function ensure_decoders()")
 }
 
 pub fn type_decoders_generated_for_tagged_union_test() {
-  let js = codegen.emit_typed_decoders(sample_notification_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_notification_type())
   let assert True =
     string.contains(js, "decode_shared_notification_notification")
 }
 
 pub fn tagged_union_dispatches_all_four_variants_test() {
-  let js = codegen.emit_typed_decoders(sample_notification_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_notification_type())
   let assert True =
     string.contains(js, "return new _m_shared_notification.ItemsLoaded(")
   let assert True =
@@ -158,13 +158,13 @@ pub fn tagged_union_dispatches_all_four_variants_test() {
 }
 
 pub fn tagged_union_uses_list_decoder_for_list_field_test() {
-  let js = codegen.emit_typed_decoders(sample_notification_type())
+  let js = codegen_decoders.emit_typed_decoders(sample_notification_type())
   let assert True = string.contains(js, "decode_list_of(")
   let assert True = string.contains(js, "decode_shared_item_item(t0)")
 }
 
 pub fn ensure_decoders_emitted_for_simple_enum_test() {
-  let js = codegen.emit_typed_decoders(sample_status_enum())
+  let js = codegen_decoders.emit_typed_decoders(sample_status_enum())
   let assert True = string.contains(js, "export function ensure_decoders()")
 }
 
@@ -190,7 +190,7 @@ pub fn result_field_uses_result_decoder_test() {
       ],
     ),
   ]
-  let js = codegen.emit_typed_decoders(types)
+  let js = codegen_decoders.emit_typed_decoders(types)
   let assert True = string.contains(js, "decode_result_of(")
   // ok decoder uses t1, err decoder uses t2 (unique param names)
   let assert True = string.contains(js, "decode_string(t1)")
@@ -214,6 +214,6 @@ pub fn option_field_uses_option_decoder_test() {
       ],
     ),
   ]
-  let js = codegen.emit_typed_decoders(types)
+  let js = codegen_decoders.emit_typed_decoders(types)
   let assert True = string.contains(js, "decode_option_of(")
 }

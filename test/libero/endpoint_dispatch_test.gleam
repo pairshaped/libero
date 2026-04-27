@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/string
-import libero/codegen
+import libero/codegen_dispatch
+import libero/codegen_stubs
 import libero/field_type
 import libero/scanner
 import simplifile
@@ -35,7 +36,7 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
   ]
   let output_dir = "build/.test_endpoint_dispatch"
   let assert Ok(Nil) =
-    codegen.write_endpoint_dispatch(
+    codegen_dispatch.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "checklist@generated@rpc_atoms",
@@ -92,7 +93,7 @@ pub fn endpoint_dispatch_is_server_only_test() {
   ]
   let output_dir = "build/.test_endpoint_dispatch_server_only"
   let assert Ok(Nil) =
-    codegen.write_endpoint_dispatch(
+    codegen_dispatch.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "checklist@generated@rpc_atoms",
@@ -142,7 +143,7 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
   ]
   let output_dir = "build/.test_endpoint_dispatch_imports"
   let assert Ok(Nil) =
-    codegen.write_endpoint_dispatch(
+    codegen_dispatch.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
@@ -183,7 +184,7 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
   ]
   let output_dir = "build/.test_endpoint_dispatch_stdlib_imports"
   let assert Ok(Nil) =
-    codegen.write_endpoint_dispatch(
+    codegen_dispatch.write_endpoint_dispatch(
       endpoints: endpoints,
       server_generated: output_dir,
       atoms_module: "app@generated@rpc_atoms",
@@ -222,7 +223,7 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
   ]
   let output_dir = "build/.test_endpoint_stubs_imports"
   let assert Ok(Nil) =
-    codegen.write_endpoint_client_stubs(
+    codegen_stubs.write_endpoint_client_stubs(
       endpoints: endpoints,
       client_generated: output_dir,
       wire_module_tag: "shared/types",
@@ -256,7 +257,7 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
   ]
   let output_dir = "build/.test_endpoint_stubs_stdlib_imports"
   let assert Ok(Nil) =
-    codegen.write_endpoint_client_stubs(
+    codegen_stubs.write_endpoint_client_stubs(
       endpoints: endpoints,
       client_generated: output_dir,
       wire_module_tag: "shared/types",

@@ -1,7 +1,7 @@
 //// Tests for generated rpc_config.gleam content.
 
 import gleam/string
-import libero/codegen
+import libero/codegen_stubs
 import libero/config.{type Config, Config}
 import simplifile
 
@@ -25,7 +25,7 @@ pub fn write_config_emits_resolver_test() {
   let cfg = make_config("/ws/admin", output_dir)
   let assert Ok(Nil) =
     simplifile.create_directory_all(output_dir <> "/src/generated")
-  let assert Ok(Nil) = codegen.write_config(config: cfg)
+  let assert Ok(Nil) = codegen_stubs.write_config(config: cfg)
 
   let assert Ok(content) =
     simplifile.read(output_dir <> "/src/generated/rpc_config.gleam")
