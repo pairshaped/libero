@@ -120,9 +120,24 @@ fn is_stdlib_reference(
     True, Some("bit_array") -> name == "BitArray"
     // Qualified with anything else: user type.
     True, Some(_) -> False
-    // Unqualified primitive name: stdlib unless shadowed by a user import.
-    True, None -> !dict.has_key(resolver.unqualified, name)
+    // Unqualified primitive name: stdlib unless shadowed by a user import
+    // from a non-stdlib module. `import gleam/option.{type Option}` is the
+    // canonical Gleam idiom and must still resolve to the stdlib type.
+    True, None ->
+      case dict.get(resolver.unqualified, name) {
+        Error(Nil) -> True
+        Ok(module_path) -> is_stdlib_module_path(module_path)
+      }
   }
+}
+
+/// True when a module path is a Gleam stdlib (or stdlib-extension) module,
+/// e.g. `gleam`, `gleam/option`, `gleam/dict`. Used to decide whether an
+/// unqualified primitive type name imported from that module is still the
+/// stdlib type (e.g. `import gleam/option.{type Option}`) versus a user
+/// type that happens to share a name with a stdlib primitive.
+fn is_stdlib_module_path(path: String) -> Bool {
+  path == "gleam" || string.starts_with(path, "gleam/")
 }
 
 /// Walk all exported custom types from a list of shared source files.
