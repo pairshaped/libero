@@ -5,7 +5,6 @@
 import gleam/dict
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import libero/config.{type Config, Config, WsPathOnly}
@@ -181,11 +180,8 @@ pub fn to_codegen_config(
   let decoders_gleam_output = client_generated <> "/rpc_decoders.gleam"
   let decoders_prelude_import_path =
     register_relpath_prefix <> "libero/libero/decoders_prelude.mjs"
-  let client_root = "../clients/" <> client.name
   Ok(Config(
     ws_mode: WsPathOnly(path: ws_path),
-    namespace: None,
-    client_root: client_root,
     atoms_output: atoms_output,
     atoms_module: atoms_module,
     config_output: config_output,
@@ -193,8 +189,6 @@ pub fn to_codegen_config(
     decoders_ffi_output: decoders_ffi_output,
     decoders_gleam_output: decoders_gleam_output,
     decoders_prelude_import_path: decoders_prelude_import_path,
-    shared_src: Some(toml_cfg.shared_src_dir),
-    server_src: Some(toml_cfg.server_src_dir),
     server_generated: server_generated,
     client_generated: client_generated,
   ))

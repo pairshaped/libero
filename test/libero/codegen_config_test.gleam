@@ -1,21 +1,28 @@
 //// Tests for generated config file content (WsFullUrl vs WsPathOnly).
 
-import gleam/option.{None}
 import gleam/string
 import libero/codegen
-import libero/config.{WsFullUrl, WsPathOnly}
+import libero/config.{type Config, Config, WsFullUrl, WsPathOnly}
 import simplifile
+
+fn make_config(ws_mode: config.WsMode, output_dir: String) -> Config {
+  Config(
+    ws_mode: ws_mode,
+    atoms_output: output_dir <> "/atoms.erl",
+    atoms_module: "test@generated@rpc_atoms",
+    config_output: output_dir <> "/src/generated/rpc_config.gleam",
+    register_relpath_prefix: "../../",
+    decoders_ffi_output: output_dir <> "/src/generated/rpc_decoders_ffi.mjs",
+    decoders_gleam_output: output_dir <> "/src/generated/rpc_decoders.gleam",
+    decoders_prelude_import_path: "../../libero/libero/decoders_prelude.mjs",
+    server_generated: output_dir <> "/src/generated",
+    client_generated: output_dir <> "/src/generated",
+  )
+}
 
 pub fn write_config_full_url_test() {
   let output_dir = "build/.test_config_full_url"
-  let assert Ok(cfg) =
-    config.build_config(
-      ws_mode: WsFullUrl(url: "wss://example.com/ws"),
-      namespace: None,
-      client_root: output_dir,
-      shared_root: Error(Nil),
-      server_root: Error(Nil),
-    )
+  let cfg = make_config(WsFullUrl(url: "wss://example.com/ws"), output_dir)
   let assert Ok(Nil) =
     simplifile.create_directory_all(output_dir <> "/src/generated")
   let assert Ok(Nil) = codegen.write_config(config: cfg)
@@ -37,14 +44,7 @@ pub fn write_config_full_url_test() {
 
 pub fn write_config_path_only_test() {
   let output_dir = "build/.test_config_path_only"
-  let assert Ok(cfg) =
-    config.build_config(
-      ws_mode: WsPathOnly(path: "/ws/admin"),
-      namespace: None,
-      client_root: output_dir,
-      shared_root: Error(Nil),
-      server_root: Error(Nil),
-    )
+  let cfg = make_config(WsPathOnly(path: "/ws/admin"), output_dir)
   let assert Ok(Nil) =
     simplifile.create_directory_all(output_dir <> "/src/generated")
   let assert Ok(Nil) = codegen.write_config(config: cfg)

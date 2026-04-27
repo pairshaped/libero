@@ -1,7 +1,6 @@
 //// Tests for the TOML config parser.
 
 import gleam/list
-import gleam/option.{Some}
 import gleam/string
 import libero/config.{WsPathOnly}
 import libero/toml_config.{type ClientConfig, ClientConfig, TomlConfig}
@@ -92,7 +91,6 @@ pub fn to_codegen_config_javascript_client_test() {
     toml_config.to_codegen_config(toml_cfg, client: "web", ws_path: "/ws")
   let assert "../clients/web/src/generated" = cfg.client_generated
   let assert "src/generated" = cfg.server_generated
-  let assert Some("../shared/src/shared") = cfg.shared_src
   let assert WsPathOnly(path: "/ws") = cfg.ws_mode
 }
 

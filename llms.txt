@@ -57,11 +57,11 @@ bin/dev
 
 From the project root:
 
-- `bin/gen` — regenerate libero codegen (dispatch, client stubs)
-- `bin/build` — build the JavaScript client bundle
-- `bin/server` — start the server
-- `bin/dev` — convenience wrapper that runs gen, build, server in order
-- `bin/test` — run server tests
+- `bin/gen`: regenerate libero codegen (dispatch, client stubs)
+- `bin/build`: build the JavaScript client bundle
+- `bin/server`: start the server
+- `bin/dev`: convenience wrapper that runs gen, build, server in order
+- `bin/test`: run server tests
 
 `bin/dev` runs in order: `cd server && gleam run -m libero` (codegen), then `cd clients/web && gleam build --target javascript`, then `cd server && gleam run`.
 
@@ -104,13 +104,16 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 ```gleam
 // server/src/handler.gleam
 
-import server/handler_context.{type HandlerContext}
-import shared/types.{type Item, type ItemParams, type ItemError, TitleRequired}
+import gleam/list
+import handler_context.{type HandlerContext, HandlerContext}
+import shared/types.{
+  type Item, type ItemError, type ItemParams, Item, TitleRequired,
+}
 
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(ets_store.all()), handler_ctx)
+  #(Ok(handler_ctx.items), handler_ctx)
 }
 
 pub fn create_item(
@@ -119,7 +122,15 @@ pub fn create_item(
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
     "" -> #(Error(TitleRequired), handler_ctx)
-    title -> #(Ok(insert(title)), handler_ctx)
+    title -> {
+      let item = Item(id: handler_ctx.next_id, title:, completed: False)
+      let new_state =
+        HandlerContext(
+          items: list.append(handler_ctx.items, [item]),
+          next_id: handler_ctx.next_id + 1,
+        )
+      #(Ok(item), new_state)
+    }
   }
 }
 
@@ -198,7 +209,7 @@ pub fn init(_flags) -> #(Model, Effect(Msg)) {
 }
 ```
 
-Key patterns:
+Common patterns:
 - Generated stubs return a Lustre `Effect`. Wire encoding handled internally.
 - Each stub takes an `on_response` callback that wraps the decoded `RemoteData` in your `Msg` type.
 - `RemoteData(value, error)` carries typed domain errors: `Failure(NotFound)` not `Failure("string")`.
@@ -210,8 +221,8 @@ Key patterns:
 
 The WebSocket auto-reconnects with exponential backoff (500ms → 30s, full jitter) on unexpected disconnects. Hook in via `libero/rpc`:
 
-- `rpc.on_connect(handler:)` — fires on initial connect AND every successful reconnect. Use it to load (or reload) state without separate code paths for the first connection.
-- `rpc.on_disconnect(handler:)` — fires when the connection drops; the reason string is human-readable and intended for UX ("offline" indicator, "reconnecting…").
+- `rpc.on_connect(handler:)`: fires on initial connect AND every successful reconnect. Use it to load (or reload) state without separate code paths for the first connection.
+- `rpc.on_disconnect(handler:)`: fires when the connection drops; the reason string is human-readable and intended for UX ("offline" indicator, "reconnecting...").
 
 Pending requests at disconnect time reject with a connection-lost error rather than waiting. Push handlers persist across reconnects.
 
@@ -220,7 +231,9 @@ Pending requests at disconnect time reject with a connection-lost error rather t
 Any BEAM process can call the server over HTTP POST with native ETF:
 
 ```gleam
-let payload = term_to_binary(#("shared/types", GetItems))
+// Envelope: #(module_path, request_id, ClientMsg). The request_id is
+// echoed back in the 4-byte response header so concurrent calls match.
+let payload = term_to_binary(#("rpc", 1, GetItems))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```
@@ -379,7 +392,7 @@ pub type RemoteData(value, error) {
 
 Helpers: `from_response`, `map`, `map_error`, `unwrap`, `to_option`, `is_success`, `is_loading`.
 
-## Key Dependencies
+## Dependencies
 
 - `lustre` -- Gleam UI framework (client, compiles to JS)
 - `mist` -- HTTP/WebSocket server (server, runs on BEAM)

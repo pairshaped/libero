@@ -96,6 +96,35 @@ fn is_primitive_type(name: String) -> Bool {
   list.contains(registry_primitives, name)
 }
 
+/// True when a NamedType reference points to a Gleam stdlib type, not a
+/// user-defined type that happens to share the name. Without this check,
+/// `pub type Result` defined in shared/ would be silently dropped from
+/// codegen because its name matches `registry_primitives`.
+///
+/// Distinguishes by module qualifier and by whether the user imported a
+/// same-named type. A bare `Result` with no shadowing import is stdlib;
+/// `import shared/myresult.{type Result}` makes bare `Result` user-defined.
+fn is_stdlib_reference(
+  name name: String,
+  module module: option.Option(String),
+  resolver resolver: TypeResolver,
+) -> Bool {
+  case is_primitive_type(name), module {
+    False, _ -> False
+    True, Some("gleam") -> True
+    True, Some("option") -> name == "Option"
+    True, Some("result") -> name == "Result"
+    True, Some("dict") -> name == "Dict"
+    True, Some("list") -> name == "List"
+    True, Some("bool") -> name == "Bool"
+    True, Some("bit_array") -> name == "BitArray"
+    // Qualified with anything else: user type.
+    True, Some(_) -> False
+    // Unqualified primitive name: stdlib unless shadowed by a user import.
+    True, None -> !dict.has_key(resolver.unqualified, name)
+  }
+}
+
 /// Walk all exported custom types from a list of shared source files.
 /// Seeds from every public type in shared/, since the codegen pipeline
 /// needs decoders for any type that may appear in a handler's params or
@@ -118,52 +147,58 @@ pub fn walk_shared_types(
       dict.insert(acc, module_path, file_path)
     })
 
-  // Seed from all exported custom types in all shared files
-  let seed =
-    list.fold(files, set.new(), fn(acc, file_path) {
+  // Seed from all exported custom types in all shared files. Surface
+  // any read/parse errors instead of silently dropping them — a file
+  // that fails to parse here would otherwise contribute zero seed types
+  // with no warning, then later show up as TypeNotFound.
+  let #(seed_set, errors_rev) =
+    list.fold(files, #(set.new(), []), fn(acc, file_path) {
+      let #(set_acc, errs_acc) = acc
       let module_path = derive_shared_module_path(file_path)
-      let pairs = read_public_type_pairs(module_path, file_path)
-      list.fold(pairs, acc, set.insert)
+      case read_public_type_pairs(module_path, file_path) {
+        Ok(pairs) -> #(list.fold(pairs, set_acc, set.insert), errs_acc)
+        Error(err) -> #(set_acc, [err, ..errs_acc])
+      }
     })
-    |> set.to_list
-
-  do_walk(
-    WalkerState(
-      queue: seed,
-      visited: set.new(),
-      discovered: [],
-      module_files: module_files,
-      parsed_cache: dict.new(),
-      errors: [],
-    ),
-  )
+  case errors_rev {
+    [] ->
+      do_walk(
+        WalkerState(
+          queue: set.to_list(seed_set),
+          visited: set.new(),
+          discovered: [],
+          module_files: module_files,
+          parsed_cache: dict.new(),
+          errors: [],
+        ),
+      )
+    _ -> Error(list.reverse(errors_rev))
+  }
 }
 
 fn read_public_type_pairs(
   module_path: String,
   file_path: String,
-) -> List(#(String, String)) {
-  let pairs = {
-    use content <- result.try(result.replace_error(
-      simplifile.read(file_path),
-      Nil,
-    ))
-    use parsed <- result.try(result.replace_error(glance.module(content), Nil))
-    Ok(
-      list.fold(parsed.custom_types, [], fn(acc, ct) {
-        let glance.Definition(_, t) = ct
-        case t.publicity == glance.Public {
-          True -> [#(module_path, t.name), ..acc]
-          False -> acc
-        }
-      }),
-    )
-  }
-  result.unwrap(pairs, or: [])
+) -> Result(List(#(String, String)), GenError) {
+  use content <- result.try(
+    simplifile.read(file_path)
+    |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
+  )
+  use parsed <- result.map(
+    glance.module(content)
+    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
+  )
+  list.fold(parsed.custom_types, [], fn(acc, ct) {
+    let glance.Definition(_, t) = ct
+    case t.publicity == glance.Public {
+      True -> [#(module_path, t.name), ..acc]
+      False -> acc
+    }
+  })
 }
 
 /// Derive a module path from a shared file path.
-/// e.g. "examples/todos/shared/src/shared/types.gleam" -> "shared/types"
+/// e.g. "examples/checklist/shared/src/shared/items.gleam" -> "shared/items"
 fn derive_shared_module_path(file_path: String) -> String {
   case string.split_once(file_path, "shared/src/") {
     Ok(#(_, after)) -> string.replace(after, ".gleam", "")
@@ -453,8 +488,13 @@ fn collect_type_refs(
         list.flat_map(parameters, fn(p) {
           collect_type_refs(t: p, resolver:, current_module:)
         })
-      // Skip primitives/builtins
-      use <- bool.guard(when: is_primitive_type(name), return: param_refs)
+      // Skip stdlib references. A primitive name alone is not enough:
+      // a user-defined type named `Result` imported into the current
+      // module should be walked so we emit a decoder for it.
+      use <- bool.guard(
+        when: is_stdlib_reference(name:, module:, resolver:),
+        return: param_refs,
+      )
       // Resolve the module path
       let module_path =
         resolve_type_module(
@@ -506,43 +546,16 @@ fn field_type_of(
     glance.FunctionType(..) -> TypeVar(name: "_fn")
     glance.HoleType(..) -> TypeVar(name: "_")
     glance.NamedType(name:, module:, parameters:, ..) ->
-      case module, name, parameters {
-        // Primitives (unqualified or gleam-qualified)
-        option.None, "Int", [] | option.Some("gleam"), "Int", [] -> IntField
-        option.None, "Float", [] | option.Some("gleam"), "Float", [] ->
-          FloatField
-        option.None, "String", [] | option.Some("gleam"), "String", [] ->
-          StringField
-        option.None, "Bool", [] | option.Some("gleam"), "Bool", [] -> BoolField
-        option.None, "BitArray", [] | option.Some("gleam"), "BitArray", [] ->
-          BitArrayField
-        option.None, "Nil", [] | option.Some("gleam"), "Nil", [] -> NilField
-        // List (unqualified or qualified)
-        option.None, "List", [elem] | option.Some("gleam"), "List", [elem] ->
-          ListOf(field_type_of(t: elem, resolver:, aliases:, current_module:))
-        // Option (unqualified or qualified as option.Option)
-        option.None, "Option", [inner]
-        | option.Some("option"), "Option", [inner]
-        ->
-          OptionOf(field_type_of(t: inner, resolver:, aliases:, current_module:))
-        // Result (unqualified or qualified as result.Result)
-        option.None, "Result", [ok, err]
-        | option.Some("result"), "Result", [ok, err]
-        ->
-          ResultOf(
-            ok: field_type_of(t: ok, resolver:, aliases:, current_module:),
-            err: field_type_of(t: err, resolver:, aliases:, current_module:),
+      case is_stdlib_reference(name:, module:, resolver:) {
+        True ->
+          stdlib_field_type(
+            name:,
+            parameters:,
+            resolver:,
+            aliases:,
+            current_module:,
           )
-        // Dict (unqualified or qualified as dict.Dict)
-        option.None, "Dict", [key, value]
-        | option.Some("dict"), "Dict", [key, value]
-        ->
-          DictOf(
-            key: field_type_of(t: key, resolver:, aliases:, current_module:),
-            value: field_type_of(t: value, resolver:, aliases:, current_module:),
-          )
-        // Everything else: check for local type alias, then resolve to UserType
-        _, _, _ ->
+        False ->
           resolve_field_type(
             name:,
             module:,
@@ -552,6 +565,42 @@ fn field_type_of(
             current_module:,
           )
       }
+  }
+}
+
+/// Map a stdlib NamedType reference to its FieldType. Caller must have
+/// already verified via `is_stdlib_reference` that this isn't a
+/// user-defined type shadowing a primitive name.
+fn stdlib_field_type(
+  name name: String,
+  parameters parameters: List(glance.Type),
+  resolver resolver: TypeResolver,
+  aliases aliases: Dict(String, glance.Type),
+  current_module current_module: String,
+) -> FieldType {
+  let recurse = fn(t) {
+    field_type_of(t:, resolver:, aliases:, current_module:)
+  }
+  case name, parameters {
+    "Int", [] -> IntField
+    "Float", [] -> FloatField
+    "String", [] -> StringField
+    "Bool", [] -> BoolField
+    "BitArray", [] -> BitArrayField
+    "Nil", [] -> NilField
+    "List", [elem] -> ListOf(recurse(elem))
+    "Option", [inner] -> OptionOf(recurse(inner))
+    "Result", [ok, err] -> ResultOf(ok: recurse(ok), err: recurse(err))
+    "Dict", [key, value] -> DictOf(key: recurse(key), value: recurse(value))
+    // Arity mismatch (e.g. bare `Result` used as a type name with zero
+    // args) — fall through to UserType so codegen produces a decoder
+    // reference rather than a malformed primitive.
+    _, _ ->
+      UserType(
+        module_path: current_module,
+        type_name: name,
+        args: list.map(parameters, recurse),
+      )
   }
 }
 

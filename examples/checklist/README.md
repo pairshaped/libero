@@ -1,6 +1,6 @@
-# default
+# checklist
 
-Minimal libero starter: SSR-hydrated SPA with one route, one handler, and one button.
+Companion app for the [Getting Started guide](../../docs/getting_started/step_1.md). A small SSR-hydrated checklist with create, toggle, and delete handlers, backed by an in-memory `HandlerContext`.
 
 ## Run
 
@@ -8,7 +8,7 @@ Minimal libero starter: SSR-hydrated SPA with one route, one handler, and one bu
 bin/dev
 ```
 
-Open http://localhost:8080. The page renders server-side, hydrates on the client, and the Ping button calls the `ping` handler over RPC.
+Open http://localhost:8080. The page renders server-side, hydrates on the client, and each button calls a handler over RPC.
 
 ## Tests
 
@@ -19,27 +19,24 @@ bin/test
 ## Layout
 
 ```
-default/
+checklist/
 ├── server/         backend (Erlang), runs the libero RPC + SSR server
 ├── shared/         cross-target types, views, and routing
 ├── clients/web/    Lustre SPA (JavaScript)
 └── bin/            dev and test entry points
 ```
 
-## Adding a route
+## Handlers
 
-Edit `shared/src/shared/router.gleam` to add a `Route` variant and update `parse_route` and `route_to_path`. Then update `shared/src/shared/views.gleam` to handle the new variant in `view`. The server picks it up via `ssr.handle_request` automatically.
+`server/src/handler.gleam` defines four endpoints, each returning `#(Result(_, ItemError), HandlerContext)`:
 
-## Adding a handler
+- `get_items` lists the current items
+- `create_item(params: ItemParams)` appends a new item, validating `TitleRequired`
+- `toggle_item(id: Int)` flips `completed`
+- `delete_item(id: Int)` removes the item by id
 
-Add a function in `server/src/handler.gleam`. It must:
-- Be `pub`
-- Take `HandlerContext` as its last parameter (named `state`)
-- Return `#(Result(value, error), HandlerContext)`
-- Use only types from `shared/` or builtins
+State lives on the `HandlerContext` record and is threaded through each call. Swap it out for a database-backed context per [Step 2 of the Getting Started guide](../../docs/getting_started/step_2.md).
 
-Then run `bin/dev` (or `cd server && gleam run -m libero`) to regenerate dispatch + client stubs.
+## Regenerating
 
-## Adding a client
-
-Create `clients/<name>/` with a gleam.toml that declares the right target and lists shared + libero as deps. Add a `[tools.libero.clients.<name>]` block to `server/gleam.toml`.
+After editing handler signatures or shared types, run `bin/dev` (or `cd server && gleam run -m libero`) to regenerate dispatch and client stubs.

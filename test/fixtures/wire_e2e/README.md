@@ -1,6 +1,6 @@
 ## Wire E2E fixture
 
-A self-contained Gleam project that mirrors the layout of `examples/todos`. Used by `test/js/wire_e2e_setup.sh` to produce compiled artifacts for E2E wire tests.
+A self-contained Gleam project that mirrors the layout of `examples/checklist`. Used by `test/js/wire_e2e_setup.sh` to produce compiled artifacts for E2E wire tests.
 
 ### Directory layout
 

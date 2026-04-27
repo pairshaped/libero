@@ -5,9 +5,11 @@ licences = ["MIT"]
 repository = { type = "github", user = "pairshaped", repo = "libero" }
 
 # No target specified - cross-target package.
-# Erlang-only modules: libero/trace, libero (the generator main)
+# Erlang-only modules: libero/trace, libero (the generator main),
+#   libero/push, libero/format
 # JS-only modules: libero/rpc
-# Cross-target modules: libero/error, libero/wire
+# Cross-target modules: libero/error, libero/wire, libero/ssr,
+#   libero/field_type, libero/remote_data, libero/ws_logger, libero/gen_error
 #
 # Per-target @external specs keep each module usable only on its intended
 # target. The package as a whole can be depended on from both Erlang and
@@ -32,7 +34,7 @@ gleam_erlang = "~> 1.0"
 
 [documentation]
 pages = [
-  { title = "Getting Started", path = "guides/getting-started.html", source = "./docs/getting_started/step_1.md" },
+  { title = "Getting Started", path = "guides/getting-started-step-1.html", source = "./docs/getting_started/step_1.md" },
   { title = "Getting Started, Step 2: SQLite", path = "guides/getting-started-step-2.html", source = "./docs/getting_started/step_2.md" },
 ]
 

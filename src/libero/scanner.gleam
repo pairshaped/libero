@@ -14,7 +14,9 @@ import gleam/result
 import gleam/set
 import gleam/string
 import libero/field_type
-import libero/gen_error.{type GenError, CannotReadDir}
+import libero/gen_error.{
+  type GenError, CannotReadDir, CannotReadFile, ParseFailed,
+}
 import simplifile
 
 // ---------- Types ----------
@@ -110,7 +112,7 @@ fn visit_file(
 
 /// Derive the Gleam module path from a file path by finding `/src/` and
 /// taking everything after it, then stripping the `.gleam` extension.
-/// E.g. `examples/todos/shared/src/shared/todos.gleam` -> `shared/todos`.
+/// E.g. `examples/checklist/shared/src/shared/items.gleam` -> `shared/items`.
 pub fn derive_module_path(file_path file_path: String) -> String {
   let without_extension = case string.ends_with(file_path, ".gleam") {
     True ->
@@ -144,83 +146,99 @@ pub fn scan_handler_endpoints(
   server_src server_src: String,
   shared_src shared_src: String,
 ) -> Result(List(HandlerEndpoint), List(GenError)) {
-  // Build a set of shared type names from the shared source directory
-  let shared_types = scan_shared_type_names(shared_src)
-  let files =
+  // Build a set of shared type names from the shared source directory.
+  use shared_types <- result.try(scan_shared_type_names(shared_src))
+  use files <- result.try(
     walk_directory(path: server_src)
-    |> result.map_error(fn(cause) { [cause] })
-  use files <- result.try(files)
-  let endpoints =
-    list.flat_map(files, fn(file_path) {
-      parse_endpoints(file_path:, shared_types:)
+    |> result.map_error(fn(cause) { [cause] }),
+  )
+  // Run parse_endpoints across every handler file, collecting both the
+  // endpoints and any read/parse errors encountered. Surface failures
+  // instead of silently dropping them, since a file that fails to parse
+  // would otherwise produce zero endpoints with no warning.
+  let #(endpoints_rev, errors_rev) =
+    list.fold(files, #([], []), fn(acc, file_path) {
+      let #(eps_acc, errs_acc) = acc
+      case parse_endpoints(file_path:, shared_types:) {
+        Ok(eps) -> #(list.append(list.reverse(eps), eps_acc), errs_acc)
+        Error(err) -> #(eps_acc, [err, ..errs_acc])
+      }
     })
-  Ok(endpoints)
+  case errors_rev {
+    [] -> Ok(list.reverse(endpoints_rev))
+    _ -> Error(list.reverse(errors_rev))
+  }
 }
 
 /// Scan shared source directory and collect all exported type names.
-fn scan_shared_type_names(shared_src: String) -> set.Set(String) {
-  let files = result.unwrap(walk_directory(path: shared_src), or: [])
-  list.fold(files, set.new(), fn(acc, file_path) {
-    let type_names = read_public_type_names(file_path)
-    list.fold(type_names, acc, set.insert)
-  })
+fn scan_shared_type_names(
+  shared_src: String,
+) -> Result(set.Set(String), List(GenError)) {
+  use files <- result.try(
+    walk_directory(path: shared_src)
+    |> result.map_error(fn(cause) { [cause] }),
+  )
+  let #(names_set, errors_rev) =
+    list.fold(files, #(set.new(), []), fn(acc, file_path) {
+      let #(set_acc, errs_acc) = acc
+      case read_public_type_names(file_path) {
+        Ok(names) -> #(list.fold(names, set_acc, set.insert), errs_acc)
+        Error(err) -> #(set_acc, [err, ..errs_acc])
+      }
+    })
+  case errors_rev {
+    [] -> Ok(names_set)
+    _ -> Error(list.reverse(errors_rev))
+  }
 }
 
-fn read_public_type_names(file_path: String) -> List(String) {
-  let names = {
-    use content <- result.try(result.replace_error(
-      simplifile.read(file_path),
-      Nil,
-    ))
-    use parsed <- result.try(result.replace_error(glance.module(content), Nil))
-    Ok(
-      list.fold(parsed.custom_types, [], fn(acc, ct) {
-        let glance.Definition(_, t) = ct
-        case t.publicity == glance.Public {
-          True -> [t.name, ..acc]
-          False -> acc
-        }
-      }),
-    )
-  }
-  result.unwrap(names, or: [])
+fn read_public_type_names(file_path: String) -> Result(List(String), GenError) {
+  use content <- result.try(
+    simplifile.read(file_path)
+    |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
+  )
+  use parsed <- result.map(
+    glance.module(content)
+    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
+  )
+  list.fold(parsed.custom_types, [], fn(acc, ct) {
+    let glance.Definition(_, t) = ct
+    case t.publicity == glance.Public {
+      True -> [t.name, ..acc]
+      False -> acc
+    }
+  })
 }
 
 fn parse_endpoints(
   file_path file_path: String,
   shared_types shared_types: set.Set(String),
-) -> List(HandlerEndpoint) {
-  let result = {
-    use content <- result.try(
-      simplifile.read(file_path) |> result.replace_error(Nil),
-    )
-    use parsed <- result.try(
-      glance.module(content) |> result.replace_error(Nil),
-    )
-    let module_path = derive_module_path(file_path: file_path)
-    let type_imports = build_type_import_map(parsed.imports)
-    let alias_map = build_alias_resolution_map(parsed.imports)
-    Ok(
-      list.filter_map(parsed.functions, fn(def) {
-        let glance.Definition(_, func) = def
-        case func.publicity == glance.Public {
-          False -> Error(Nil)
-          True ->
-            parse_single_endpoint(
-              func: func,
-              module_path: module_path,
-              type_imports: type_imports,
-              alias_map: alias_map,
-              shared_types: shared_types,
-            )
-        }
-      }),
-    )
-  }
-  case result {
-    Ok(endpoints) -> endpoints
-    Error(Nil) -> []
-  }
+) -> Result(List(HandlerEndpoint), GenError) {
+  use content <- result.try(
+    simplifile.read(file_path)
+    |> result.map_error(fn(cause) { CannotReadFile(path: file_path, cause:) }),
+  )
+  use parsed <- result.map(
+    glance.module(content)
+    |> result.map_error(fn(cause) { ParseFailed(path: file_path, cause:) }),
+  )
+  let module_path = derive_module_path(file_path: file_path)
+  let type_imports = build_type_import_map(parsed.imports)
+  let alias_map = build_alias_resolution_map(parsed.imports)
+  list.filter_map(parsed.functions, fn(def) {
+    let glance.Definition(_, func) = def
+    case func.publicity == glance.Public {
+      False -> Error(Nil)
+      True ->
+        parse_single_endpoint(
+          func: func,
+          module_path: module_path,
+          type_imports: type_imports,
+          alias_map: alias_map,
+          shared_types: shared_types,
+        )
+    }
+  })
 }
 
 /// Build a map from unqualified type names to the FULL module path of

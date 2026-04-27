@@ -62,13 +62,16 @@ Your handler function signatures ARE the API definition. Libero's scanner detect
 ```gleam
 // server/src/handler.gleam
 
-import server/handler_context.{type HandlerContext}
-import shared/types.{type Item, type ItemParams, type ItemError}
+import gleam/list
+import handler_context.{type HandlerContext, HandlerContext}
+import shared/types.{
+  type Item, type ItemError, type ItemParams, Item, TitleRequired,
+}
 
 pub fn get_items(
   handler_ctx handler_ctx: HandlerContext,
 ) -> #(Result(List(Item), ItemError), HandlerContext) {
-  #(Ok(ets_store.all()), handler_ctx)
+  #(Ok(handler_ctx.items), handler_ctx)
 }
 
 pub fn create_item(
@@ -77,7 +80,15 @@ pub fn create_item(
 ) -> #(Result(Item, ItemError), HandlerContext) {
   case params.title {
     "" -> #(Error(TitleRequired), handler_ctx)
-    title -> #(Ok(insert(title)), handler_ctx)
+    title -> {
+      let item = Item(id: handler_ctx.next_id, title:, completed: False)
+      let new_state =
+        HandlerContext(
+          items: list.append(handler_ctx.items, [item]),
+          next_id: handler_ctx.next_id + 1,
+        )
+      #(Ok(item), new_state)
+    }
   }
 }
 ```
@@ -235,10 +246,14 @@ Use `bin/dev` after changing handler signatures or shared types. Use `bin/server
 - Boots Mist with WebSocket, HTTP RPC, and static file serving
 - Serves HTML shell at `/` that loads the first JS client
 
+**Atom registration (`server/src/<app_name>@generated@rpc_atoms.erl`):**
+- Pre-registers every constructor atom so ETF decoding is safe before the first message arrives
+
 **Per client (`clients/<name>/src/generated/`):**
-- Typed stubs per handler function (e.g. `rpc.get_items`, `rpc.create_item`)
-- WebSocket config and typed decoder registration
-- SSR flag reader (for hydration)
+- `messages.gleam` -- typed stubs per handler function (e.g. `rpc.get_items`, `rpc.create_item`)
+- `rpc_config.gleam` (+ `rpc_config_ffi.mjs` for path-only mode) -- WebSocket URL resolution
+- `rpc_decoders.gleam` (+ `rpc_decoders_ffi.mjs`) -- typed decoder registration
+- `ssr.gleam` (+ `ssr_ffi.mjs`) -- SSR flag reader for hydration
 
 Generation rules:
 - Starter apps and client `gleam.toml`: generated once, never overwritten
@@ -279,7 +294,9 @@ The wire contract is shared. The UI surface stays per-client.
 Any BEAM process can call the server over HTTP POST without WebSocket or a Libero dependency:
 
 ```gleam
-let payload = term_to_binary(#("shared/types", GetItems))
+// Envelope: #(module_path, request_id, ClientMsg). The request_id is
+// echoed back in the 4-byte response header so concurrent calls match.
+let payload = term_to_binary(#("rpc", 1, GetItems))
 let assert Ok(response) = httpc.request(Post, "http://localhost:8080/rpc", payload)
 let result = binary_to_term(response.body)
 ```

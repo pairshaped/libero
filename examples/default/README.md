@@ -34,7 +34,7 @@ Edit `shared/src/shared/router.gleam` to add a `Route` variant and update `parse
 
 Add a function in `server/src/handler.gleam`. It must:
 - Be `pub`
-- Take `HandlerContext` as its last parameter (named `state`)
+- Take `HandlerContext` as its last parameter (conventionally named `handler_ctx`)
 - Return `#(Result(value, error), HandlerContext)`
 - Use only types from `shared/` or builtins
 

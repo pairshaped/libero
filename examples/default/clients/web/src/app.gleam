@@ -29,7 +29,7 @@ fn init(flags: Dynamic) -> #(Model, Effect(ClientMsg)) {
   let model = case libero_ssr.decode_flags(flags) {
     Ok(m) -> m
     Error(_) ->
-      panic as "failed to decode SSR flags — was ssr.boot_script called on the server?"
+      panic as "failed to decode SSR flags. Was ssr.boot_script called on the server?"
   }
   #(model, modem.init(on_url_change))
 }
