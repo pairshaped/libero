@@ -22,7 +22,6 @@ pub type TomlConfig {
   TomlConfig(
     name: String,
     port: Int,
-    rest: Bool,
     clients: List(ClientConfig),
     /// Directory containing server source (where handler modules live).
     /// Default: "src" (package root).
@@ -110,10 +109,6 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
       ))
   })
 
-  let rest =
-    tom.get_bool(parsed, ["tools", "libero", "server", "rest"])
-    |> result.unwrap(False)
-
   let server_src_dir =
     tom.get_string(parsed, ["tools", "libero", "server", "src_dir"])
     |> result.unwrap("src")
@@ -143,7 +138,6 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   Ok(TomlConfig(
     name: name,
     port: port,
-    rest: rest,
     clients: clients,
     server_src_dir: server_src_dir,
     server_generated_dir: server_generated_dir,

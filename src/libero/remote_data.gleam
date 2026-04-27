@@ -114,15 +114,26 @@ pub fn format_transport_error(err: RpcError) -> String {
 /// supplies a formatter for their domain error type; transport errors
 /// are routed through `format_transport_error`.
 ///
-/// Use this in views to collapse the common `Failure(TransportError(_))` /
-/// `Failure(DomainError(_))` dual arm into one branch:
+/// Use this anywhere two arms differ only by which formatter runs. In
+/// views:
 ///
 /// ```
 /// Failure(outcome) -> render(format_failure(outcome, format_my_error))
 /// ```
 ///
-/// The match becomes exhaustive over `RpcOutcome`, so no `Failure(_)`
-/// catch-all is needed.
+/// In an update reducer that surfaces a flash message:
+///
+/// ```
+/// LoadResult(Failure(outcome)) -> #(
+///   model,
+///   effect.none(),
+///   Some(#(Danger, format_failure(outcome, format_my_error))),
+/// )
+/// ```
+///
+/// The match becomes exhaustive over `RpcOutcome`, so no
+/// `Failure(_)` catch-all is needed and the per-tier `DomainError(err)` /
+/// `TransportError(rpc_err)` arms collapse into one.
 pub fn format_failure(
   outcome outcome: RpcOutcome(domain),
   format_domain format_domain: fn(domain) -> String,

@@ -9,7 +9,6 @@ pub fn parse_minimal_toml_test() {
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 3000 = cfg.port
-  let assert False = cfg.rest
   let assert [] = cfg.clients
 }
 
@@ -26,11 +25,10 @@ pub fn parse_uses_shared_plus_server_defaults_test() {
 
 pub fn parse_with_clients_test() {
   let toml =
-    "name = \"myapp\"\n\n[tools.libero.server]\nrest = true\n\n[tools.libero.clients.web]\ntarget = \"javascript\"\n\n[tools.libero.clients.admin]\ntarget = \"javascript\"\n"
+    "name = \"myapp\"\n\n[tools.libero.clients.web]\ntarget = \"javascript\"\n\n[tools.libero.clients.admin]\ntarget = \"javascript\"\n"
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 8080 = cfg.port
-  let assert True = cfg.rest
   let assert 2 = list.length(cfg.clients)
   let assert True =
     list.any(cfg.clients, fn(c: ClientConfig) {
@@ -55,7 +53,6 @@ pub fn parse_no_tools_libero_section_test() {
   let assert Ok(cfg) = toml_config.parse(toml)
   let assert "myapp" = cfg.name
   let assert 8080 = cfg.port
-  let assert False = cfg.rest
   let assert [] = cfg.clients
 }
 
@@ -78,7 +75,6 @@ pub fn to_codegen_config_javascript_client_test() {
     TomlConfig(
       name: "my_app",
       port: 3000,
-      rest: False,
       clients: [ClientConfig(name: "web", target: "javascript")],
       server_src_dir: "src",
       server_generated_dir: "src/generated",
@@ -98,7 +94,6 @@ pub fn to_codegen_config_missing_client_test() {
     TomlConfig(
       name: "my_app",
       port: 3000,
-      rest: False,
       clients: [],
       server_src_dir: "src",
       server_generated_dir: "src/generated",

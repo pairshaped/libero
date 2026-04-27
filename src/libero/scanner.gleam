@@ -190,6 +190,7 @@ fn duplicate_fn_name_errors(
     })
   by_name
   |> dict.to_list
+  |> list.sort(by: fn(a, b) { string.compare(a.0, b.0) })
   |> list.filter_map(fn(pair) {
     let #(fn_name, modules_rev) = pair
     case modules_rev {
@@ -201,16 +202,6 @@ fn duplicate_fn_name_errors(
       _ -> Error(Nil)
     }
   })
-  |> list.sort(by: fn(a, b) {
-    string.compare(duplicate_fn_name(a), duplicate_fn_name(b))
-  })
-}
-
-fn duplicate_fn_name(err: GenError) -> String {
-  case err {
-    DuplicateEndpoint(fn_name:, ..) -> fn_name
-    _ -> ""
-  }
 }
 
 /// Scan shared source directory and collect all exported type names.
