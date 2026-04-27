@@ -9,6 +9,7 @@ pub type GenError {
   CannotReadDir(path: String, cause: simplifile.FileError)
   CannotReadFile(path: String, cause: simplifile.FileError)
   CannotWriteFile(path: String, cause: simplifile.FileError)
+  CannotCreateDir(path: String, cause: simplifile.FileError)
   ParseFailed(path: String, cause: glance.Error)
   UnresolvedTypeModule(module_path: String, type_name: String)
   TypeNotFound(module_path: String, type_name: String)
@@ -80,6 +81,16 @@ fn to_string(err: GenError) -> String {
         ),
       )
 
+    CannotCreateDir(path, cause) ->
+      error_box(
+        title: "Cannot create directory",
+        path:,
+        body_lines: [format_file_error(cause)],
+        hint: Some(
+          "Check parent directory exists and you have write permission",
+        ),
+      )
+
     ParseFailed(path, _cause) ->
       error_box(
         title: "Failed to parse Gleam source",
@@ -133,7 +144,7 @@ fn to_string(err: GenError) -> String {
         body_lines: [
           "The same function name is exported from multiple handler",
           "modules:",
-          "  " <> string.join(modules, "\n  \u{2502}   "),
+          ..list.map(modules, fn(m) { "  " <> m })
         ],
         hint: Some(
           "Handler function names must be unique across the server source\n        tree, since each one becomes a ClientMsg variant.",

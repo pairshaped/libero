@@ -7,6 +7,7 @@
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option.{Some}
 import gleam/result
 import libero/codegen_decoders
 import libero/codegen_dispatch
@@ -28,12 +29,14 @@ pub fn run(project_path project_path: String) -> Result(Nil, String) {
   // 1. Read gleam.toml
   use toml_content <- result.try(
     simplifile.read(project_path <> "/gleam.toml")
-    |> result.map_error(fn(err) { "error: Cannot read gleam.toml
-  \u{250c}\u{2500} gleam.toml
-  \u{2502}
-  \u{2502} " <> simplifile.describe_error(err) <> "
-  \u{2502}
-  hint: Run this command from your project root directory" }),
+    |> result.map_error(fn(err) {
+      gen_error.error_box(
+        title: "Cannot read gleam.toml",
+        path: "gleam.toml",
+        body_lines: [simplifile.describe_error(err)],
+        hint: Some("Run this command from your project root directory"),
+      )
+    }),
   )
 
   // 2. Parse it
@@ -157,14 +160,17 @@ fn run_step(
   })
 }
 
-/// Create the directory if it doesn't exist, formatting the error as a
-/// CLI-friendly string.
+/// Create the directory if it doesn't exist, surfacing failures through
+/// the standard `gen_error` boxed format.
 /// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
 fn ensure_dir(path: String) -> Result(Nil, String) {
-  simplifile.create_directory_all(path)
-  |> result.map_error(fn(err) {
-    "cannot create " <> path <> ": " <> simplifile.describe_error(err)
-  })
+  case simplifile.create_directory_all(path) {
+    Ok(_) -> Ok(Nil)
+    Error(err) -> {
+      gen_error.print_error(gen_error.CannotCreateDir(path:, cause: err))
+      Error("ensure_dir failed")
+    }
+  }
 }
 
 // nolint: stringly_typed_error

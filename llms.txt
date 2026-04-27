@@ -401,7 +401,9 @@ pub type RpcData(value, domain) =
 
 Mirrors Elm's `WebData a = RemoteData Http.Error a`. Domain errors stay typed all the way through; no string flattening.
 
-Helpers: `from_response`, `format_rpc_error`, `map`, `map_error`, `unwrap`, `to_option`, `fold`, `is_success`, `is_loading`, `is_not_asked`, `is_failure`.
+Generated stubs build `RpcData` directly via the per-endpoint `decode_response_<fn>` FFI; callers `case` on the variants.
+
+Helpers: `format_rpc_error`, `map`, `map_error`, `unwrap`, `to_option`, `fold`.
 
 ## Dependencies
 

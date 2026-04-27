@@ -289,7 +289,7 @@ fn parse_endpoints(
 /// {"MyItem": "shared/items"}.
 /// Used by structured type resolution where downstream codegen needs the
 /// full path for decoder function naming.
-fn build_type_import_map(
+pub fn build_type_import_map(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
@@ -309,7 +309,7 @@ fn build_type_import_map(
 /// e.g. `import shared/items.{type Item as MyItem}` produces
 /// {"MyItem": "Item"}. Used by `all_types_shared` so an aliased type
 /// resolves against `shared_types` (which holds original names).
-fn build_type_alias_originals(
+pub fn build_type_alias_originals(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
@@ -327,7 +327,7 @@ fn build_type_alias_originals(
 /// module path. e.g. `import shared/line_items_report as wire` produces
 /// {"wire": "shared/line_items_report"}. Unaliased imports produce
 /// identity entries keyed by the last segment.
-fn build_alias_resolution_map(
+pub fn build_alias_resolution_map(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {

@@ -933,9 +933,8 @@ const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 30_000;
 
 // Build a connection-error value as a proper Gleam Result(_, RpcError)
-// so `wire.coerce` + pattern matching in remote_data.from_response (or the
-// per-endpoint response decoders) can extract the InternalError and read
-// its .message field.
+// so the per-endpoint response decoders can extract the InternalError
+// and read its .message field.
 function makeConnectionError(message) {
   return new ResultError(new InternalError("", message));
 }

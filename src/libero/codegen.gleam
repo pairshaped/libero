@@ -5,6 +5,7 @@
 //// per-domain modules (codegen_dispatch, codegen_stubs, codegen_decoders,
 //// codegen_server).
 
+import gleam/bool
 import gleam/io
 import gleam/list
 import gleam/result
@@ -208,4 +209,19 @@ pub fn is_option(ft: field_type.FieldType) -> Bool {
     field_type.OptionOf(_) -> True
     _ -> False
   }
+}
+
+/// Emit `import_line` (with a leading newline) iff any endpoint type
+/// transitively satisfies `predicate`; otherwise the empty string. Used
+/// for conditional stdlib imports like `gleam/dict` or `gleam/option`.
+pub fn import_if(
+  endpoints endpoints: List(scanner.HandlerEndpoint),
+  predicate predicate: fn(field_type.FieldType) -> Bool,
+  import_line import_line: String,
+) -> String {
+  use <- bool.guard(
+    when: !endpoints_contain(endpoints:, predicate:),
+    return: "",
+  )
+  "\n" <> import_line
 }

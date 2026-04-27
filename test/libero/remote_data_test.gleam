@@ -1,9 +1,6 @@
-import gleam/dynamic.{type Dynamic}
 import gleam/option.{None, Some}
 import libero/error
-import libero/remote_data.{
-  type RpcData, DomainError, Failure, Loading, NotAsked, Success, TransportError,
-}
+import libero/remote_data.{Failure, Loading, NotAsked, Success}
 
 // -- map --
 
@@ -81,97 +78,6 @@ pub fn to_option_not_asked_test() {
   let assert None = remote_data.to_option(NotAsked)
 }
 
-// -- is_success --
-
-pub fn is_success_true_test() {
-  let assert True = remote_data.is_success(Success(1))
-}
-
-pub fn is_success_false_for_loading_test() {
-  let assert False = remote_data.is_success(Loading)
-}
-
-pub fn is_success_false_for_failure_test() {
-  let assert False = remote_data.is_success(Failure("err"))
-}
-
-pub fn is_success_false_for_not_asked_test() {
-  let assert False = remote_data.is_success(NotAsked)
-}
-
-// -- is_loading --
-
-pub fn is_loading_true_test() {
-  let assert True = remote_data.is_loading(Loading)
-}
-
-pub fn is_loading_false_for_success_test() {
-  let assert False = remote_data.is_loading(Success(1))
-}
-
-pub fn is_loading_false_for_failure_test() {
-  let assert False = remote_data.is_loading(Failure("err"))
-}
-
-pub fn is_loading_false_for_not_asked_test() {
-  let assert False = remote_data.is_loading(NotAsked)
-}
-
-// -- from_response (response decoding) --
-//
-// Wire shape: Result(Result(payload, domain), RpcError) — outer Result
-// is libero's framework envelope, inner Result is the handler's typed
-// return.
-
-pub type Item {
-  Item(id: Int, title: String)
-}
-
-pub type DomainErr {
-  NotFound
-}
-
-pub fn from_response_success_extracts_payload_test() {
-  let wire: Dynamic = coerce(Ok(Ok(Item(1, "Buy milk"))))
-  let rd: RpcData(Item, DomainErr) = remote_data.from_response(raw: wire)
-  let assert Success(Item(1, "Buy milk")) = rd
-}
-
-pub fn from_response_success_extracts_list_payload_test() {
-  let items = [Item(1, "Buy milk"), Item(2, "Walk dog")]
-  let wire: Dynamic = coerce(Ok(Ok(items)))
-  let rd: RpcData(List(Item), DomainErr) = remote_data.from_response(raw: wire)
-  let assert Success([Item(1, "Buy milk"), Item(2, "Walk dog")]) = rd
-}
-
-pub fn from_response_domain_error_test() {
-  let wire: Dynamic = coerce(Ok(Error(NotFound)))
-  let rd: RpcData(Item, DomainErr) = remote_data.from_response(raw: wire)
-  let assert Failure(DomainError(NotFound)) = rd
-}
-
-pub fn from_response_rpc_error_test() {
-  let wire: Dynamic = coerce(Error(error.MalformedRequest))
-  let rd: RpcData(Item, DomainErr) = remote_data.from_response(raw: wire)
-  let assert Failure(TransportError(error.MalformedRequest)) = rd
-}
-
-pub fn from_response_unknown_function_error_test() {
-  let wire: Dynamic = coerce(Error(error.UnknownFunction("bad_fn")))
-  let rd: RpcData(Item, DomainErr) = remote_data.from_response(raw: wire)
-  let assert Failure(TransportError(error.UnknownFunction("bad_fn"))) = rd
-}
-
-pub fn from_response_internal_error_test() {
-  let wire: Dynamic =
-    coerce(Error(error.InternalError("trace-123", "Something went wrong")))
-  let rd: RpcData(Item, DomainErr) = remote_data.from_response(raw: wire)
-  let assert Failure(TransportError(error.InternalError(
-    "trace-123",
-    "Something went wrong",
-  ))) = rd
-}
-
 // -- format_rpc_error --
 
 pub fn format_rpc_error_internal_test() {
@@ -188,8 +94,3 @@ pub fn format_rpc_error_malformed_test() {
   let assert "Malformed request" =
     remote_data.format_rpc_error(error.MalformedRequest)
 }
-
-// -- helpers --
-
-@external(erlang, "gleam_stdlib", "identity")
-fn coerce(value: a) -> Dynamic

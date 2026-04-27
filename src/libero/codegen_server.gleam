@@ -262,10 +262,8 @@ pub fn write_main(
 
   // Derive the module qualifier (last path segment) for use in generated code.
   // e.g. "server/handler_context" -> "handler_context"
-  let context_qualifier = case string.split(context_module, "/") {
-    [] -> context_module
-    parts -> result.unwrap(list.last(parts), or: context_module)
-  }
+  let context_qualifier =
+    codegen.last_split(input: context_module, separator: "/")
 
   // Note: the string below is the GENERATED Gleam file content.
   // Imports here (gleam/list, gleam/string, etc.) appear in the consumer's

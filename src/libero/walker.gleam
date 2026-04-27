@@ -473,18 +473,6 @@ fn resolve_type_module(
   }
 }
 
-/// Unwrap a Result, returning the default on Error or continuing with the Ok value.
-fn result_guard(
-  over r: Result(a, Nil),
-  default default: c,
-  next next: fn(a) -> c,
-) -> c {
-  case r {
-    Ok(value) -> next(value)
-    Error(Nil) -> default
-  }
-}
-
 /// Walk a glance.Type and return (module_path, type_name) refs for any
 /// named custom types found. Uses resolver to map alias/unqualified names
 /// to their full module paths. `current_module` is the module path of the
@@ -509,22 +497,25 @@ fn collect_type_refs(
         when: is_stdlib_reference(name:, module:, resolver:),
         return: param_refs,
       )
-      // Resolve the module path
-      let module_path =
+      case
         resolve_type_module(
           name: name,
           module: module,
           resolver: resolver,
           current_module: current_module,
         )
-      use mp <- result_guard(module_path, param_refs)
-      use <- bool.guard(when: is_skipped_module(mp), return: param_refs)
-      // Resolve aliased type names back to original names.
-      // e.g. `type AdminData as DiscountAdminData` - we need to look up
-      // "AdminData" in the target module, not "DiscountAdminData".
-      let original_name =
-        result.unwrap(dict.get(resolver.original_names, name), name)
-      list.append([#(mp, original_name)], param_refs)
+      {
+        Error(Nil) -> param_refs
+        Ok(mp) -> {
+          use <- bool.guard(when: is_skipped_module(mp), return: param_refs)
+          // Resolve aliased type names back to original names.
+          // e.g. `type AdminData as DiscountAdminData` - we need to look up
+          // "AdminData" in the target module, not "DiscountAdminData".
+          let original_name =
+            result.unwrap(dict.get(resolver.original_names, name), name)
+          list.append([#(mp, original_name)], param_refs)
+        }
+      }
     }
     glance.TupleType(elements:, ..) ->
       list.flat_map(elements, fn(e) {
@@ -651,47 +642,11 @@ fn build_alias_map(
 fn build_type_resolver(
   imports: List(glance.Definition(glance.Import)),
 ) -> TypeResolver {
-  let empty_unq: Dict(String, String) = dict.new()
-  let empty_al: Dict(String, String) = dict.new()
-  let empty_orig: Dict(String, String) = dict.new()
-  let init =
-    TypeResolver(
-      unqualified: empty_unq,
-      aliased: empty_al,
-      original_names: empty_orig,
-    )
-  list.fold(imports, init, fn(acc, def) {
-    let imp = def.definition
-    let module_path = imp.module
-    // Unqualified types: `import foo.{type Bar}` → "Bar" -> module_path
-    // Also track aliases: `import foo.{type Bar as Baz}` → "Baz" -> module_path
-    // and original_names: "Baz" → "Bar"
-    let acc =
-      list.fold(imp.unqualified_types, acc, fn(acc, uq) {
-        let name = case uq.alias {
-          Some(a) -> a
-          None -> uq.name
-        }
-        let new_originals = case uq.alias {
-          Some(_a) -> dict.insert(acc.original_names, name, uq.name)
-          None -> acc.original_names
-        }
-        TypeResolver(
-          unqualified: dict.insert(acc.unqualified, name, module_path),
-          aliased: acc.aliased,
-          original_names: new_originals,
-        )
-      })
-    // Module alias: `import shared/record` → "record" -> "shared/record"
-    let alias_name = case imp.alias {
-      Some(glance.Named(name)) -> name
-      _ -> field_type.last_segment(module_path)
-    }
-    TypeResolver(
-      ..acc,
-      aliased: dict.insert(acc.aliased, alias_name, module_path),
-    )
-  })
+  TypeResolver(
+    unqualified: scanner.build_type_import_map(imports),
+    aliased: scanner.build_alias_resolution_map(imports),
+    original_names: scanner.build_type_alias_originals(imports),
+  )
 }
 
 /// Convert a PascalCase variant name to snake_case for the wire atom.

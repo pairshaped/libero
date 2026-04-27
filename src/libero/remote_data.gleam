@@ -5,20 +5,15 @@
 //// asynchronously. The view pattern matches directly on the state -
 //// impossible to show stale data while loading or forget to handle errors.
 ////
-//// `from_response` is the bridge from a libero RPC response (a Dynamic
-//// value shipped from the server) to an `RpcData` value the page stores
-//// in its model. The wire shape is `Result(Result(payload, domain), RpcError)`:
-//// the outer Result is libero's framework envelope, the inner Result is
-//// the handler's typed return. Transport failures become
-//// `Failure(TransportError(rpc))`, domain failures become
-//// `Failure(DomainError(domain))`, and a clean round-trip becomes
-//// `Success(payload)`. `NotAsked` and `Loading` are page-lifecycle states
-//// the page sets itself in `init` and `update`.
+//// Generated RPC stubs build `RpcData` directly: the per-endpoint
+//// `decode_response_<fn>` FFI returns an `RpcData(payload, domain)` that
+//// the page stores in its model. `NotAsked` and `Loading` are page-lifecycle
+//// states the page sets itself in `init` and `update`. `Failure` carries
+//// either a `TransportError(RpcError)` (framework / wire-level) or a typed
+//// `DomainError(domain)` from the handler's own error type.
 
-import gleam/dynamic.{type Dynamic}
 import gleam/option.{type Option, None, Some}
 import libero/error.{type RpcError}
-import libero/wire
 
 pub type RemoteData(value, error) {
   NotAsked
@@ -86,38 +81,6 @@ pub fn to_option(data: RemoteData(a, e)) -> Option(a) {
   }
 }
 
-/// Check if the data is loaded successfully.
-pub fn is_success(data: RemoteData(a, e)) -> Bool {
-  case data {
-    Success(_) -> True
-    _ -> False
-  }
-}
-
-/// Check if the data is currently loading.
-pub fn is_loading(data: RemoteData(a, e)) -> Bool {
-  case data {
-    Loading -> True
-    _ -> False
-  }
-}
-
-/// Check if the data has not been requested yet.
-pub fn is_not_asked(data: RemoteData(a, e)) -> Bool {
-  case data {
-    NotAsked -> True
-    _ -> False
-  }
-}
-
-/// Check if the data is in a failure state.
-pub fn is_failure(data: RemoteData(a, e)) -> Bool {
-  case data {
-    Failure(_) -> True
-    _ -> False
-  }
-}
-
 /// Reduce all four states into a single value. Each case provides its
 /// own callback so the caller can return whatever shape they need
 /// (e.g. an `Element(msg)` for a Lustre view).
@@ -133,30 +96,6 @@ pub fn fold(
     Loading -> on_loading()
     Failure(error) -> on_failure(error)
     Success(value) -> on_success(value)
-  }
-}
-
-/// Convert a libero RPC response (Dynamic) into an `RpcData` value.
-///
-/// The wire response is `Result(Result(payload, domain), RpcError)`:
-/// the outer Result is libero's framework envelope, the inner Result
-/// is the handler's typed return. Transport errors become
-/// `Failure(TransportError(rpc))`. Domain errors become
-/// `Failure(DomainError(domain))`. A clean round-trip becomes
-/// `Success(payload)`.
-pub fn from_response(raw raw: Dynamic) -> RpcData(payload, domain) {
-  // BY DESIGN: wire.coerce is an unwitnessed cast. Type safety relies on
-  // both sides being built from the same shared/ types.
-  let outer: Result(Dynamic, RpcError) = wire.coerce(raw)
-  case outer {
-    Error(rpc_err) -> Failure(TransportError(rpc_err))
-    Ok(inner) -> {
-      let result: Result(payload, domain) = wire.coerce(inner)
-      case result {
-        Ok(payload) -> Success(payload)
-        Error(domain_err) -> Failure(DomainError(domain_err))
-      }
-    }
   }
 }
 
