@@ -70,21 +70,26 @@ pub fn on_disconnect(handler handler: fn(String) -> msg) -> Effect(msg) {
   })
 }
 
-// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+// nolint: avoid_panic -- never invoked; centralizes the panic message for the FFI fallbacks below
+fn unreachable_on_erlang() -> a {
+  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+}
+
+// nolint: discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "registerOnConnect")
 fn ffi_register_on_connect(callback callback: fn() -> Nil) -> Nil {
   let _ = callback
-  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+  unreachable_on_erlang()
 }
 
-// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+// nolint: discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "registerOnDisconnect")
 fn ffi_register_on_disconnect(callback callback: fn(String) -> Nil) -> Nil {
   let _ = callback
-  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+  unreachable_on_erlang()
 }
 
-// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+// nolint: discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "registerPushHandler")
 fn ffi_register_push(
   module module: String,
@@ -92,10 +97,10 @@ fn ffi_register_push(
 ) -> Nil {
   let _ = module
   let _ = callback
-  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+  unreachable_on_erlang()
 }
 
-// nolint: avoid_panic, discarded_result -- JS-only @external; Erlang fallback is unreachable
+// nolint: discarded_result -- JS-only @external; Erlang fallback is unreachable
 @external(javascript, "./rpc_ffi.mjs", "send")
 fn ffi_send(
   url url: String,
@@ -107,5 +112,5 @@ fn ffi_send(
   let _ = module
   let _ = msg
   let _ = on_response
-  panic as "libero/rpc is a JavaScript-only module, unreachable on Erlang target"
+  unreachable_on_erlang()
 }

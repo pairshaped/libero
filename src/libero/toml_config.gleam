@@ -58,9 +58,8 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   use parsed <- result.try(
     tom.parse(input)
     |> result.map_error(fn(_) {
-      gen_error.error_box(
+      toml_error(
         title: "Failed to parse gleam.toml",
-        path: "gleam.toml",
         body_lines: ["The file contains invalid TOML syntax"],
         hint: Some("Run `gleam check` to validate your gleam.toml"),
       )
@@ -70,9 +69,8 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   use name <- result.try(
     tom.get_string(parsed, ["name"])
     |> result.map_error(fn(_) {
-      gen_error.error_box(
+      toml_error(
         title: "Missing required field",
-        path: "gleam.toml",
         body_lines: ["The `name` field is required at the top level"],
         hint: Some("Add: name = \"my_app\""),
       )
@@ -82,9 +80,8 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   // Reject legacy [libero] config (must be [tools.libero] since v4.1.1)
   use _ <- result.try(case tom.get_table(parsed, ["libero"]) {
     Ok(_) ->
-      Error(gen_error.error_box(
+      Error(toml_error(
         title: "Legacy config section",
-        path: "gleam.toml",
         body_lines: [
           "Found [libero] section, but since v4.1.1 config must be",
           "under [tools.libero]",
@@ -102,9 +99,8 @@ pub fn parse(input: String) -> Result(TomlConfig, String) {
   use port <- result.try(case raw_port >= 1 && raw_port <= 65_535 {
     True -> Ok(raw_port)
     False ->
-      Error(gen_error.error_box(
+      Error(toml_error(
         title: "Invalid port number",
-        path: "gleam.toml",
         body_lines: [
           "port = "
           <> int.to_string(raw_port)
@@ -168,9 +164,8 @@ pub fn to_codegen_config(
   use client <- result.try(
     list.find(toml_cfg.clients, fn(c) { c.name == client_name })
     |> result.map_error(fn(_) {
-      gen_error.error_box(
+      toml_error(
         title: "Client not found",
-        path: "gleam.toml",
         body_lines: [
           "No client named `" <> client_name <> "` in [tools.libero.clients]",
         ],
@@ -216,6 +211,16 @@ pub fn to_codegen_config(
 
 // ---------- Private helpers ----------
 
+/// Format a parser error pointing at gleam.toml. Pre-fills the path so
+/// every call site doesn't have to repeat it.
+fn toml_error(
+  title title: String,
+  body_lines body_lines: List(String),
+  hint hint: option.Option(String),
+) -> String {
+  gen_error.error_box(title:, path: "gleam.toml", body_lines:, hint:)
+}
+
 // nolint: stringly_typed_error, thrown_away_error, error_context_lost -- tom errors are opaque
 fn parse_clients(
   parsed: dict.Dict(String, tom.Toml),
@@ -228,9 +233,8 @@ fn parse_clients(
         use client_table <- result.try(
           tom.get_table(clients_dict, [name])
           |> result.map_error(fn(_) {
-            gen_error.error_box(
+            toml_error(
               title: "Invalid client config",
-              path: "gleam.toml",
               body_lines: [
                 "[tools.libero.clients." <> name <> "] is not a valid table",
               ],
@@ -241,9 +245,8 @@ fn parse_clients(
         use target <- result.try(
           tom.get_string(client_table, ["target"])
           |> result.map_error(fn(_) {
-            gen_error.error_box(
+            toml_error(
               title: "Missing target",
-              path: "gleam.toml",
               body_lines: [
                 "[tools.libero.clients."
                 <> name
@@ -256,9 +259,8 @@ fn parse_clients(
         use _ <- result.try(case target {
           "javascript" -> Ok(Nil)
           other ->
-            Error(gen_error.error_box(
+            Error(toml_error(
               title: "Unsupported client target",
-              path: "gleam.toml",
               body_lines: [
                 "[tools.libero.clients."
                   <> name

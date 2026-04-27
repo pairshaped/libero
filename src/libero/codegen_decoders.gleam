@@ -411,8 +411,8 @@ fn emit_ensure_decoders() -> String {
 /// InternalError(trace_id, message)`) so it isn't discovered through
 /// the type walker. Generated once, called by every per-endpoint
 /// response decoder for the outer-Error path.
-// nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
 fn emit_rpc_error_decoder() -> String {
+  // nolint: unnecessary_string_concatenation -- codegen template, clarity over concat
   "function _decode_rpc_error(term) {\n"
   <> "  if (term === \"malformed_request\") return new _MalformedRequest();\n"
   <> "  if (Array.isArray(term)) {\n"

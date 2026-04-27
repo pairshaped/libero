@@ -157,6 +157,16 @@ fn run_step(
   })
 }
 
+/// Create the directory if it doesn't exist, formatting the error as a
+/// CLI-friendly string.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
+fn ensure_dir(path: String) -> Result(Nil, String) {
+  simplifile.create_directory_all(path)
+  |> result.map_error(fn(err) {
+    "cannot create " <> path <> ": " <> simplifile.describe_error(err)
+  })
+}
+
 // nolint: stringly_typed_error
 fn run_client_codegen(
   project_path project_path: String,
@@ -175,24 +185,8 @@ fn run_client_codegen(
   ))
   let config = config.prefix_paths(config: raw_config, project_path:)
 
-  use _ <- result.try(
-    simplifile.create_directory_all(config.server_generated)
-    |> result.map_error(fn(err) {
-      "cannot create "
-      <> config.server_generated
-      <> ": "
-      <> simplifile.describe_error(err)
-    }),
-  )
-  use _ <- result.try(
-    simplifile.create_directory_all(config.client_generated)
-    |> result.map_error(fn(err) {
-      "cannot create "
-      <> config.client_generated
-      <> ": "
-      <> simplifile.describe_error(err)
-    }),
-  )
+  use _ <- result.try(ensure_dir(config.server_generated))
+  use _ <- result.try(ensure_dir(config.client_generated))
 
   // Server dispatch
   use _ <- result.try(run_step(
