@@ -127,7 +127,8 @@ fn generate_main(
         _ -> Error(Nil)
       }
     })
-  use _ <- result.try(
+  use _ <- result.try(run_step(
+    "write_main",
     codegen_server.write_main(
       app_name: toml_cfg.name,
       port: toml_cfg.port,
@@ -135,15 +136,25 @@ fn generate_main(
       context_module: toml_cfg.context_module,
       js_client_names:,
       project_path:,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_main failed"
-    }),
-  )
+    ),
+  ))
 
   io.println("libero: done")
   Ok(Nil)
+}
+
+/// Print a GenError to stderr and translate it into a short String error
+/// the CLI can return. Centralising this keeps each codegen call site to
+/// one line and makes adding a new step a one-liner instead of five.
+/// nolint: stringly_typed_error -- CLI module, String errors are user-facing messages
+fn run_step(
+  label: String,
+  result: Result(a, gen_error.GenError),
+) -> Result(a, String) {
+  result.map_error(result, fn(err) {
+    gen_error.print_error(err)
+    label <> " failed"
+  })
 }
 
 // nolint: stringly_typed_error
@@ -184,87 +195,63 @@ fn run_client_codegen(
   )
 
   // Server dispatch
-  use _ <- result.try(
+  use _ <- result.try(run_step(
+    "write_endpoint_dispatch",
     codegen_dispatch.write_endpoint_dispatch(
       endpoints:,
       server_generated: config.server_generated,
       atoms_module: config.atoms_module,
       context_module: toml_cfg.context_module,
       wire_module_tag:,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_endpoint_dispatch failed"
-    }),
-  )
+    ),
+  ))
 
   // Client stubs
-  use _ <- result.try(
+  use _ <- result.try(run_step(
+    "write_endpoint_client_stubs",
     codegen_stubs.write_endpoint_client_stubs(
       endpoints:,
       client_generated: config.client_generated,
       wire_module_tag:,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_endpoint_client_stubs failed"
-    }),
-  )
+    ),
+  ))
 
   // WebSocket handler
-  use _ <- result.try(
+  use _ <- result.try(run_step(
+    "write_websocket",
     codegen_server.write_websocket(
       server_generated: config.server_generated,
       context_module: toml_cfg.context_module,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_websocket failed"
-    }),
-  )
+    ),
+  ))
 
   // Atom registration (server-side)
-  use _ <- result.try(
-    codegen_server.write_atoms(config:, discovered:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_atoms failed"
-    }),
-  )
+  use _ <- result.try(run_step(
+    "write_atoms",
+    codegen_server.write_atoms(config:, discovered:),
+  ))
 
   // Client-side
-  use _ <- result.try(
-    codegen_stubs.write_config(config:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_config failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen_decoders.write_decoders_gleam(config:)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_decoders_gleam failed"
-    }),
-  )
-  use _ <- result.try(
+  use _ <- result.try(run_step(
+    "write_config",
+    codegen_stubs.write_config(config:),
+  ))
+  use _ <- result.try(run_step(
+    "write_decoders_gleam",
+    codegen_decoders.write_decoders_gleam(config:),
+  ))
+  use _ <- result.try(run_step(
+    "write_decoders_ffi",
     codegen_decoders.write_decoders_ffi(
       config:,
       discovered:,
       endpoints: endpoints,
-    )
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_decoders_ffi failed"
-    }),
-  )
-  use _ <- result.try(
-    codegen_stubs.write_ssr_flags(client_generated: config.client_generated)
-    |> result.map_error(fn(err) {
-      gen_error.print_error(err)
-      "write_ssr_flags failed"
-    }),
-  )
+    ),
+  ))
+  use _ <- result.try(run_step(
+    "write_ssr_flags",
+    codegen_stubs.write_ssr_flags(client_generated: config.client_generated),
+  ))
 
   Ok(Nil)
 }

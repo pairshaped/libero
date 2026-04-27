@@ -132,3 +132,10 @@ pub fn is_dict(ft: field_type.FieldType) -> Bool {
     _ -> False
   }
 }
+
+pub fn is_option(ft: field_type.FieldType) -> Bool {
+  case ft {
+    field_type.OptionOf(_) -> True
+    _ -> False
+  }
+}

@@ -90,7 +90,7 @@ pub fn decode_safe(data: BitArray) -> Result(a, DecodeError) {
 @external(javascript, "./rpc_ffi.mjs", "decode_safe")
 fn ffi_decode_safe(data: BitArray) -> Result(a, DecodeError) {
   let _ = data
-  panic as "libero/wire.ffi_decode_safe is unreachable - externals handle both targets"
+  panic as "libero/wire.ffi_decode_safe: external is missing for this target. This indicates a libero packaging bug; the function should be resolved by the @external attributes."
 }
 
 // ---------- Decoder (incoming call envelope) ----------
@@ -196,5 +196,5 @@ fn ffi_variant_tag(value: dynamic.Dynamic) -> Result(String, Nil) {
 @external(javascript, "./rpc_ffi.mjs", "identity")
 pub fn coerce(value: dynamic.Dynamic) -> a {
   let _ = value
-  panic as "unreachable"
+  panic as "libero/wire.coerce: external is missing for this target. This indicates a libero packaging bug; the function should be resolved by the @external attributes."
 }

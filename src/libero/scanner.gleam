@@ -73,16 +73,15 @@ fn visit_entry(
   entry entry: String,
 ) -> Result(List(String), GenError) {
   let child = parent <> "/" <> entry
-  // Skip symlinks entirely. Libero walks controlled source trees only;
-  // following a symlink risks infinite loops on cycles (e.g. a link back
-  // to a parent directory) and the target either lives inside the scan
-  // root already (in which case it's walked directly) or lives outside
-  // it, in which case it shouldn't contribute to generated output.
-  use <- bool.guard(
-    when: simplifile.is_symlink(child) |> result.unwrap(False),
-    return: Ok(acc),
-  )
+  let is_symlink = simplifile.is_symlink(child) |> result.unwrap(False)
   let is_dir = result.unwrap(simplifile.is_directory(child), False)
+  // Skip symlinked DIRECTORIES only; following them risks infinite loops
+  // on cycles (a link back to a parent), and any directory inside the
+  // scan root is already being walked directly. Symlinked files don't
+  // loop, and a developer who symlinks a `.gleam` file into a handler
+  // tree (vendored fixtures, shared base files) reasonably expects it
+  // to participate.
+  use <- bool.guard(when: is_symlink && is_dir, return: Ok(acc))
   case is_dir {
     True -> visit_subdirectory(acc: acc, entry: entry, child: child)
     False -> Ok(visit_file(acc: acc, entry: entry, child: child))
@@ -273,6 +272,7 @@ fn parse_endpoints(
   let module_path = derive_module_path(file_path: file_path)
   let type_imports = build_type_import_map(parsed.imports)
   let alias_map = build_alias_resolution_map(parsed.imports)
+  let type_alias_originals = build_type_alias_originals(parsed.imports)
   list.filter_map(parsed.functions, fn(def) {
     let glance.Definition(_, func) = def
     case func.publicity == glance.Public {
@@ -283,24 +283,50 @@ fn parse_endpoints(
           module_path: module_path,
           type_imports: type_imports,
           alias_map: alias_map,
+          type_alias_originals: type_alias_originals,
           shared_types: shared_types,
         )
     }
   })
 }
 
-/// Build a map from unqualified type names to the FULL module path of
-/// their import. e.g. `import shared/items.{type Item}` produces
-/// {"Item": "shared/items"}. Used by structured type resolution
-/// where downstream codegen needs the full path for decoder function
-/// naming (`decoder_fn_name(module_path, type_name)`).
+/// Build a map from unqualified type names (using the alias if present)
+/// to the FULL module path of their import.
+/// e.g. `import shared/items.{type Item}` produces {"Item": "shared/items"}.
+/// e.g. `import shared/items.{type Item as MyItem}` produces
+/// {"MyItem": "shared/items"}.
+/// Used by structured type resolution where downstream codegen needs the
+/// full path for decoder function naming.
 fn build_type_import_map(
   imports: List(glance.Definition(glance.Import)),
 ) -> dict.Dict(String, String) {
   list.fold(imports, dict.new(), fn(acc, def) {
     let glance.Definition(_, imp) = def
     list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
-      dict.insert(inner_acc, uq.name, imp.module)
+      let key = case uq.alias {
+        option.Some(alias) -> alias
+        option.None -> uq.name
+      }
+      dict.insert(inner_acc, key, imp.module)
+    })
+  })
+}
+
+/// Map locally-bound type names back to their original names from the
+/// source module. Only populated when an import uses `type X as Y`.
+/// e.g. `import shared/items.{type Item as MyItem}` produces
+/// {"MyItem": "Item"}. Used by `all_types_shared` so an aliased type
+/// resolves against `shared_types` (which holds original names).
+fn build_type_alias_originals(
+  imports: List(glance.Definition(glance.Import)),
+) -> dict.Dict(String, String) {
+  list.fold(imports, dict.new(), fn(acc, def) {
+    let glance.Definition(_, imp) = def
+    list.fold(imp.unqualified_types, acc, fn(inner_acc, uq) {
+      case uq.alias {
+        option.Some(alias) -> dict.insert(inner_acc, alias, uq.name)
+        option.None -> inner_acc
+      }
     })
   })
 }
@@ -328,6 +354,7 @@ fn parse_single_endpoint(
   module_path module_path: String,
   type_imports type_imports: dict.Dict(String, String),
   alias_map alias_map: dict.Dict(String, String),
+  type_alias_originals type_alias_originals: dict.Dict(String, String),
   shared_types shared_types: set.Set(String),
 ) -> Result(HandlerEndpoint, Nil) {
   // Must have at least one parameter
@@ -367,6 +394,7 @@ fn parse_single_endpoint(
               type_: type_,
               imports: type_imports,
               aliases: alias_map,
+              type_alias_originals: type_alias_originals,
             ),
           ))
         _, _ -> Error(Nil)
@@ -378,7 +406,11 @@ fn parse_single_endpoint(
     list.filter_map(payload_params, fn(p) { option.to_result(p.type_, Nil) })
   let all_types = [response_type, ..all_param_types]
   use <- bool.guard(
-    when: !all_types_shared(all_types, shared_types),
+    when: !all_types_shared(
+      types: all_types,
+      shared_types:,
+      type_alias_originals:,
+    ),
     return: Error(Nil),
   )
 
@@ -389,6 +421,7 @@ fn parse_single_endpoint(
       type_: response_type,
       imports: type_imports,
       aliases: alias_map,
+      type_alias_originals: type_alias_originals,
     ),
     params: params_typed,
   ))
@@ -435,32 +468,46 @@ fn extract_handler_return(
 /// `imports` and `aliases` map unqualified names and module aliases
 /// (respectively) to FULL module paths (e.g. "shared/types"). See
 /// `build_type_import_map` and `build_alias_resolution_map`.
+/// `type_alias_originals` maps locally-bound aliased type names to the
+/// name they have in the source module, e.g. {"MyItem": "Item"}.
 fn glance_type_to_field_type(
   type_ t: glance.Type,
   imports imports: dict.Dict(String, String),
   aliases aliases: dict.Dict(String, String),
+  type_alias_originals type_alias_originals: dict.Dict(String, String),
 ) -> field_type.FieldType {
+  let recurse_named = fn(name, params) {
+    builtin_or_user(
+      name:,
+      parameters: params,
+      imports:,
+      aliases:,
+      type_alias_originals:,
+    )
+  }
+  let recurse = fn(t) {
+    glance_type_to_field_type(
+      type_: t,
+      imports:,
+      aliases:,
+      type_alias_originals:,
+    )
+  }
   case t {
     glance.NamedType(name:, module: option.None, parameters: [], ..) ->
-      builtin_or_user(name:, parameters: [], imports:, aliases:)
+      recurse_named(name, [])
     glance.NamedType(name:, module: option.None, parameters: params, ..) ->
-      builtin_or_user(name:, parameters: params, imports:, aliases:)
+      recurse_named(name, params)
     glance.NamedType(name:, module: option.Some(m), parameters: params, ..) -> {
       let module_path = dict.get(aliases, m) |> result.unwrap(or: m)
       field_type.UserType(
         module_path:,
         type_name: name,
-        args: list.map(params, fn(p) {
-          glance_type_to_field_type(type_: p, imports:, aliases:)
-        }),
+        args: list.map(params, recurse),
       )
     }
     glance.TupleType(elements:, ..) ->
-      field_type.TupleOf(
-        elements: list.map(elements, fn(e) {
-          glance_type_to_field_type(type_: e, imports:, aliases:)
-        }),
-      )
+      field_type.TupleOf(elements: list.map(elements, recurse))
     glance.VariableType(name:, ..) -> field_type.TypeVar(name:)
     glance.FunctionType(..) -> field_type.TypeVar(name: "_fn")
     glance.HoleType(..) -> field_type.TypeVar(name: "_")
@@ -469,18 +516,29 @@ fn glance_type_to_field_type(
 
 /// Resolve a non-module-qualified named type. Builtins return their
 /// FieldType directly. Other names are looked up in `imports` to
-/// produce a `UserType` with the import's full module path. Unknown
-/// names fall back to a `UserType` with the bare name as `module_path`
-/// (caller is expected to have validated all types via
-/// `all_types_shared` first, so this branch is unreachable in practice.
+/// produce a `UserType` with the import's full module path.
+///
+/// When a name passes `all_types_shared` (it appears in the shared-types
+/// set) but isn't in `imports`, the handler defines the type locally
+/// rather than importing it from shared. This happens in test fixtures
+/// where the same type name exists in both places. The fallback uses
+/// the bare name as `module_path`, which produces unusable codegen if
+/// the endpoint is actually compiled, but in practice consumers always
+/// import shared types rather than re-declaring them.
 fn builtin_or_user(
   name name: String,
   parameters parameters: List(glance.Type),
   imports imports: dict.Dict(String, String),
   aliases aliases: dict.Dict(String, String),
+  type_alias_originals type_alias_originals: dict.Dict(String, String),
 ) -> field_type.FieldType {
   let recurse = fn(t) {
-    glance_type_to_field_type(type_: t, imports:, aliases:)
+    glance_type_to_field_type(
+      type_: t,
+      imports:,
+      aliases:,
+      type_alias_originals:,
+    )
   }
   case name, parameters {
     "Int", [] -> field_type.IntField
@@ -497,9 +555,14 @@ fn builtin_or_user(
       field_type.DictOf(key: recurse(key), value: recurse(val))
     _, _ -> {
       let module_path = dict.get(imports, name) |> result.unwrap(or: name)
+      // If the local name is an aliased import (e.g. `type Item as MyItem`),
+      // the source module knows it as the original name. Use that so the
+      // generated decoder calls match what the walker discovers.
+      let type_name =
+        dict.get(type_alias_originals, name) |> result.unwrap(or: name)
       field_type.UserType(
         module_path:,
-        type_name: name,
+        type_name:,
         args: list.map(parameters, recurse),
       )
     }
@@ -509,26 +572,49 @@ fn builtin_or_user(
 /// Check that all types in a list are shared types or builtins.
 /// Walks type parameters recursively (e.g. List(Todo) checks Todo).
 fn all_types_shared(
-  types: List(glance.Type),
-  shared_types: set.Set(String),
+  types types: List(glance.Type),
+  shared_types shared_types: set.Set(String),
+  type_alias_originals type_alias_originals: dict.Dict(String, String),
 ) -> Bool {
-  list.all(types, fn(t) { is_type_shared(t, shared_types) })
+  list.all(types, fn(t) {
+    is_type_shared(t: t, shared_types:, type_alias_originals:)
+  })
 }
 
 /// Check if a single type (and all its parameters) are shared or builtins.
 /// `field_type.is_builtin` is the single source of truth for builtin
 /// names, shared with the walker.
-fn is_type_shared(t: glance.Type, shared_types: set.Set(String)) -> Bool {
+///
+/// Resolves locally-bound aliased type names back to their original
+/// source names before checking against `shared_types`, so
+/// `import shared/items.{type Item as MyItem}` lets the handler use
+/// `MyItem` and still pass the shared check.
+fn is_type_shared(
+  t t: glance.Type,
+  shared_types shared_types: set.Set(String),
+  type_alias_originals type_alias_originals: dict.Dict(String, String),
+) -> Bool {
   case t {
-    glance.NamedType(name:, parameters:, ..) ->
-      { field_type.is_builtin(name) || set.contains(shared_types, name) }
-      && list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
+    glance.NamedType(name:, parameters:, ..) -> {
+      let resolved =
+        dict.get(type_alias_originals, name) |> result.unwrap(or: name)
+      {
+        field_type.is_builtin(resolved) || set.contains(shared_types, resolved)
+      }
+      && list.all(parameters, fn(p) {
+        is_type_shared(t: p, shared_types:, type_alias_originals:)
+      })
+    }
     glance.TupleType(elements:, ..) ->
-      list.all(elements, fn(e) { is_type_shared(e, shared_types) })
+      list.all(elements, fn(e) {
+        is_type_shared(t: e, shared_types:, type_alias_originals:)
+      })
     glance.VariableType(..) -> True
     glance.FunctionType(parameters:, return:, ..) ->
-      list.all(parameters, fn(p) { is_type_shared(p, shared_types) })
-      && is_type_shared(return, shared_types)
+      list.all(parameters, fn(p) {
+        is_type_shared(t: p, shared_types:, type_alias_originals:)
+      })
+      && is_type_shared(t: return, shared_types:, type_alias_originals:)
     glance.HoleType(..) -> True
   }
 }

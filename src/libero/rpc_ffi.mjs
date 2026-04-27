@@ -1029,11 +1029,15 @@ function ensureSocket(url) {
     const payload = bytes.slice(1);
 
     if (tag === 0x01) {
-      // Push frame: payload is ETF-encoded {module, value}. The handler
-      // registered via rpc.on_push receives the decoded value
-      // through the global ctor registry.
-      const decoded = decode_value(payload);
-      if (decoded && decoded[0] !== undefined && decoded[1] !== undefined) {
+      // Push frame: payload is ETF-encoded {module, value}. Decode in
+      // raw mode so atoms stay as strings and tuples stay as arrays;
+      // matches the response-frame path on the same socket so push
+      // handlers and response handlers see the same runtime shapes for
+      // shared types. Consumers route raw values through their generated
+      // typed decoders the same way response handlers do.
+      const decoded = decode_value_raw(payload);
+      if (Array.isArray(decoded) && typeof decoded[0] === "string"
+          && decoded[1] !== undefined) {
         const handler = pushHandlers.get(decoded[0]);
         if (handler) handler(decoded[1]);
       }

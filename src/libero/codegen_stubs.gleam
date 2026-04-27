@@ -118,7 +118,7 @@ pub fn write_endpoint_client_stubs(
     })
 
   let option_import = case
-    codegen.endpoints_contain(endpoints:, predicate: is_option)
+    codegen.endpoints_contain(endpoints:, predicate: codegen.is_option)
   {
     True -> "\nimport gleam/option.{type Option}"
     False -> ""
@@ -268,11 +268,4 @@ fn collect_shared_type_imports(
   |> list.unique()
   |> list.sort(string.compare)
   |> list.map(fn(mod) { "import " <> mod })
-}
-
-fn is_option(ft: field_type.FieldType) -> Bool {
-  case ft {
-    field_type.OptionOf(_) -> True
-    _ -> False
-  }
 }

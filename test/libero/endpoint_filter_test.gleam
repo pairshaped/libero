@@ -144,3 +144,59 @@ pub fn get_items(
 
   let assert Ok(Nil) = simplifile.delete_all([dir])
 }
+
+/// `import shared/items.{type Item as MyItem}` lets the handler refer to
+/// the type by its local alias. The scanner must resolve the alias back
+/// to the original name before checking the shared-types set, otherwise
+/// the endpoint is silently dropped.
+pub fn includes_endpoint_with_aliased_type_import_test() {
+  let dir = "build/.test_aliased_type_import"
+  let server_dir = dir <> "/server"
+  let shared_dir = dir <> "/shared"
+  let assert Ok(Nil) = simplifile.create_directory_all(server_dir)
+  let assert Ok(Nil) = simplifile.create_directory_all(shared_dir)
+
+  let assert Ok(Nil) =
+    simplifile.write(
+      shared_dir <> "/items.gleam",
+      "pub type Item {
+  Item(id: Int)
+}
+pub type ItemError {
+  NotFound
+}
+",
+    )
+
+  let assert Ok(Nil) =
+    simplifile.write(
+      server_dir <> "/handler_context.gleam",
+      "pub type HandlerContext {
+  HandlerContext
+}
+",
+    )
+
+  let assert Ok(Nil) =
+    simplifile.write(
+      server_dir <> "/handler.gleam",
+      "import handler_context.{type HandlerContext}
+import items.{type Item as MyItem, type ItemError}
+
+pub fn get_thing(
+  handler_ctx handler_ctx: HandlerContext,
+) -> #(Result(MyItem, ItemError), HandlerContext) {
+  #(Ok(items.Item(0)), handler_ctx)
+}
+",
+    )
+
+  let assert Ok(endpoints) =
+    scanner.scan_handler_endpoints(
+      server_src: server_dir,
+      shared_src: shared_dir,
+    )
+  let assert True = list.any(endpoints, fn(e) { e.fn_name == "get_thing" })
+
+  let assert Ok(Nil) = simplifile.delete_all([dir])
+}

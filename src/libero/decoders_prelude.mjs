@@ -119,12 +119,13 @@ export function decode_list_of(elementDecoder, term) {
   if (!Array.isArray(term)) {
     throw new DecodeError("expected List, got " + typeof term);
   }
-  const decoded = term.map(elementDecoder);
-  // Rebuild as a Gleam linked list using injected ctors.
+  // Match decode_dict_of: throw if setListCtors hasn't run, since a
+  // silent JS-array fallback would crash deep inside the consumer's
+  // view code with a less actionable error than this one.
   if (_Empty === null || _NonEmpty === null) {
-    // Standalone/test mode - return the JS array directly.
-    return decoded;
+    throw new DecodeError("setListCtors not called");
   }
+  const decoded = term.map(elementDecoder);
   let list = new _Empty();
   for (let i = decoded.length - 1; i >= 0; i--) {
     list = new _NonEmpty(decoded[i], list);
