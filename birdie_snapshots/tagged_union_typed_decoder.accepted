@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: tagged union typed decoder
+file: ./test/libero/typed_decoder_codegen_test.gleam
+test_name: tagged_union_snapshot_test
 ---
 export function decode_shared_notification_notification(term) {
   const tag = Array.isArray(term) ? term[0] : term;

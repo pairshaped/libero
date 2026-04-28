@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: record typed decoder
+file: ./test/libero/typed_decoder_codegen_test.gleam
+test_name: record_snapshot_test
 ---
 export function decode_shared_item_item(term) {
   return new _m_shared_item.Item(

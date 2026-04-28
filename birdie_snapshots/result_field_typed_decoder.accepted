@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: result field typed decoder
+file: ./test/libero/typed_decoder_codegen_test.gleam
+test_name: result_field_snapshot_test
 ---
 export function decode_shared_result_type_wrapper(term) {
   return new _m_shared_result_type.Wrapper(

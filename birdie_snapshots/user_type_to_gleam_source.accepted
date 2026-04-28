@@ -1,5 +1,7 @@
 ---
 version: 1.5.5
 title: user_type to_gleam_source
+file: ./test/libero/field_type_test.gleam
+test_name: to_gleam_source_renders_user_type_with_last_segment_test
 ---
 types.Item

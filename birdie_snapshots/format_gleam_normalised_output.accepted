@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: format gleam normalised output
+file: ./test/libero/format_test.gleam
+test_name: format_returns_normalised_when_input_parses_test
 ---
 pub fn add(a: Int, b: Int) -> Int {
   a + b

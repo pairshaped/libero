@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: ssr handle_request success page
+file: ./test/libero/ssr_test.gleam
+test_name: handle_request_renders_200_on_success_test
 ---
 <!doctype html>
 <html><body><p>value=7</p></body></html>

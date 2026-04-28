@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: ssr boot_script client module
+file: ./test/libero/ssr_test.gleam
+test_name: boot_script_includes_client_module_test
 ---
 <!-- lustre:fragment --><script>window.__LIBERO_FLAGS__ = "g2EA";</script><script type="module">import { main } from "/web/app.mjs";
 main();</script><!-- /lustre:fragment -->

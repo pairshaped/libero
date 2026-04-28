@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/option.{None, Some}
 import libero/error
 import libero/remote_data.{
@@ -112,5 +113,54 @@ pub fn format_failure_routes_domain_error_test() {
     remote_data.format_failure(
       outcome: DomainError("ITEM_NOT_FOUND"),
       format_domain: fn(code) { code },
+    )
+}
+
+// -- fold --
+
+pub fn fold_success_test() {
+  let assert "got: 42" =
+    remote_data.fold(
+      data: Success(42),
+      on_not_asked: fn() { "not asked" },
+      on_loading: fn() { "loading" },
+      on_failure: fn(_) { "failure" },
+      on_success: fn(v) { "got: " <> int.to_string(v) },
+    )
+}
+
+pub fn fold_not_asked_test() {
+  let data: remote_data.RemoteData(Int, String) = NotAsked
+  let assert "not asked" =
+    remote_data.fold(
+      data:,
+      on_not_asked: fn() { "not asked" },
+      on_loading: fn() { "loading" },
+      on_failure: fn(_) { "failure" },
+      on_success: fn(_) { "success" },
+    )
+}
+
+pub fn fold_loading_test() {
+  let data: remote_data.RemoteData(Int, String) = Loading
+  let assert "loading" =
+    remote_data.fold(
+      data:,
+      on_not_asked: fn() { "not asked" },
+      on_loading: fn() { "loading" },
+      on_failure: fn(_) { "failure" },
+      on_success: fn(_) { "success" },
+    )
+}
+
+pub fn fold_failure_test() {
+  let data = Failure("err")
+  let assert "failure: err" =
+    remote_data.fold(
+      data:,
+      on_not_asked: fn() { "not asked" },
+      on_loading: fn() { "loading" },
+      on_failure: fn(e) { "failure: " <> e },
+      on_success: fn(_) { "success" },
     )
 }

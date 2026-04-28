@@ -1,6 +1,8 @@
 ---
 version: 1.5.5
 title: ssr handle_request route params
+file: ./test/libero/ssr_test.gleam
+test_name: handle_request_passes_route_with_params_to_loader_test
 ---
 <!doctype html>
 <html><body><p>value=42</p></body></html>

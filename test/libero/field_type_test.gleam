@@ -170,3 +170,64 @@ pub fn contains_finds_dict_test() {
       }
     })
 }
+
+// -- is_builtin --
+
+pub fn is_builtin_recognises_primitive_names_test() {
+  let assert True = field_type.is_builtin("Int")
+  let assert True = field_type.is_builtin("String")
+  let assert True = field_type.is_builtin("Bool")
+  let assert True = field_type.is_builtin("Float")
+  let assert True = field_type.is_builtin("BitArray")
+  let assert True = field_type.is_builtin("Nil")
+  let assert True = field_type.is_builtin("List")
+  let assert True = field_type.is_builtin("Result")
+  let assert True = field_type.is_builtin("Option")
+  let assert True = field_type.is_builtin("Dict")
+}
+
+pub fn is_builtin_rejects_user_type_names_test() {
+  let assert False = field_type.is_builtin("Item")
+  let assert False = field_type.is_builtin("WidgetParams")
+  let assert False = field_type.is_builtin("")
+}
+
+// -- builtin_field_type error path --
+
+pub fn builtin_field_type_rejects_non_builtin_name_test() {
+  let assert Error(Nil) =
+    field_type.builtin_field_type(
+      name: "NotABuiltin",
+      parameters: [],
+      recurse: fn(_a) { field_type.IntField },
+    )
+}
+
+pub fn builtin_field_type_rejects_result_with_wrong_arity_test() {
+  let assert Error(Nil) =
+    field_type.builtin_field_type(
+      name: "Result",
+      parameters: [],
+      recurse: fn(_a) { field_type.IntField },
+    )
+}
+
+pub fn builtin_field_type_rejects_option_with_extra_params_test() {
+  let assert Error(Nil) =
+    field_type.builtin_field_type(
+      name: "Option",
+      parameters: [1, 2],
+      recurse: fn(_a) { field_type.IntField },
+    )
+}
+
+// -- last_segment --
+
+pub fn last_segment_returns_last_part_of_path_test() {
+  let assert "types" = field_type.last_segment("shared/types")
+  let assert "handler" = field_type.last_segment("server/handler")
+}
+
+pub fn last_segment_returns_whole_string_when_no_separator_test() {
+  let assert "hello" = field_type.last_segment("hello")
+}

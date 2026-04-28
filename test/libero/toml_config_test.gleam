@@ -106,3 +106,66 @@ pub fn to_codegen_config_missing_client_test() {
   let assert True = string.contains(msg, "Client not found")
   let assert True = string.contains(msg, "web")
 }
+
+// -- Edge cases --
+
+pub fn parse_rejects_invalid_port_zero_test() {
+  let toml = "name = \"myapp\"\n\n[tools.libero]\nport = 0\n"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Invalid port number")
+  let assert True = string.contains(msg, "0")
+}
+
+pub fn parse_rejects_invalid_port_too_high_test() {
+  let toml = "name = \"myapp\"\n\n[tools.libero]\nport = 100000\n"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Invalid port number")
+  let assert True = string.contains(msg, "100000")
+}
+
+pub fn parse_rejects_malformed_client_table_test() {
+  let toml = "name = \"myapp\"\n\n[tools.libero.clients.web]\ntarget = 42\n"
+  // target must be a string, not a number. parse_clients calls tom.get_string.
+  // The TOML parser will parse it, but get_string on an int should fail.
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Missing target")
+}
+
+pub fn parse_rejects_client_with_empty_target_test() {
+  let toml = "name = \"myapp\"\n\n[tools.libero.clients.web]\ntarget = \"\"\n"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Unsupported client target")
+}
+
+pub fn parse_with_no_clients_section_defaults_to_empty_list_test() {
+  let toml = "name = \"myapp\"\n"
+  let assert Ok(cfg) = toml_config.parse(toml)
+  let assert [] = cfg.clients
+}
+
+pub fn to_codegen_config_rejects_nonexistent_client_test() {
+  let toml_cfg =
+    TomlConfig(
+      name: "my_app",
+      port: 3000,
+      clients: [ClientConfig(name: "admin", target: "javascript")],
+      server_src_dir: "src",
+      server_generated_dir: "src/generated",
+      server_atoms_path: "src/my_app@generated@rpc_atoms.erl",
+      shared_src_dir: "../shared/src/shared",
+      context_module: "handler_context",
+    )
+  let assert Error(msg) =
+    toml_config.to_codegen_config(
+      toml_cfg,
+      client: "nonexistent",
+      ws_path: "/ws",
+    )
+  let assert True = string.contains(msg, "Client not found")
+}
+
+pub fn parse_rejects_invalid_toml_syntax_test() {
+  let toml = "this is [ definitely not valid toml"
+  let assert Error(msg) = toml_config.parse(toml)
+  let assert True = string.contains(msg, "Failed to parse")
+}
