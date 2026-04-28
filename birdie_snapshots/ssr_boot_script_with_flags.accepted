@@ -1,0 +1,6 @@
+---
+version: 1.5.5
+title: ssr boot_script with flags
+---
+<!-- lustre:fragment --><script>window.__LIBERO_FLAGS__ = "g20AAAALaGVsbG8gd29ybGQ=";</script><script type="module">import { main } from "/web/app.mjs";
+main();</script><!-- /lustre:fragment -->

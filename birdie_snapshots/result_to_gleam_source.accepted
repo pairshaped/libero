@@ -1,0 +1,5 @@
+---
+version: 1.5.5
+title: result to_gleam_source
+---
+Result(Int, String)

@@ -1,15 +1,10 @@
-import gleam/string
+import birdie
 import libero/format
 
-/// `format_gleam` shells out to `gleam format`. When the input parses,
-/// the formatter normalizes whitespace; when it doesn't, the original
-/// string is returned unchanged. Both paths must leave program semantics
-/// alone — codegen would otherwise produce broken modules.
 pub fn format_returns_normalised_when_input_parses_test() {
   let input = "pub fn   add(a: Int,b:Int)->Int{a+b}\n"
   let output = format.format_gleam(input)
-  let assert True = string.contains(output, "pub fn add")
-  let assert True = string.contains(output, "Int, b: Int")
+  birdie.snap(output, title: "format gleam normalised output")
 }
 
 pub fn format_falls_back_to_input_when_unparseable_test() {

@@ -1,0 +1,6 @@
+---
+version: 1.5.5
+title: ssr boot_script module type
+---
+<!-- lustre:fragment --><script>window.__LIBERO_FLAGS__ = "g2EB";</script><script type="module">import { main } from "/x.mjs";
+main();</script><!-- /lustre:fragment -->

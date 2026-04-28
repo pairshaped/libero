@@ -1,0 +1,6 @@
+---
+version: 1.5.5
+title: ssr handle_request success page
+---
+<!doctype html>
+<html><body><p>value=7</p></body></html>

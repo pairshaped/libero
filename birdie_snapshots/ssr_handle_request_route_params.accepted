@@ -1,0 +1,6 @@
+---
+version: 1.5.5
+title: ssr handle_request route params
+---
+<!doctype html>
+<html><body><p>value=42</p></body></html>

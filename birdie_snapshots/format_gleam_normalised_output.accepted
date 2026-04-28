@@ -1,0 +1,8 @@
+---
+version: 1.5.5
+title: format gleam normalised output
+---
+pub fn add(a: Int, b: Int) -> Int {
+  a + b
+}
+

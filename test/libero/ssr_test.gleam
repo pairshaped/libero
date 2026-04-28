@@ -1,3 +1,4 @@
+import birdie
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dynamic.{type Dynamic}
@@ -154,31 +155,32 @@ pub fn call_returns_dispatch_error_on_panic_test() {
 // --- ssr.boot_script ---
 
 pub fn boot_script_embeds_encoded_flags_test() {
-  let flags = "hello world"
-  let encoded = ssr.encode_flags(flags)
-  let el = ssr.boot_script(client_module: "/web/app.mjs", flags:)
-  let html_str = lustre_element.to_string(el)
-  let assert True = string.contains(html_str, encoded)
+  let el = ssr.boot_script(client_module: "/web/app.mjs", flags: "hello world")
+  birdie.snap(lustre_element.to_string(el), title: "ssr boot_script with flags")
 }
 
 pub fn boot_script_includes_client_module_test() {
   let el = ssr.boot_script(client_module: "/web/app.mjs", flags: 0)
-  let html_str = lustre_element.to_string(el)
-  let assert True = string.contains(html_str, "/web/app.mjs")
-  let assert True = string.contains(html_str, "main()")
+  birdie.snap(
+    lustre_element.to_string(el),
+    title: "ssr boot_script client module",
+  )
 }
 
 pub fn boot_script_sets_window_flags_global_test() {
   let el = ssr.boot_script(client_module: "/x.mjs", flags: 1)
-  let html_str = lustre_element.to_string(el)
-  let assert True = string.contains(html_str, "window.__LIBERO_FLAGS__")
+  birdie.snap(
+    lustre_element.to_string(el),
+    title: "ssr boot_script window flags",
+  )
 }
 
 pub fn boot_script_module_script_is_module_type_test() {
   let el = ssr.boot_script(client_module: "/x.mjs", flags: 1)
-  let html_str = lustre_element.to_string(el)
-  // The import script must be type="module" or the import statement is invalid.
-  let assert True = string.contains(html_str, "type=\"module\"")
+  birdie.snap(
+    lustre_element.to_string(el),
+    title: "ssr boot_script module type",
+  )
 }
 
 // --- ssr.handle_request ---
@@ -313,9 +315,10 @@ pub fn handle_request_renders_200_on_success_test() {
     )
   let assert 200 = resp.status
   let assert Ok("text/html") = response.get_header(resp, "content-type")
-  let body = extract_body_string(resp)
-  let assert True = string.contains(body, "<!doctype html>")
-  let assert True = string.contains(body, "value=7")
+  birdie.snap(
+    extract_body_string(resp),
+    title: "ssr handle_request success page",
+  )
 }
 
 pub fn handle_request_passes_route_with_params_to_loader_test() {
@@ -333,6 +336,8 @@ pub fn handle_request_passes_route_with_params_to_loader_test() {
       render: fake_render,
       handler_ctx: FakeState(default: 0),
     )
-  let body = extract_body_string(captured)
-  let assert True = string.contains(body, "value=42")
+  birdie.snap(
+    extract_body_string(captured),
+    title: "ssr handle_request route params",
+  )
 }
