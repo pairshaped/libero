@@ -1,0 +1,11 @@
+---
+version: 1.5.5
+title: enum typed decoder
+---
+export function decode_shared_line_item_status(term) {
+  if (term === "pending") return new _m_shared_line_item.Pending();
+  if (term === "paid") return new _m_shared_line_item.Paid();
+  throw new DecodeError("unknown variant: " + String(term));
+}
+
+export function ensure_decoders() { return true; }

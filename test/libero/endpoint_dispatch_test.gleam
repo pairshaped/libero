@@ -1,5 +1,5 @@
+import birdie
 import gleam/list
-import gleam/string
 import libero/codegen_dispatch
 import libero/codegen_stubs
 import libero/field_type
@@ -52,37 +52,8 @@ pub fn endpoint_dispatch_generates_client_msg_test() {
       wire_module_tag: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
+  birdie.snap(content, title: "dispatch: four mutating endpoints")
 
-  // Must have ClientMsg type with all variants
-  let assert True = string.contains(content, "pub type ClientMsg {")
-  let assert True = string.contains(content, "GetItems")
-  // UserType is qualified by its import's last module segment, matching
-  // what the user wrote: `import shared/items` makes `ItemParams`
-  // render as `items.ItemParams` in the generated source.
-  let assert True =
-    string.contains(content, "CreateItem(params: items.ItemParams)")
-  let assert True = string.contains(content, "ToggleItem(id: Int)")
-  let assert True = string.contains(content, "DeleteItem(id: Int)")
-
-  // Must route to handler functions
-  let assert True = string.contains(content, "handler.get_items(handler_ctx:)")
-  let assert True =
-    string.contains(content, "handler.create_item(params:, handler_ctx:)")
-  let assert True =
-    string.contains(content, "handler.toggle_item(id:, handler_ctx:)")
-  let assert True =
-    string.contains(content, "handler.delete_item(id:, handler_ctx:)")
-
-  // Must NOT reference AppError or MsgFromServer
-  let assert False = string.contains(content, "AppError")
-  let assert False = string.contains(content, "MsgFromServer")
-
-  // UnknownFunction must pass through the caller's request_id so the
-  // client can correlate the error to its in-flight call.
-  let assert True = string.contains(content, "Ok(#(name, request_id, _))")
-  let assert False = string.contains(content, "Ok(#(name, _request_id, _))")
-
-  // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
@@ -118,25 +89,7 @@ pub fn endpoint_dispatch_wraps_read_only_handler_test() {
       wire_module_tag: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
-
-  // Read-only handler is wrapped: dispatch threads the inbound ctx through.
-  let assert True =
-    string.contains(
-      content,
-      "#(server_handler_handler.list_things(handler_ctx:), handler_ctx)",
-    )
-
-  // Mutating handler is invoked directly; no #(...) wrap around the call.
-  let assert True =
-    string.contains(
-      content,
-      "server_handler_handler.rename_thing(id:, handler_ctx:)",
-    )
-  let assert False =
-    string.contains(
-      content,
-      "#(server_handler_handler.rename_thing(id:, handler_ctx:), handler_ctx)",
-    )
+  birdie.snap(content, title: "dispatch: read-only handler wrapper")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
@@ -166,26 +119,16 @@ pub fn endpoint_dispatch_is_server_only_test() {
       wire_module_tag: "rpc",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
-
-  // Erlang-only external naturally restricts the module to the Erlang target.
-  let assert True = string.contains(content, "@external(erlang,")
-  let assert False = string.contains(content, "@external(javascript,")
-  // Doc comment explains the constraint to readers.
-  let assert True = string.contains(content, "Server-only")
+  birdie.snap(content, title: "dispatch: server-only constraint")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
 pub fn endpoint_dispatch_imports_qualified_param_types_test() {
-  // When handler params reference module-qualified types (e.g.,
-  // widgets.WidgetParams), the generated dispatch must import those
-  // modules so the ClientMsg enum compiles.
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/store",
       fn_name: "list_widgets",
-      // Return type references widget_detail to verify dispatch does
-      // NOT pull return-type-only modules into its imports.
       return_ok: field_type.UserType("shared/widget_detail", "Widget", []),
       return_err: field_type.NilField,
       params: [
@@ -222,20 +165,8 @@ pub fn endpoint_dispatch_imports_qualified_param_types_test() {
       wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
+  birdie.snap(content, title: "dispatch: qualified param type imports")
 
-  // Must import shared modules referenced in param types
-  let assert True = string.contains(content, "import shared/widgets")
-  let assert True = string.contains(content, "import shared/alerts")
-
-  // Must NOT import builtins (Int, String, List, Option, Bool)
-  let assert False = string.contains(content, "import shared/Int")
-
-  // Dispatch does NOT import modules only referenced in return types
-  // (return types flow through wire.encode at runtime, not static references).
-  // Client stubs DO import them for RemoteData annotations.
-  let assert False = string.contains(content, "import shared/widget_detail")
-
-  // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
@@ -265,17 +196,12 @@ pub fn endpoint_dispatch_imports_stdlib_param_types_test() {
       wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/dispatch.gleam")
-
-  let assert True = string.contains(content, "import gleam/dict.{type Dict}")
-  let assert True =
-    string.contains(content, "EchoDict(value: Dict(String, Int))")
+  birdie.snap(content, title: "dispatch: stdlib param type imports")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
 pub fn endpoint_client_stubs_imports_qualified_types_test() {
-  // Client stubs need imports for both param AND return type modules
-  // (return types appear in RemoteData annotations).
   let endpoints = [
     scanner.HandlerEndpoint(
       module_path: "server/store",
@@ -306,12 +232,8 @@ pub fn endpoint_client_stubs_imports_qualified_types_test() {
       wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
+  birdie.snap(content, title: "client stubs: qualified type imports")
 
-  // Must import shared modules referenced in param and return types
-  let assert True = string.contains(content, "import shared/widgets")
-  let assert True = string.contains(content, "import shared/alerts")
-
-  // Cleanup
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }
 
@@ -339,11 +261,7 @@ pub fn endpoint_client_stubs_imports_stdlib_types_test() {
       wire_module_tag: "shared/types",
     )
   let assert Ok(content) = simplifile.read(output_dir <> "/messages.gleam")
-
-  let assert True = string.contains(content, "import gleam/dict.{type Dict}")
-  let assert True =
-    string.contains(content, "EchoDict(value: Dict(String, Int))")
-  let assert True = string.contains(content, "value value: Dict(String, Int),")
+  birdie.snap(content, title: "client stubs: stdlib type imports")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }

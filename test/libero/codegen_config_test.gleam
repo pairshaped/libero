@@ -1,6 +1,6 @@
 //// Tests for generated rpc_config.gleam content.
 
-import gleam/string
+import birdie
 import libero/codegen_stubs
 import libero/config.{type Config, Config}
 import simplifile
@@ -29,17 +29,21 @@ pub fn write_config_emits_resolver_test() {
 
   let assert Ok(content) =
     simplifile.read(output_dir <> "/src/generated/rpc_config.gleam")
+  birdie.snap(content, title: "rpc config gleam")
 
-  // Should reference the path
-  let assert True = string.contains(content, "/ws/admin")
-  // Should have the resolve function
-  let assert True = string.contains(content, "resolve_ws_url")
+  let assert Ok(Nil) = simplifile.delete_all([output_dir])
+}
 
-  // FFI file should exist
+pub fn write_config_emits_ffi_test() {
+  let output_dir = "build/.test_config_ffi"
+  let cfg = make_config("/ws/admin", output_dir)
+  let assert Ok(Nil) =
+    simplifile.create_directory_all(output_dir <> "/src/generated")
+  let assert Ok(Nil) = codegen_stubs.write_config(config: cfg)
+
   let assert Ok(ffi) =
     simplifile.read(output_dir <> "/src/generated/rpc_config_ffi.mjs")
-  let assert True = string.contains(ffi, "resolveWsUrl")
-  let assert True = string.contains(ffi, "location")
+  birdie.snap(ffi, title: "rpc config FFI")
 
   let assert Ok(Nil) = simplifile.delete_all([output_dir])
 }

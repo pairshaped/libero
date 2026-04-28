@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: record typed decoder
+---
+export function decode_shared_item_item(term) {
+  return new _m_shared_item.Item(
+    decode_string(term[1]),
+    decode_int(term[2]),
+    decode_bool(term[3])
+  );
+}
+
+export function ensure_decoders() { return true; }

@@ -1,0 +1,11 @@
+---
+version: 1.5.5
+title: option field typed decoder
+---
+export function decode_shared_opt_type_opt_wrapper(term) {
+  return new _m_shared_opt_type.OptWrapper(
+    decode_option_of((t0) => decode_string(t0), term[1])
+  );
+}
+
+export function ensure_decoders() { return true; }

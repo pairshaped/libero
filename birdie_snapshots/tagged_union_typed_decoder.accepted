@@ -1,0 +1,21 @@
+---
+version: 1.5.5
+title: tagged union typed decoder
+---
+export function decode_shared_notification_notification(term) {
+  const tag = Array.isArray(term) ? term[0] : term;
+  switch (tag) {
+    case "items_loaded":
+      return new _m_shared_notification.ItemsLoaded(decode_list_of((t0) => decode_shared_item_item(t0), term[1]));
+    case "status_changed":
+      return new _m_shared_notification.StatusChanged(decode_string(term[1]));
+    case "disconnected":
+      return new _m_shared_notification.Disconnected();
+    case "refreshed":
+      return new _m_shared_notification.Refreshed();
+    default:
+      throw new DecodeError("unknown variant: " + String(tag));
+  }
+}
+
+export function ensure_decoders() { return true; }
