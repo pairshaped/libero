@@ -29,7 +29,7 @@ mist = "~> 6.0"
 glexer = ">= 2.4.0 and < 3.0.0"
 
 [dev-dependencies]
-glinter = "~> 2.14"
+glinter = "~> 2.16"
 gleeunit = "~> 1.0"
 gleam_erlang = "~> 1.0"
 birdie = ">= 1.5.5 and < 2.0.0"
