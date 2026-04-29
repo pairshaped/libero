@@ -52,6 +52,53 @@ pub fn map(
   }
 }
 
+/// Combine two independent `RemoteData` values with a function. Returns
+/// `Success` only when both inputs are `Success`. Short-circuits on the
+/// first `Failure` found (in either position), or `Loading` if either is
+/// `Loading` and neither has failed.
+///
+/// Useful in `init` to batch parallel RPC calls into a single state
+/// transition:
+///
+/// ```
+/// let result = remote_data.map2(config_rd, items_rd, fn(c, i) {
+///   #(c, i)
+/// })
+/// ```
+pub fn map2(
+  a a: RemoteData(a, e),
+  b b: RemoteData(b, e),
+  combine combine: fn(a, b) -> c,
+) -> RemoteData(c, e) {
+  case a, b {
+    Success(a), Success(b) -> Success(combine(a, b))
+    Failure(e), _ -> Failure(e)
+    _, Failure(e) -> Failure(e)
+    Loading, _ -> Loading
+    _, Loading -> Loading
+    _, _ -> NotAsked
+  }
+}
+
+/// Monadic bind for chaining dependent async work. When the data is
+/// `Success`, apply `f` to the value and return its result. Otherwise
+/// propagate the current state unchanged.
+///
+/// RPC calls that depend on a prior result usually live in separate
+/// `update` arms rather than inside `init`, so this is less common than
+/// `map` or `map2` — but available when callers need it.
+pub fn try(
+  data data: RemoteData(a, e),
+  f f: fn(a) -> RemoteData(b, e),
+) -> RemoteData(b, e) {
+  case data {
+    Success(value) -> f(value)
+    NotAsked -> NotAsked
+    Loading -> Loading
+    Failure(error) -> Failure(error)
+  }
+}
+
 /// Apply a function to the error value.
 pub fn map_error(
   data data: RemoteData(a, e1),

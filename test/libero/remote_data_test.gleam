@@ -81,6 +81,95 @@ pub fn to_option_not_asked_test() {
   let assert None = remote_data.to_option(NotAsked)
 }
 
+// -- map2 --
+
+pub fn map2_both_success_test() {
+  let assert Success(#(10, 20)) = remote_data.map2(
+    a: Success(10),
+    b: Success(20),
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_first_failure_test() {
+  let assert Failure("a") = remote_data.map2(
+    a: Failure("a"),
+    b: Success(20),
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_second_failure_test() {
+  let assert Failure("b") = remote_data.map2(
+    a: Success(10),
+    b: Failure("b"),
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_both_failure_test() {
+  let assert Failure("a") = remote_data.map2(
+    a: Failure("a"),
+    b: Failure("b"),
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_first_loading_test() {
+  let data: remote_data.RemoteData(Int, String) = Loading
+  let assert Loading = remote_data.map2(
+    a: data,
+    b: Success(20),
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_second_loading_test() {
+  let data: remote_data.RemoteData(Int, String) = Loading
+  let assert Loading = remote_data.map2(
+    a: Success(10),
+    b: data,
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+pub fn map2_both_not_asked_test() {
+  let data_a: remote_data.RemoteData(Int, String) = NotAsked
+  let data_b: remote_data.RemoteData(Int, String) = NotAsked
+  let assert NotAsked = remote_data.map2(
+    a: data_a,
+    b: data_b,
+    combine: fn(a, b) { #(a, b) },
+  )
+}
+
+// -- try --
+
+pub fn try_success_test() {
+  let assert Success(10) =
+    remote_data.try(data: Success(5), f: fn(x) { Success(x * 2) })
+}
+
+pub fn try_failure_test() {
+  let assert Failure("err") =
+    remote_data.try(data: Failure("err"), f: fn(x) { Success(x * 2) })
+}
+
+pub fn try_loading_test() {
+  let data: remote_data.RemoteData(Int, String) = Loading
+  let assert Loading = remote_data.try(data:, f: fn(x) { Success(x * 2) })
+}
+
+pub fn try_not_asked_test() {
+  let data: remote_data.RemoteData(Int, String) = NotAsked
+  let assert NotAsked = remote_data.try(data:, f: fn(x) { Success(x * 2) })
+}
+
+pub fn try_chains_to_failure_test() {
+  let assert Failure("chain") =
+    remote_data.try(data: Success(1), f: fn(_) { Failure("chain") })
+}
+
 // -- format_transport_error --
 
 pub fn format_transport_error_internal_test() {
